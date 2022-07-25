@@ -1,18 +1,20 @@
 package daemon
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 )
 
-func (dh *dbHandler) eventSubrouter(r *gin.RouterGroup) {
+func (d *daemon) eventSubrouter(r *gin.RouterGroup) {
 	//gtaAPI := r.Group("/gta")
 	//gtaAPI.Use(tokenAuthMiddleware())
 
 	// Gm user management
-	r.POST("/", dh.testHandlerTwo)
+	r.GET("/", d.testHandlerTwo)
 
 }
 
-func (dh *dbHandler) testHandlerTwo(c *gin.Context) {
-
+func (d *daemon) testHandlerTwo(c *gin.Context) {
+	c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 }
