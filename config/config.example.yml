@@ -1,0 +1,11 @@
+host: localhost
+port: 8080
+
+db-config:
+  host: 127.0.0.1
+  port: 5432
+  db_name: haaukins
+  username: haaukins
+  password: haaukins
+
+jwtSecret: test
