@@ -78,3 +78,6 @@ SELECT finish_expected FROM event WHERE finish_expected =(SELECT max(finish_expe
 
 -- name: DropEvent :exec
 DELETE FROM event WHERE tag=$1 and status=$2;
+
+-- name: GetExerciseDatabases :many
+SELECT * FROM Exercise_dbs;

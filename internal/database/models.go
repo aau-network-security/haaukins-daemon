@@ -8,6 +8,15 @@ import (
 	"database/sql"
 )
 
+type AdminUser struct {
+	ID             int32          `json:"id"`
+	Username       sql.NullString `json:"username"`
+	Password       sql.NullString `json:"password"`
+	Email          sql.NullString `json:"email"`
+	RoleID         sql.NullInt32  `json:"role_id"`
+	OrganizationID sql.NullInt32  `json:"organization_id"`
+}
+
 type Event struct {
 	ID                int32          `json:"id"`
 	Tag               sql.NullString `json:"tag"`
@@ -26,16 +35,54 @@ type Event struct {
 	Disabledexercises sql.NullString `json:"disabledexercises"`
 }
 
+type ExerciseDb struct {
+	ID             int32          `json:"id"`
+	Name           sql.NullString `json:"name"`
+	OrganizationID sql.NullInt32  `json:"organization_id"`
+	Url            sql.NullString `json:"url"`
+	SignKey        sql.NullString `json:"sign_key"`
+	AuthKey        sql.NullString `json:"auth_key"`
+}
+
+type Frontend struct {
+	ID       int32          `json:"id"`
+	Name     sql.NullString `json:"name"`
+	Image    sql.NullString `json:"image"`
+	Memorymb sql.NullInt32  `json:"memorymb"`
+}
+
+type HaaukinsAgent struct {
+	ID      int32          `json:"id"`
+	Url     sql.NullString `json:"url"`
+	SignKey sql.NullString `json:"sign_key"`
+	AuthKey sql.NullString `json:"auth_key"`
+}
+
+type Organization struct {
+	ID   int32          `json:"id"`
+	Name sql.NullString `json:"name"`
+}
+
 type Profile struct {
+	ID             int32          `json:"id"`
+	Name           sql.NullString `json:"name"`
+	Secret         sql.NullBool   `json:"secret"`
+	OrganizationID sql.NullInt32  `json:"organization_id"`
+	Challenges     sql.NullString `json:"challenges"`
+}
+
+type Role struct {
 	ID         int32          `json:"id"`
 	Name       sql.NullString `json:"name"`
-	Secret     sql.NullBool   `json:"secret"`
-	Challenges sql.NullString `json:"challenges"`
+	WriteLocal sql.NullBool   `json:"write_local"`
+	ReadLocal  sql.NullBool   `json:"read_local"`
+	ReadAll    sql.NullBool   `json:"read_all"`
+	WriteAll   sql.NullBool   `json:"write_all"`
 }
 
 type Team struct {
 	ID               int32          `json:"id"`
-	Tag              interface{}    `json:"tag"`
+	Tag              sql.NullString `json:"tag"`
 	EventID          sql.NullInt32  `json:"event_id"`
 	Email            sql.NullString `json:"email"`
 	Name             sql.NullString `json:"name"`
