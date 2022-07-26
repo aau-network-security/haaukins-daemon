@@ -4,18 +4,22 @@ import (
 	"context"
 	"errors"
 	"io/ioutil"
+	"os"
+	"path/filepath"
 
 	"github.com/aau-network-security/haaukins-daemon/internal/database"
 	eproto "github.com/aau-network-security/haaukins-daemon/internal/exercise/ex-proto"
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v2"
 )
 
 type daemon struct {
-	conf      *Config
-	db        *database.Queries
-	exClients map[string]eproto.ExerciseStoreClient
+	conf        *Config
+	db          *database.Queries
+	exClients   map[string]eproto.ExerciseStoreClient
+	auditLogger *zerolog.Logger
 }
 
 func NewConfigFromFile(path string) (*Config, error) {
@@ -32,6 +36,27 @@ func NewConfigFromFile(path string) (*Config, error) {
 
 	if c.JwtSecret == "" {
 		return nil, errors.New("missing signing key in configuration")
+	}
+
+	if c.AuditLog.Directory == "" {
+		dir, _ := os.Getwd()
+		c.AuditLog.Directory = filepath.Join(dir, "logs")
+	}
+
+	if c.AuditLog.FileName == "" {
+		c.AuditLog.FileName = "audit.log"
+	}
+
+	if c.AuditLog.MaxBackups == 0 {
+		c.AuditLog.MaxBackups = 10
+	}
+
+	if c.AuditLog.MaxAge == 0 {
+		c.AuditLog.MaxAge = 30
+	}
+
+	if c.AuditLog.MaxSize == 0 {
+		c.AuditLog.MaxSize = 10
 	}
 
 	if c.Port == 0 {
@@ -71,6 +96,8 @@ func New(conf *Config) (*daemon, error) {
 		log.Fatal().Err(err).Msg("[Haaukins-daemon] Failed to get currently connected exercise databases")
 		return nil, err
 	}
+	// Creating audit logger to log admin events seperately
+	auditLogger := zerolog.New(newRollingFile(conf)).With().Logger()
 
 	// Using a hashtable for exercise database connections
 	// If the database name is not in the hashtable we know that the database is not connected
@@ -78,9 +105,9 @@ func New(conf *Config) (*daemon, error) {
 	exClients := make(map[string]eproto.ExerciseStoreClient)
 	for _, exDb := range exersiceDatabases {
 		exDbConfig := ServiceConfig{
-			Grpc:    exDb.Url.String,
-			AuthKey: exDb.AuthKey.String,
-			SignKey: exDb.SignKey.String,
+			Grpc:    exDb.Url,
+			AuthKey: exDb.AuthKey,
+			SignKey: exDb.SignKey,
 			Enabled: true,
 		}
 		exClient, err := NewExerciseClientConn(exDbConfig)
@@ -88,15 +115,16 @@ func New(conf *Config) (*daemon, error) {
 			log.Warn().Err(err).Msgf("[exercise-service]: error on creating gRPC communication")
 
 		} else {
-			exClients[exDb.Name.String] = exClient
+			exClients[exDb.Name] = exClient
 			log.Debug().Str("Url", exDbConfig.Grpc).Msg("Exercise service connected !")
 		}
 	}
 
 	d := &daemon{
-		conf:      conf,
-		db:        db,
-		exClients: exClients,
+		conf:        conf,
+		db:          db,
+		exClients:   exClients,
+		auditLogger: &auditLogger,
 	}
 	return d, nil
 }
