@@ -1,5 +1,6 @@
 config.yml
-.exercisedb.sql
+.testqueries.sql
 .air.toml
 build-errors.log
 main
+logs
