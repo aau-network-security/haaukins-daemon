@@ -6,88 +6,89 @@ package database
 
 import (
 	"database/sql"
+	"time"
 )
 
 type AdminUser struct {
-	ID             int32          `json:"id"`
-	Username       sql.NullString `json:"username"`
-	Password       sql.NullString `json:"password"`
-	Email          sql.NullString `json:"email"`
-	RoleID         sql.NullInt32  `json:"role_id"`
-	OrganizationID sql.NullInt32  `json:"organization_id"`
+	ID             int32  `json:"id"`
+	Username       string `json:"username"`
+	Password       string `json:"password"`
+	Email          string `json:"email"`
+	RoleID         int32  `json:"role_id"`
+	OrganizationID int32  `json:"organization_id"`
 }
 
 type Event struct {
-	ID                int32          `json:"id"`
-	Tag               sql.NullString `json:"tag"`
-	Name              sql.NullString `json:"name"`
-	Available         sql.NullInt32  `json:"available"`
-	Capacity          sql.NullInt32  `json:"capacity"`
-	Status            sql.NullInt32  `json:"status"`
-	Frontends         sql.NullString `json:"frontends"`
-	Exercises         sql.NullString `json:"exercises"`
-	StartedAt         sql.NullTime   `json:"started_at"`
-	FinishExpected    sql.NullTime   `json:"finish_expected"`
-	FinishedAt        sql.NullTime   `json:"finished_at"`
-	Createdby         sql.NullString `json:"createdby"`
-	Onlyvpn           sql.NullInt32  `json:"onlyvpn"`
-	Secretkey         sql.NullString `json:"secretkey"`
-	Disabledexercises sql.NullString `json:"disabledexercises"`
+	ID                int32         `json:"id"`
+	Tag               string        `json:"tag"`
+	Name              string        `json:"name"`
+	Available         int32         `json:"available"`
+	Capacity          int32         `json:"capacity"`
+	Status            sql.NullInt32 `json:"status"`
+	Frontends         string        `json:"frontends"`
+	Exercises         string        `json:"exercises"`
+	StartedAt         time.Time     `json:"started_at"`
+	FinishExpected    time.Time     `json:"finish_expected"`
+	FinishedAt        time.Time     `json:"finished_at"`
+	Createdby         string        `json:"createdby"`
+	Onlyvpn           sql.NullInt32 `json:"onlyvpn"`
+	Secretkey         string        `json:"secretkey"`
+	Disabledexercises string        `json:"disabledexercises"`
 }
 
 type ExerciseDb struct {
-	ID             int32          `json:"id"`
-	Name           sql.NullString `json:"name"`
-	OrganizationID sql.NullInt32  `json:"organization_id"`
-	Url            sql.NullString `json:"url"`
-	SignKey        sql.NullString `json:"sign_key"`
-	AuthKey        sql.NullString `json:"auth_key"`
+	ID             int32  `json:"id"`
+	Name           string `json:"name"`
+	OrganizationID int32  `json:"organization_id"`
+	Url            string `json:"url"`
+	SignKey        string `json:"sign_key"`
+	AuthKey        string `json:"auth_key"`
 }
 
 type Frontend struct {
-	ID       int32          `json:"id"`
-	Name     sql.NullString `json:"name"`
-	Image    sql.NullString `json:"image"`
-	Memorymb sql.NullInt32  `json:"memorymb"`
+	ID       int32         `json:"id"`
+	Name     string        `json:"name"`
+	Image    string        `json:"image"`
+	Memorymb sql.NullInt32 `json:"memorymb"`
 }
 
 type HaaukinsAgent struct {
-	ID      int32          `json:"id"`
-	Url     sql.NullString `json:"url"`
-	SignKey sql.NullString `json:"sign_key"`
-	AuthKey sql.NullString `json:"auth_key"`
+	ID      int32  `json:"id"`
+	Url     string `json:"url"`
+	SignKey string `json:"sign_key"`
+	AuthKey string `json:"auth_key"`
 }
 
 type Organization struct {
-	ID   int32          `json:"id"`
-	Name sql.NullString `json:"name"`
+	ID   int32  `json:"id"`
+	Name string `json:"name"`
 }
 
 type Profile struct {
-	ID             int32          `json:"id"`
-	Name           sql.NullString `json:"name"`
-	Secret         sql.NullBool   `json:"secret"`
-	OrganizationID sql.NullInt32  `json:"organization_id"`
-	Challenges     sql.NullString `json:"challenges"`
+	ID             int32  `json:"id"`
+	Name           string `json:"name"`
+	Secret         bool   `json:"secret"`
+	OrganizationID int32  `json:"organization_id"`
+	Challenges     string `json:"challenges"`
 }
 
 type Role struct {
-	ID         int32          `json:"id"`
-	Name       sql.NullString `json:"name"`
-	WriteLocal sql.NullBool   `json:"write_local"`
-	ReadLocal  sql.NullBool   `json:"read_local"`
-	ReadAll    sql.NullBool   `json:"read_all"`
-	WriteAll   sql.NullBool   `json:"write_all"`
+	ID         int32  `json:"id"`
+	Name       string `json:"name"`
+	WriteLocal bool   `json:"write_local"`
+	ReadLocal  bool   `json:"read_local"`
+	ReadAll    bool   `json:"read_all"`
+	WriteAll   bool   `json:"write_all"`
 }
 
 type Team struct {
-	ID               int32          `json:"id"`
-	Tag              sql.NullString `json:"tag"`
-	EventID          sql.NullInt32  `json:"event_id"`
-	Email            sql.NullString `json:"email"`
-	Name             sql.NullString `json:"name"`
-	Password         sql.NullString `json:"password"`
-	CreatedAt        sql.NullTime   `json:"created_at"`
-	LastAccess       sql.NullTime   `json:"last_access"`
-	SolvedChallenges sql.NullString `json:"solved_challenges"`
+	ID               int32     `json:"id"`
+	Tag              string    `json:"tag"`
+	EventID          int32     `json:"event_id"`
+	Email            string    `json:"email"`
+	Name             string    `json:"name"`
+	Password         string    `json:"password"`
+	CreatedAt        time.Time `json:"created_at"`
+	LastAccess       time.Time `json:"last_access"`
+	SolvedChallenges string    `json:"solved_challenges"`
 }

@@ -8,6 +8,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"time"
 )
 
 const addEvent = `-- name: AddEvent :exec
@@ -15,20 +16,20 @@ INSERT INTO event (tag, name, available, capacity, frontends, status, exercises,
 `
 
 type AddEventParams struct {
-	Tag               sql.NullString `json:"tag"`
-	Name              sql.NullString `json:"name"`
-	Available         sql.NullInt32  `json:"available"`
-	Capacity          sql.NullInt32  `json:"capacity"`
-	Frontends         sql.NullString `json:"frontends"`
-	Status            sql.NullInt32  `json:"status"`
-	Exercises         sql.NullString `json:"exercises"`
-	StartedAt         sql.NullTime   `json:"started_at"`
-	FinishExpected    sql.NullTime   `json:"finish_expected"`
-	FinishedAt        sql.NullTime   `json:"finished_at"`
-	Createdby         sql.NullString `json:"createdby"`
-	Onlyvpn           sql.NullInt32  `json:"onlyvpn"`
-	Secretkey         sql.NullString `json:"secretkey"`
-	Disabledexercises sql.NullString `json:"disabledexercises"`
+	Tag               string        `json:"tag"`
+	Name              string        `json:"name"`
+	Available         int32         `json:"available"`
+	Capacity          int32         `json:"capacity"`
+	Frontends         string        `json:"frontends"`
+	Status            sql.NullInt32 `json:"status"`
+	Exercises         string        `json:"exercises"`
+	StartedAt         time.Time     `json:"started_at"`
+	FinishExpected    time.Time     `json:"finish_expected"`
+	FinishedAt        time.Time     `json:"finished_at"`
+	Createdby         string        `json:"createdby"`
+	Onlyvpn           sql.NullInt32 `json:"onlyvpn"`
+	Secretkey         string        `json:"secretkey"`
+	Disabledexercises string        `json:"disabledexercises"`
 }
 
 func (q *Queries) AddEvent(ctx context.Context, arg AddEventParams) error {
@@ -56,9 +57,9 @@ INSERT INTO profiles (name, secret, challenges) VALUES ($1, $2, $3)
 `
 
 type AddProfileParams struct {
-	Name       sql.NullString `json:"name"`
-	Secret     sql.NullBool   `json:"secret"`
-	Challenges sql.NullString `json:"challenges"`
+	Name       string `json:"name"`
+	Secret     bool   `json:"secret"`
+	Challenges string `json:"challenges"`
 }
 
 func (q *Queries) AddProfile(ctx context.Context, arg AddProfileParams) error {
@@ -71,14 +72,14 @@ INSERT INTO team (tag, event_id, email, name, password, created_at, last_access,
 `
 
 type AddTeamParams struct {
-	Tag              sql.NullString `json:"tag"`
-	EventID          sql.NullInt32  `json:"event_id"`
-	Email            sql.NullString `json:"email"`
-	Name             sql.NullString `json:"name"`
-	Password         sql.NullString `json:"password"`
-	CreatedAt        sql.NullTime   `json:"created_at"`
-	LastAccess       sql.NullTime   `json:"last_access"`
-	SolvedChallenges sql.NullString `json:"solved_challenges"`
+	Tag              string    `json:"tag"`
+	EventID          int32     `json:"event_id"`
+	Email            string    `json:"email"`
+	Name             string    `json:"name"`
+	Password         string    `json:"password"`
+	CreatedAt        time.Time `json:"created_at"`
+	LastAccess       time.Time `json:"last_access"`
+	SolvedChallenges string    `json:"solved_challenges"`
 }
 
 func (q *Queries) AddTeam(ctx context.Context, arg AddTeamParams) error {
@@ -99,18 +100,41 @@ const checkProfileExists = `-- name: CheckProfileExists :one
 SELECT EXISTS(SELECT 1 FROM profiles WHERE name = $1)
 `
 
-func (q *Queries) CheckProfileExists(ctx context.Context, name sql.NullString) (bool, error) {
+func (q *Queries) CheckProfileExists(ctx context.Context, name string) (bool, error) {
 	row := q.db.QueryRowContext(ctx, checkProfileExists, name)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
 }
 
+const createAdminUser = `-- name: CreateAdminUser :exec
+INSERT INTO Admin_users (username, password, email, role_id, organization_id) VALUES ($1, $2, $3, $4, $5)
+`
+
+type CreateAdminUserParams struct {
+	Username       string `json:"username"`
+	Password       string `json:"password"`
+	Email          string `json:"email"`
+	RoleID         int32  `json:"role_id"`
+	OrganizationID int32  `json:"organization_id"`
+}
+
+func (q *Queries) CreateAdminUser(ctx context.Context, arg CreateAdminUserParams) error {
+	_, err := q.db.ExecContext(ctx, createAdminUser,
+		arg.Username,
+		arg.Password,
+		arg.Email,
+		arg.RoleID,
+		arg.OrganizationID,
+	)
+	return err
+}
+
 const deleteProfile = `-- name: DeleteProfile :exec
 DELETE FROM profiles WHERE name = $1
 `
 
-func (q *Queries) DeleteProfile(ctx context.Context, name sql.NullString) error {
+func (q *Queries) DeleteProfile(ctx context.Context, name string) error {
 	_, err := q.db.ExecContext(ctx, deleteProfile, name)
 	return err
 }
@@ -120,8 +144,8 @@ DELETE FROM team WHERE tag=$1 and event_id = $2
 `
 
 type DeleteTeamParams struct {
-	Tag     sql.NullString `json:"tag"`
-	EventID sql.NullInt32  `json:"event_id"`
+	Tag     string `json:"tag"`
+	EventID int32  `json:"event_id"`
 }
 
 func (q *Queries) DeleteTeam(ctx context.Context, arg DeleteTeamParams) error {
@@ -134,8 +158,8 @@ SELECT EXISTS (select tag from event where tag=$1 and status!=$2)
 `
 
 type DoesEventExistParams struct {
-	Tag    sql.NullString `json:"tag"`
-	Status sql.NullInt32  `json:"status"`
+	Tag    string        `json:"tag"`
+	Status sql.NullInt32 `json:"status"`
 }
 
 func (q *Queries) DoesEventExist(ctx context.Context, arg DoesEventExistParams) (bool, error) {
@@ -150,8 +174,8 @@ DELETE FROM event WHERE tag=$1 and status=$2
 `
 
 type DropEventParams struct {
-	Tag    sql.NullString `json:"tag"`
-	Status sql.NullInt32  `json:"status"`
+	Tag    string        `json:"tag"`
+	Status sql.NullInt32 `json:"status"`
 }
 
 func (q *Queries) DropEvent(ctx context.Context, arg DropEventParams) error {
@@ -163,11 +187,29 @@ const earliestDate = `-- name: EarliestDate :one
 SELECT started_at FROM event WHERE started_at=(SELECT MIN(started_at) FROM event) and finished_at = date('0001-01-01 00:00:00')
 `
 
-func (q *Queries) EarliestDate(ctx context.Context) (sql.NullTime, error) {
+func (q *Queries) EarliestDate(ctx context.Context) (time.Time, error) {
 	row := q.db.QueryRowContext(ctx, earliestDate)
-	var started_at sql.NullTime
+	var started_at time.Time
 	err := row.Scan(&started_at)
 	return started_at, err
+}
+
+const getAdminUser = `-- name: GetAdminUser :one
+SELECT id, username, password, email, role_id, organization_id FROM Admin_users WHERE UPPER(username)=UPPER($1)
+`
+
+func (q *Queries) GetAdminUser(ctx context.Context, upper string) (AdminUser, error) {
+	row := q.db.QueryRowContext(ctx, getAdminUser, upper)
+	var i AdminUser
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Password,
+		&i.Email,
+		&i.RoleID,
+		&i.OrganizationID,
+	)
+	return i, err
 }
 
 const getAllEvents = `-- name: GetAllEvents :many
@@ -217,7 +259,7 @@ const getAvailableEvents = `-- name: GetAvailableEvents :many
 SELECT id FROM event WHERE tag=$1 and finished_at = date('0001-01-01 00:00:00') and (status = 0 or status = 1 or status = 2)
 `
 
-func (q *Queries) GetAvailableEvents(ctx context.Context, tag sql.NullString) ([]int32, error) {
+func (q *Queries) GetAvailableEvents(ctx context.Context, tag string) ([]int32, error) {
 	rows, err := q.db.QueryContext(ctx, getAvailableEvents, tag)
 	if err != nil {
 		return nil, err
@@ -244,7 +286,7 @@ const getEventStatus = `-- name: GetEventStatus :many
 SELECT status FROM event WHERE tag=$1
 `
 
-func (q *Queries) GetEventStatus(ctx context.Context, tag sql.NullString) ([]sql.NullInt32, error) {
+func (q *Queries) GetEventStatus(ctx context.Context, tag string) ([]sql.NullInt32, error) {
 	rows, err := q.db.QueryContext(ctx, getEventStatus, tag)
 	if err != nil {
 		return nil, err
@@ -315,8 +357,8 @@ SELECT id, tag, name, available, capacity, status, frontends, exercises, started
 `
 
 type GetEventsByUserParams struct {
-	Status    sql.NullInt32  `json:"status"`
-	Createdby sql.NullString `json:"createdby"`
+	Status    sql.NullInt32 `json:"status"`
+	Createdby string        `json:"createdby"`
 }
 
 func (q *Queries) GetEventsByUser(ctx context.Context, arg GetEventsByUserParams) ([]Event, error) {
@@ -435,6 +477,17 @@ func (q *Queries) GetExerciseDatabases(ctx context.Context) ([]ExerciseDb, error
 	return items, nil
 }
 
+const getOrgById = `-- name: GetOrgById :one
+SELECT id, name FROM Organizations WHERE id=$1
+`
+
+func (q *Queries) GetOrgById(ctx context.Context, id int32) (Organization, error) {
+	row := q.db.QueryRowContext(ctx, getOrgById, id)
+	var i Organization
+	err := row.Scan(&i.ID, &i.Name)
+	return i, err
+}
+
 const getProfiles = `-- name: GetProfiles :many
 SELECT id, name, secret, organization_id, challenges FROM profiles ORDER BY id asc
 `
@@ -468,11 +521,29 @@ func (q *Queries) GetProfiles(ctx context.Context) ([]Profile, error) {
 	return items, nil
 }
 
+const getRoleById = `-- name: GetRoleById :one
+SELECT id, name, write_local, read_local, read_all, write_all FROM Roles WHERE id=$1
+`
+
+func (q *Queries) GetRoleById(ctx context.Context, id int32) (Role, error) {
+	row := q.db.QueryRowContext(ctx, getRoleById, id)
+	var i Role
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.WriteLocal,
+		&i.ReadLocal,
+		&i.ReadAll,
+		&i.WriteAll,
+	)
+	return i, err
+}
+
 const getTeamCount = `-- name: GetTeamCount :many
 SELECT count(team.id) FROM team WHERE team.event_id=$1
 `
 
-func (q *Queries) GetTeamCount(ctx context.Context, eventID sql.NullInt32) ([]int64, error) {
+func (q *Queries) GetTeamCount(ctx context.Context, eventID int32) ([]int64, error) {
 	rows, err := q.db.QueryContext(ctx, getTeamCount, eventID)
 	if err != nil {
 		return nil, err
@@ -499,7 +570,7 @@ const getTeamsForEvent = `-- name: GetTeamsForEvent :many
 SELECT id, tag, event_id, email, name, password, created_at, last_access, solved_challenges FROM team WHERE event_id=$1
 `
 
-func (q *Queries) GetTeamsForEvent(ctx context.Context, eventID sql.NullInt32) ([]Team, error) {
+func (q *Queries) GetTeamsForEvent(ctx context.Context, eventID int32) ([]Team, error) {
 	rows, err := q.db.QueryContext(ctx, getTeamsForEvent, eventID)
 	if err != nil {
 		return nil, err
@@ -536,9 +607,9 @@ const latestDate = `-- name: LatestDate :one
 SELECT finish_expected FROM event WHERE finish_expected =(SELECT max(finish_expected) FROM event) and finished_at = date('0001-01-01 00:00:00')
 `
 
-func (q *Queries) LatestDate(ctx context.Context) (sql.NullTime, error) {
+func (q *Queries) LatestDate(ctx context.Context) (time.Time, error) {
 	row := q.db.QueryRowContext(ctx, latestDate)
-	var finish_expected sql.NullTime
+	var finish_expected time.Time
 	err := row.Scan(&finish_expected)
 	return finish_expected, err
 }
@@ -547,15 +618,15 @@ const teamSolvedChls = `-- name: TeamSolvedChls :many
 SELECT solved_challenges FROM team WHERE tag=$1
 `
 
-func (q *Queries) TeamSolvedChls(ctx context.Context, tag sql.NullString) ([]sql.NullString, error) {
+func (q *Queries) TeamSolvedChls(ctx context.Context, tag string) ([]string, error) {
 	rows, err := q.db.QueryContext(ctx, teamSolvedChls, tag)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []sql.NullString
+	var items []string
 	for rows.Next() {
-		var solved_challenges sql.NullString
+		var solved_challenges string
 		if err := rows.Scan(&solved_challenges); err != nil {
 			return nil, err
 		}
@@ -575,9 +646,9 @@ UPDATE event SET tag = $2, finished_at = $3 WHERE tag = $1
 `
 
 type UpdateCloseEventParams struct {
-	Tag        sql.NullString `json:"tag"`
-	Tag_2      sql.NullString `json:"tag_2"`
-	FinishedAt sql.NullTime   `json:"finished_at"`
+	Tag        string    `json:"tag"`
+	Tag_2      string    `json:"tag_2"`
+	FinishedAt time.Time `json:"finished_at"`
 }
 
 func (q *Queries) UpdateCloseEvent(ctx context.Context, arg UpdateCloseEventParams) error {
@@ -590,8 +661,8 @@ UPDATE event SET status = $2 WHERE tag = $1
 `
 
 type UpdateEventStatusParams struct {
-	Tag    sql.NullString `json:"tag"`
-	Status sql.NullInt32  `json:"status"`
+	Tag    string        `json:"tag"`
+	Status sql.NullInt32 `json:"status"`
 }
 
 func (q *Queries) UpdateEventStatus(ctx context.Context, arg UpdateEventStatusParams) error {
@@ -605,8 +676,8 @@ UPDATE team SET last_access = $2 WHERE tag = $1
 `
 
 type UpdateExercisesParams struct {
-	Tag        sql.NullString `json:"tag"`
-	LastAccess sql.NullTime   `json:"last_access"`
+	Tag        string    `json:"tag"`
+	LastAccess time.Time `json:"last_access"`
 }
 
 // UPDATE event SET exercises = (SELECT (SELECT exercises FROM event WHERE id = $1) || $2) WHERE id=$1;
@@ -620,9 +691,9 @@ UPDATE profiles SET secret = $1, challenges = $2 WHERE name = $3
 `
 
 type UpdateProfileParams struct {
-	Secret     sql.NullBool   `json:"secret"`
-	Challenges sql.NullString `json:"challenges"`
-	Name       sql.NullString `json:"name"`
+	Secret     bool   `json:"secret"`
+	Challenges string `json:"challenges"`
+	Name       string `json:"name"`
 }
 
 func (q *Queries) UpdateProfile(ctx context.Context, arg UpdateProfileParams) error {
@@ -635,9 +706,9 @@ UPDATE team SET password = $1 WHERE tag = $2 and event_id = $3
 `
 
 type UpdateTeamPasswordParams struct {
-	Password sql.NullString `json:"password"`
-	Tag      sql.NullString `json:"tag"`
-	EventID  sql.NullInt32  `json:"event_id"`
+	Password string `json:"password"`
+	Tag      string `json:"tag"`
+	EventID  int32  `json:"event_id"`
 }
 
 func (q *Queries) UpdateTeamPassword(ctx context.Context, arg UpdateTeamPasswordParams) error {
@@ -650,8 +721,8 @@ UPDATE team SET solved_challenges = $2 WHERE tag = $1
 `
 
 type UpdateTeamSolvedChlParams struct {
-	Tag              sql.NullString `json:"tag"`
-	SolvedChallenges sql.NullString `json:"solved_challenges"`
+	Tag              string `json:"tag"`
+	SolvedChallenges string `json:"solved_challenges"`
 }
 
 func (q *Queries) UpdateTeamSolvedChl(ctx context.Context, arg UpdateTeamSolvedChlParams) error {

@@ -81,3 +81,15 @@ DELETE FROM event WHERE tag=$1 and status=$2;
 
 -- name: GetExerciseDatabases :many
 SELECT * FROM Exercise_dbs;
+
+-- name: GetAdminUser :one
+SELECT * FROM Admin_users WHERE LOWER(username)=LOWER($1);
+
+-- name: GetRoleById :one
+SELECT * FROM Roles WHERE id=$1;
+
+-- name: GetOrgById :one
+SELECT * FROM Organizations WHERE id=$1;
+
+-- name: CreateAdminUser :exec
+INSERT INTO Admin_users (username, password, email, role_id, organization_id) VALUES ($1, $2, $3, $4, $5);
