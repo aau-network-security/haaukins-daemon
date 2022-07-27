@@ -195,11 +195,11 @@ func (q *Queries) EarliestDate(ctx context.Context) (time.Time, error) {
 }
 
 const getAdminUser = `-- name: GetAdminUser :one
-SELECT id, username, password, email, role_id, organization_id FROM Admin_users WHERE UPPER(username)=UPPER($1)
+SELECT id, username, password, email, role_id, organization_id FROM Admin_users WHERE LOWER(username)=LOWER($1)
 `
 
-func (q *Queries) GetAdminUser(ctx context.Context, upper string) (AdminUser, error) {
-	row := q.db.QueryRowContext(ctx, getAdminUser, upper)
+func (q *Queries) GetAdminUser(ctx context.Context, lower string) (AdminUser, error) {
+	row := q.db.QueryRowContext(ctx, getAdminUser, lower)
 	var i AdminUser
 	err := row.Scan(
 		&i.ID,
@@ -522,7 +522,7 @@ func (q *Queries) GetProfiles(ctx context.Context) ([]Profile, error) {
 }
 
 const getRoleById = `-- name: GetRoleById :one
-SELECT id, name, write_local, read_local, read_all, write_all FROM Roles WHERE id=$1
+SELECT id, name, write_all, read_all, write_local, read_local FROM Roles WHERE id=$1
 `
 
 func (q *Queries) GetRoleById(ctx context.Context, id int32) (Role, error) {
@@ -531,10 +531,10 @@ func (q *Queries) GetRoleById(ctx context.Context, id int32) (Role, error) {
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
+		&i.WriteAll,
+		&i.ReadAll,
 		&i.WriteLocal,
 		&i.ReadLocal,
-		&i.ReadAll,
-		&i.WriteAll,
 	)
 	return i, err
 }

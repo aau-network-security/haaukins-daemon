@@ -54,6 +54,7 @@ type Frontend struct {
 
 type HaaukinsAgent struct {
 	ID      int32  `json:"id"`
+	Name    string `json:"name"`
 	Url     string `json:"url"`
 	SignKey string `json:"sign_key"`
 	AuthKey string `json:"auth_key"`
@@ -75,10 +76,10 @@ type Profile struct {
 type Role struct {
 	ID         int32  `json:"id"`
 	Name       string `json:"name"`
+	WriteAll   bool   `json:"write_all"`
+	ReadAll    bool   `json:"read_all"`
 	WriteLocal bool   `json:"write_local"`
 	ReadLocal  bool   `json:"read_local"`
-	ReadAll    bool   `json:"read_all"`
-	WriteAll   bool   `json:"write_all"`
 }
 
 type Team struct {
