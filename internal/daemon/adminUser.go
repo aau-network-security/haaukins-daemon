@@ -61,7 +61,7 @@ func (d *daemon) adminLogin(c *gin.Context) {
 		return
 	}
 
-	token, err := d.createAdminToken(user)
+	token, err := d.createAdminToken(ctx, user)
 	if err != nil {
 		log.Error().Err(err).Msg("Error creating token")
 		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
@@ -80,25 +80,20 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 		return
 	}
 	admin := unpackAdminClaims(c)
+	log.Debug().Msgf("admin claims: %v", admin)
 	d.auditLogger.Info().
 		Str("AdminUser", admin.Username).
 		Str("AdminEmail", admin.Email).
 		Msg("AdminUser is creating a new user")
 
-	adminRole, err := d.db.GetRoleById(ctx, admin.RoleID)
-	if err != nil {
-		log.Error().Err(err).Msgf("Error finding role claimned by user: %s", admin.Username)
-		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
-		return
-	}
-	// TODO Fix if not super admin
-	_, err = d.db.GetRoleById(ctx, req.RoleId)
+	// Check if role to assign actually exists
+	role, err := d.db.GetRoleById(ctx, req.RoleId)
 	if err != nil {
 		log.Error().Err(err).Msgf("Error finding role for new user")
 		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 		return
 	}
-
+	// Check if org to assign actually exists
 	_, err = d.db.GetOrgById(ctx, req.OrganizationId)
 	if err != nil {
 		log.Error().Err(err).Msgf("Error finding org for new user")
@@ -106,32 +101,48 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 		return
 	}
 
-	if adminRole.WriteAll { // User is allowed to create new users with no restrictions
-		pwHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-		if err != nil {
-			log.Error().Err(err).Msgf("Error generating password hash")
+	if admin.WriteAll { // User is allowed to create new users with no restrictions
+		alreadyExists, err := d.createAdminUser(ctx, req)
+		if err != nil || alreadyExists {
+			if alreadyExists {
+				log.Error().Err(err).Msgf("Error creating admin user")
+				c.JSON(http.StatusInternalServerError, APIResponse{Status: "User already exists"})
+				return
+			}
+			log.Error().Err(err).Msgf("Error creating admin user")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
 		}
-		newUser := database.CreateAdminUserParams{
-			Username:       req.Username,
-			Password:       string(pwHash),
-			Email:          req.Email,
-			RoleID:         req.RoleId,
-			OrganizationID: req.OrganizationId,
+		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+		return
+	} else if admin.WriteLocal { // User is only allowed to write within their organization
+		// Check if admin has access to organization
+		if !authOrganizationAccess(admin, req.OrganizationId) {
+			c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized, you do not have access to this organization"})
+			return
 		}
 
-		if err := d.db.CreateAdminUser(ctx, newUser); err != nil {
+		// Check if admin can attach desired role to user
+		if !authRoleAssignment(admin, role) {
+			c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized, you cannot create a user which has more permissions than yourself"})
+			return
+		}
+		alreadyExists, err := d.createAdminUser(ctx, req)
+		if err != nil || alreadyExists {
+			if alreadyExists {
+				log.Error().Err(err).Msgf("Error creating admin user")
+				c.JSON(http.StatusInternalServerError, APIResponse{Status: "User already exists"})
+				return
+			}
 			log.Error().Err(err).Msgf("Error creating admin user")
-			c.JSON(http.StatusInternalServerError, APIResponse{Status: "User already exists"})
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
 		}
 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
-	} else {
-		// TODO Fix if not super admin
-		c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
+		return
 	}
 
+	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 }
 
 func (d *daemon) deleteAdminUser(c *gin.Context) {
@@ -144,4 +155,24 @@ func (d *daemon) updateAdminUser(c *gin.Context) {
 
 func (d *daemon) getAdminUser(c *gin.Context) {
 
+}
+
+func (d *daemon) createAdminUser(ctx context.Context, user adminUserRequest) (bool, error) {
+	pwHash, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return false, err
+	}
+	newUser := database.CreateAdminUserParams{
+		Username:       user.Username,
+		Password:       string(pwHash),
+		Email:          user.Email,
+		RoleID:         user.RoleId,
+		OrganizationID: user.OrganizationId,
+	}
+	// Create the admin user
+	if err := d.db.CreateAdminUser(ctx, newUser); err != nil {
+		// User already exists
+		return true, err
+	}
+	return false, nil
 }
