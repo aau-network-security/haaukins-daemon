@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"github.com/aau-network-security/haaukins-daemon/internal/database"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -16,11 +15,16 @@ func verifyPassword(hash, password string) bool {
 	return true
 }
 
-func unpackAdminClaims(c *gin.Context) database.AdminUser {
-	return database.AdminUser{
-		Username:       string(c.MustGet("username").(string)),
+func unpackAdminClaims(c *gin.Context) AdminClaims {
+	return AdminClaims{
+		Username:       string(c.MustGet("sub").(string)),
 		Email:          string(c.MustGet("email").(string)),
-		OrganizationID: int32(c.MustGet("organization").(float64)),
-		RoleID:         int32(c.MustGet("role").(float64)),
+		OrganizationID: int32(c.MustGet("organization_id").(float64)),
+		WriteAll:       bool(c.MustGet("write_all").(bool)),
+		ReadAll:        bool(c.MustGet("read_all").(bool)),
+		WriteLocal:     bool(c.MustGet("write_local").(bool)),
+		ReadLocal:      bool(c.MustGet("read_local").(bool)),
+		Jti:            string(c.MustGet("jti").(string)),
+		Exp:            int64(c.MustGet("exp").(float64)),
 	}
 }

@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -9,17 +10,48 @@ import (
 	"github.com/aau-network-security/haaukins-daemon/internal/database"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
 
+const psyduck string = `
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⣆⢀⣶⡶⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢈⣿⢸⠟⣠⣶⡷⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⢀⣀⠀⢀⣠⠴⠴⠶⠚⠿⠿⠾⠭⣤⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⢀⠴⢋⡽⠚⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠙⠢⣀⠀⠀⠀⠀⠀⠀
+⠀⠀⢀⡔⠁⡰⠋⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⠚⠛⣖⠀⠀⠀⠀
+⠀⢀⡏⠀⡼⢡⠚⡛⠒⣄⠀⠀⠀⠀⣠⠖⠛⠛⠲⡄⠐⢯⠁⠀⠀⠹⡧⠀⠀⠀
+⠀⣸⠀⠀⡇⠘⠦⣭⡤⢟⡤⠤⣀⠀⠣⣀⡉⢁⣀⠟⠀⠀⢷⠀⠀⠀⠙⣗⠀⠀
+⠁⢻⠀⠀⢷⢀⡔⠉⢻⡅⣀⣤⡈⠙⠒⠺⠯⡍⠁⠀⠀⠀⢸⡆⠀⠀⠀⠘⡶⠄
+⠀⣈⣧⠴⠚⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣰⠃⠀⠀⠀⠀⣸⡇⠀⠀⠀⠀⠸⣔
+⣾⠋⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣧⣤⡤⠴⠖⠋⢹⠃⠀⠀⠀⠀⠀⣷
+⣿⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠐⣻⠁⠀⠀⠀⠀⠀⣿⠀⠀⠀⠀⠀⠀⣼
+⠙⠑⣤⣀⠀⠀⠀⠀⠀⢀⠀⠀⢄⣐⠴⠋⠀⠀⠀⠀⠀⠀⠘⢆⠀⠀⠀⠀⣰⠟
+⠀⠀⠀⣑⡟⠛⠛⠛⠛⠛⠛⠉⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢴⡾⠋⠀
+⠀⠀⠀⡾⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⡇⠀⠀
+⠀⠀⣰⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀
+⠀⠀⠸⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢰⠃⠀⠃
+`
+
 // todo Need to create different tokens based on it is an admin login or participant login
-func (d *daemon) createAdminToken(user database.AdminUser) (string, error) {
+func (d *daemon) createAdminToken(ctx context.Context, user database.AdminUser) (string, error) {
 	atClaims := jwt.MapClaims{}
-	atClaims["username"] = user.Username
-	atClaims["role"] = user.RoleID
-	atClaims["organization"] = user.OrganizationID
 	atClaims["exp"] = time.Now().Add(time.Hour * 24).Unix()
+	atClaims["jti"] = uuid.New()
+	atClaims["sub"] = user.Username
+	atClaims["participant"] = false
 	atClaims["email"] = user.Email
+	atClaims["organization_id"] = user.OrganizationID
+
+	role, err := d.db.GetRoleById(ctx, user.RoleID)
+	if err != nil {
+		return "", err
+	}
+	atClaims["write_all"] = role.WriteAll
+	atClaims["read_all"] = role.ReadAll
+	atClaims["write_local"] = role.WriteLocal
+	atClaims["read_local"] = role.ReadLocal
+
 	at := jwt.NewWithClaims(jwt.SigningMethodHS256, atClaims)
 	token, err := at.SignedString([]byte(d.conf.JwtSecret))
 	if err != nil {
@@ -98,15 +130,29 @@ func corsMiddleware() gin.HandlerFunc {
 func (d *daemon) adminAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		claims, err := d.jwtValidate(c)
-		if err != nil {
+		if err != nil || claims["participant"] == true {
+			if claims["participant"] == true {
+				d.auditLogger.Warn().
+					Str("username", claims["sub"].(string)).
+					Str("email", claims["email"].(string)).
+					Msg("Participant is trying to abuse admin api")
+				c.Data(http.StatusUnauthorized, "text/plain; charset=utf-8", []byte(psyduck))
+				c.Abort()
+				return
+			}
 			c.AbortWithStatusJSON(http.StatusUnauthorized, APIResponse{Status: "Invalid JWT"})
 			return
 		}
-		// Passing jwt claims to next handler function
-		c.Set("username", claims["username"])
+		// Passing jwt claims to next handler function in the gin context
+		c.Set("jti", claims["jti"])
+		c.Set("exp", claims["exp"])
+		c.Set("sub", claims["sub"])
 		c.Set("email", claims["email"])
-		c.Set("organization", claims["organization"])
-		c.Set("role", claims["role"])
+		c.Set("organization_id", claims["organization_id"])
+		c.Set("write_all", claims["write_all"])
+		c.Set("read_all", claims["read_all"])
+		c.Set("write_local", claims["write_local"])
+		c.Set("read_local", claims["read_local"])
 		c.Next()
 	}
 }
