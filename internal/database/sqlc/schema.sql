@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS Organizations (
         id serial primary key,
         name varchar (50) NOT NULL
 );
+CREATE UNIQUE INDEX orgname_lower_index ON Organizations (LOWER(name));
 
 CREATE TABLE IF NOT EXISTS Profiles (
         id serial primary key, 
@@ -42,6 +43,7 @@ CREATE TABLE IF NOT EXISTS Profiles (
         organization_id integer NOT NULL REFERENCES Organizations (id) ON DELETE CASCADE,
         challenges text NOT NULL
 );        
+CREATE UNIQUE INDEX profilename_lower_index ON Profiles (LOWER(name));
 
 CREATE TABLE IF NOT EXISTS Admin_users (
         id serial primary key, 
@@ -56,11 +58,12 @@ CREATE UNIQUE INDEX username_lower_index ON Admin_users (LOWER(username));
 CREATE TABLE IF NOT EXISTS Roles (
         id serial primary key, 
         name varchar (50) NOT NULL,
-        write_local boolean NOT NULL,
-        read_local boolean NOT NULL,
+        write_all boolean NOT NULL,
         read_all boolean NOT NULL,
-        write_all boolean NOT NULL
+        write_local boolean NOT NULL,
+        read_local boolean NOT NULL
 );
+CREATE UNIQUE INDEX rolename_lower_index ON Roles (LOWER(name));
 
 CREATE TABLE IF NOT EXISTS Exercise_dbs (
         id serial primary key,
@@ -68,21 +71,24 @@ CREATE TABLE IF NOT EXISTS Exercise_dbs (
         organization_id integer NOT NULL REFERENCES Organizations (id) ON DELETE CASCADE, 
         url varchar (255) NOT NULL,
         sign_key varchar (255) NOT NULL,
-        auth_key varchar (255) NOT NULL,
-        UNIQUE (name)
+        auth_key varchar (255) NOT NULL
 );
+CREATE UNIQUE INDEX exdbname_lower_index ON Exercise_dbs (LOWER(name));
 
 CREATE TABLE IF NOT EXISTS Haaukins_agents (
-        id serial primary key, 
+        id serial primary key,
+        name varchar (255) NOT NULL,
         url varchar (255) NOT NULL,
         sign_key varchar (255) NOT NULL,
         auth_key varchar (255) NOT NULL
 );
+CREATE UNIQUE INDEX agentname_lower_index ON Haaukins_agents (LOWER(name));
 
 CREATE TABLE IF NOT EXISTS Frontends (
-    id serial primary key, 
-    name varchar (50) NOT NULL,
-    image varchar (50) NOT NULL,
-    memoryMB integer
+        id serial primary key, 
+        name varchar (50) NOT NULL,
+        image varchar (50) NOT NULL,
+        memoryMB integer
 );
+CREATE UNIQUE INDEX frontendname_lower_index ON Frontends (LOWER(name));
 
