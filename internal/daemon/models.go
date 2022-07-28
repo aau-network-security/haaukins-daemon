@@ -1,5 +1,7 @@
 package daemon
 
+import "github.com/aau-network-security/haaukins-daemon/internal/database"
+
 type AdminClaims struct {
 	Username       string `json:"username"`
 	Email          string `json:"email"`
@@ -14,9 +16,8 @@ type AdminClaims struct {
 }
 
 type APIResponse struct {
-	Status string `json:"status,omitempty"`
-	Token  string `json:"token,omitempty"`
+	Status string                        `json:"status,omitempty"`
+	Token  string                        `json:"token,omitempty"`
+	User   *database.GetAdminUserNoPwRow `json:"user,omitempty"`
+	Users  []database.GetAdminUsersRow   `json:"users,omitempty"`
 }
-
-// VPNConnConf includes configuration
-// information for gRPC client on VPN service
