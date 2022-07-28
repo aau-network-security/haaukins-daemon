@@ -130,6 +130,15 @@ func (q *Queries) CreateAdminUser(ctx context.Context, arg CreateAdminUserParams
 	return err
 }
 
+const deleteAdminUser = `-- name: DeleteAdminUser :exec
+DELETE FROM Admin_users WHERE LOWER(username)=LOWER($1)
+`
+
+func (q *Queries) DeleteAdminUser(ctx context.Context, lower string) error {
+	_, err := q.db.ExecContext(ctx, deleteAdminUser, lower)
+	return err
+}
+
 const deleteProfile = `-- name: DeleteProfile :exec
 DELETE FROM profiles WHERE name = $1
 `
@@ -198,8 +207,8 @@ const getAdminUser = `-- name: GetAdminUser :one
 SELECT id, username, password, email, role_id, organization_id FROM Admin_users WHERE LOWER(username)=LOWER($1)
 `
 
-func (q *Queries) GetAdminUser(ctx context.Context, lower string) (AdminUser, error) {
-	row := q.db.QueryRowContext(ctx, getAdminUser, lower)
+func (q *Queries) GetAdminUser(ctx context.Context, username string) (AdminUser, error) {
+	row := q.db.QueryRowContext(ctx, getAdminUser, username)
 	var i AdminUser
 	err := row.Scan(
 		&i.ID,
@@ -210,6 +219,68 @@ func (q *Queries) GetAdminUser(ctx context.Context, lower string) (AdminUser, er
 		&i.OrganizationID,
 	)
 	return i, err
+}
+
+const getAdminUserNoPw = `-- name: GetAdminUserNoPw :one
+SELECT username, email, role_id, organization_id FROM Admin_users WHERE LOWER(username)=LOWER($1)
+`
+
+type GetAdminUserNoPwRow struct {
+	Username       string `json:"username"`
+	Email          string `json:"email"`
+	RoleID         int32  `json:"role_id"`
+	OrganizationID int32  `json:"organization_id"`
+}
+
+func (q *Queries) GetAdminUserNoPw(ctx context.Context, lower string) (GetAdminUserNoPwRow, error) {
+	row := q.db.QueryRowContext(ctx, getAdminUserNoPw, lower)
+	var i GetAdminUserNoPwRow
+	err := row.Scan(
+		&i.Username,
+		&i.Email,
+		&i.RoleID,
+		&i.OrganizationID,
+	)
+	return i, err
+}
+
+const getAdminUsers = `-- name: GetAdminUsers :many
+SELECT username, email, role_id, organization_id FROM Admin_users WHERE organization_id = CASE WHEN $1=0 THEN organization_id ELSE $1 END
+`
+
+type GetAdminUsersRow struct {
+	Username       string `json:"username"`
+	Email          string `json:"email"`
+	RoleID         int32  `json:"role_id"`
+	OrganizationID int32  `json:"organization_id"`
+}
+
+func (q *Queries) GetAdminUsers(ctx context.Context, dollar_1 interface{}) ([]GetAdminUsersRow, error) {
+	rows, err := q.db.QueryContext(ctx, getAdminUsers, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetAdminUsersRow
+	for rows.Next() {
+		var i GetAdminUsersRow
+		if err := rows.Scan(
+			&i.Username,
+			&i.Email,
+			&i.RoleID,
+			&i.OrganizationID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getAllEvents = `-- name: GetAllEvents :many
@@ -639,6 +710,34 @@ func (q *Queries) TeamSolvedChls(ctx context.Context, tag string) ([]string, err
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateAdminEmail = `-- name: UpdateAdminEmail :exec
+UPDATE Admin_users SET email = $1 WHERE username = $2
+`
+
+type UpdateAdminEmailParams struct {
+	Email    string `json:"email"`
+	Username string `json:"username"`
+}
+
+func (q *Queries) UpdateAdminEmail(ctx context.Context, arg UpdateAdminEmailParams) error {
+	_, err := q.db.ExecContext(ctx, updateAdminEmail, arg.Email, arg.Username)
+	return err
+}
+
+const updateAdminPassword = `-- name: UpdateAdminPassword :exec
+UPDATE Admin_users SET password = $1 WHERE username = $2
+`
+
+type UpdateAdminPasswordParams struct {
+	Password string `json:"password"`
+	Username string `json:"username"`
+}
+
+func (q *Queries) UpdateAdminPassword(ctx context.Context, arg UpdateAdminPasswordParams) error {
+	_, err := q.db.ExecContext(ctx, updateAdminPassword, arg.Password, arg.Username)
+	return err
 }
 
 const updateCloseEvent = `-- name: UpdateCloseEvent :exec
