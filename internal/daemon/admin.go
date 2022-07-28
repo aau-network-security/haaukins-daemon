@@ -5,7 +5,7 @@ import (
 )
 
 func (d *daemon) adminSubrouter(r *gin.RouterGroup) {
-	user := r.Group("/user")
-	d.adminUserSubrouter(user)
+
+	d.adminUserSubrouter(r)
 
 }
