@@ -4,3 +4,4 @@ config.yml
 build-errors.log
 main
 logs
+.VSCodeCounter
