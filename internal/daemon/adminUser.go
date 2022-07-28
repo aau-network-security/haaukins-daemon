@@ -2,7 +2,9 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/aau-network-security/haaukins-daemon/internal/database"
 	"github.com/gin-gonic/gin"
@@ -16,19 +18,22 @@ type adminUserRequest struct {
 	Email          string `json:"email,omitempty"`
 	RoleId         int32  `json:"role_id,omitempty"`
 	OrganizationId int32  `json:"organization_id,omitempty"`
+	VerifyAdminPassword string `json:"verify_admin_password,omitempty"`
 }
 
 func (d *daemon) adminUserSubrouter(r *gin.RouterGroup) {
+	user := r.Group("/users")
 	// Public endpoints
-	r.Use(corsMiddleware())
-	r.POST("/login", d.adminLogin)
+	user.Use(corsMiddleware())
+	user.POST("/login", d.adminLogin)
 
 	// Private endpoints
-	r.Use(d.adminAuthMiddleware())
-	r.POST("", d.newAdminUser)
-	r.GET("", d.getAdminUser)
-	r.PUT("", d.updateAdminUser)
-	r.DELETE("", d.deleteAdminUser)
+	user.Use(d.adminAuthMiddleware())
+	user.POST("", d.newAdminUser)
+	user.GET("/:username", d.getAdminUser)
+	user.GET("", d.getAdminUsers)
+	user.PUT("", d.updateAdminUser)
+	user.DELETE("", d.deleteAdminUser)
 
 }
 
@@ -40,9 +45,6 @@ func (d *daemon) adminLogin(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "Error"})
 		return
 	}
-
-	// Query is case insensitive and uses the capitalized username for comparison
-	//username := strings.ToUpper(req.Username)
 
 	user, err := d.db.GetAdminUser(ctx, req.Username)
 	if err != nil {
@@ -82,9 +84,11 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 	admin := unpackAdminClaims(c)
 	log.Debug().Msgf("admin claims: %v", admin)
 	d.auditLogger.Info().
+		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
 		Str("AdminEmail", admin.Email).
-		Msg("AdminUser is creating a new user")
+		Str("NewUser", req.Username).
+		Msg("AdminUser is trying to create a new user")
 
 	// Check if role to assign actually exists
 	role, err := d.db.GetRoleById(ctx, req.RoleId)
@@ -123,7 +127,7 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 		}
 
 		// Check if admin can attach desired role to user
-		if !authRoleAssignment(admin, role) {
+		if !authRoleAccess(admin, role) {
 			c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized, you cannot create a user which has more permissions than yourself"})
 			return
 		}
@@ -146,15 +150,169 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 }
 
 func (d *daemon) deleteAdminUser(c *gin.Context) {
+	ctx := context.Background()
+	var req adminUserRequest
+	if err := c.BindJSON(&req); err != nil {
+		log.Error().Err(err).Msg("Error parsing request data: ")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "Error"})
+		return
+	}
+	admin := unpackAdminClaims(c)
+	log.Debug().Msgf("admin claims: %v", admin)
+	d.auditLogger.Info().
+		Time("UTC", time.Now().UTC()).
+		Str("AdminUser", admin.Username).
+		Str("AdminEmail", admin.Email).
+		Str("Username", req.Username).
+		Msg("AdminUser is trying to delete user")
 
+	// Getting info for user to delete
+	user, err := d.db.GetAdminUser(ctx, req.Username)
+	if err != nil {
+		log.Error().Err(err).Msg("Error getting admin user for deletion")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "Could not find user to delete"})
+		return
+	}
+	userRole, err := d.db.GetRoleById(ctx, user.RoleID)
+	if err != nil {
+		log.Error().Err(err).Msg("Error getting user role for user to delete")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error, please contact an server administrator"})
+		return
+	}
+
+	if admin.WriteAll { // User is allowed to create new users with no restrictions
+		if err := d.db.DeleteAdminUser(ctx, req.Username); err != nil {
+			log.Error().Err(err).Msg("Error deleting admin user")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+		return
+	} else if admin.WriteLocal { // User is only allowed to write within their organization
+		if !authOrganizationAccess(admin, user.OrganizationID) {
+			c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized, you do not have access to this organization"})
+			return
+		}
+		// Check if admin can attach desired role to user
+		if !authRoleAccess(admin, userRole) {
+			c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized, you cannot delete a user which has more permissions than yourself"})
+			return
+		}
+		if err := d.db.DeleteAdminUser(ctx, req.Username); err != nil {
+			log.Error().Err(err).Msg("Error deleting admin user")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+		return
+	}
+
+	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 }
 
 func (d *daemon) updateAdminUser(c *gin.Context) {
+	ctx := context.Background()
+	var req adminUserRequest
+	if err := c.BindJSON(&req); err != nil {
+		log.Error().Err(err).Msg("Error parsing request data: ")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "Error"})
+		return
+	}
+
+	admin := unpackAdminClaims(c)
+	log.Debug().Msgf("admin claims: %v", admin)
+	d.auditLogger.Info().
+		Time("UTC", time.Now().UTC()).
+		Str("AdminUser", admin.Username).
+		Str("AdminEmail", admin.Email).
+		Str("Username", req.Username).
+		Msg("AdminUser is updating user")
+
+	user, err := d.db.GetAdminUser(ctx, req.Username)
+	if err != nil {
+		log.Error().Err(err).Msg("Error getting user")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "Could not find user to update"})
+		return
+	}
+
+	if admin.WriteAll {
+		err := 
+	} else if admin.WriteLocal {
+
+	} else if admin.Username == user.Username {
+
+	}
 
 }
 
 func (d *daemon) getAdminUser(c *gin.Context) {
+	ctx := context.Background()
+	username := c.Param("username")
 
+	admin := unpackAdminClaims(c)
+	log.Debug().Msgf("admin claims: %v", admin)
+	d.auditLogger.Info().
+		Time("UTC", time.Now().UTC()).
+		Str("AdminUser", admin.Username).
+		Str("AdminEmail", admin.Email).
+		Str("Username", username).
+		Msg("AdminUser is listing users")
+
+	user, err := d.db.GetAdminUserNoPw(ctx, username)
+	if err != nil {
+		log.Error().Err(err).Msg("Error getting admin user")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "Could not find user"})
+		return
+	}
+
+	if admin.ReadAll {
+		c.JSON(http.StatusOK, APIResponse{Status: "OK", User: &user})
+		return
+	} else if admin.ReadLocal {
+		if !authOrganizationAccess(admin, user.OrganizationID) {
+			c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized, you do not have access to this organization"})
+			return
+		}
+		c.JSON(http.StatusOK, APIResponse{Status: "OK", User: &user})
+		return
+	}
+
+	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
+}
+
+func (d *daemon) getAdminUsers(c *gin.Context) {
+	ctx := context.Background()
+
+	admin := unpackAdminClaims(c)
+	log.Debug().Msgf("admin claims: %v", admin)
+	d.auditLogger.Info().
+		Time("UTC", time.Now().UTC()).
+		Str("AdminUser", admin.Username).
+		Str("AdminEmail", admin.Email).
+		Msg("AdminUser is listing users")
+
+	if admin.ReadAll {
+		// When org id is zero it gets all users from the db
+		users, err := d.db.GetAdminUsers(ctx, 0)
+		if err != nil {
+			log.Error().Err(err).Msg("Error getting admin users")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+		c.JSON(http.StatusOK, APIResponse{Status: "OK", Users: users})
+		return
+	} else if admin.ReadLocal {
+		users, err := d.db.GetAdminUsers(ctx, admin.OrganizationID)
+		if err != nil {
+			log.Error().Err(err).Msg("Error getting admin users")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+		c.JSON(http.StatusOK, APIResponse{Status: "OK", Users: users})
+		return
+	}
+
+	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 }
 
 func (d *daemon) createAdminUser(ctx context.Context, user adminUserRequest) (bool, error) {
@@ -175,4 +333,18 @@ func (d *daemon) createAdminUser(ctx context.Context, user adminUserRequest) (bo
 		return true, err
 	}
 	return false, nil
+}
+
+func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUserRequest, currUser database.AdminUser, admin AdminClaims) error {
+	adminInfo, err := d.db.GetAdminUser(ctx, admin.Username)
+	if err != nil {
+		return err
+	}
+	match := verifyPassword(adminInfo.Password, updatedUser.VerifyAdminPassword)
+	if !match {
+		return fmt.Error("Admin verification failed, password did not match")
+	}
+	if updatedUser.Password != currUser.Password {
+		if up
+	}
 }
