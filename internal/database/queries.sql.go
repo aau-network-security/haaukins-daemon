@@ -108,15 +108,15 @@ func (q *Queries) CheckProfileExists(ctx context.Context, name string) (bool, er
 }
 
 const createAdminUser = `-- name: CreateAdminUser :exec
-INSERT INTO Admin_users (username, password, email, role_id, organization_id) VALUES ($1, $2, $3, $4, $5)
+INSERT INTO Admin_users (username, password, email, role, organization) VALUES ($1, $2, $3, $4, $5)
 `
 
 type CreateAdminUserParams struct {
-	Username       string `json:"username"`
-	Password       string `json:"password"`
-	Email          string `json:"email"`
-	RoleID         int32  `json:"role_id"`
-	OrganizationID int32  `json:"organization_id"`
+	Username     string `json:"username"`
+	Password     string `json:"password"`
+	Email        string `json:"email"`
+	Role         string `json:"role"`
+	Organization string `json:"organization"`
 }
 
 func (q *Queries) CreateAdminUser(ctx context.Context, arg CreateAdminUserParams) error {
@@ -124,8 +124,8 @@ func (q *Queries) CreateAdminUser(ctx context.Context, arg CreateAdminUserParams
 		arg.Username,
 		arg.Password,
 		arg.Email,
-		arg.RoleID,
-		arg.OrganizationID,
+		arg.Role,
+		arg.Organization,
 	)
 	return err
 }
@@ -204,7 +204,7 @@ func (q *Queries) EarliestDate(ctx context.Context) (time.Time, error) {
 }
 
 const getAdminUser = `-- name: GetAdminUser :one
-SELECT id, username, password, email, role_id, organization_id FROM Admin_users WHERE LOWER(username)=LOWER($1)
+SELECT id, username, password, email, role, organization FROM Admin_users WHERE LOWER(username)=LOWER($1)
 `
 
 func (q *Queries) GetAdminUser(ctx context.Context, username string) (AdminUser, error) {
@@ -215,21 +215,21 @@ func (q *Queries) GetAdminUser(ctx context.Context, username string) (AdminUser,
 		&i.Username,
 		&i.Password,
 		&i.Email,
-		&i.RoleID,
-		&i.OrganizationID,
+		&i.Role,
+		&i.Organization,
 	)
 	return i, err
 }
 
 const getAdminUserNoPw = `-- name: GetAdminUserNoPw :one
-SELECT username, email, role_id, organization_id FROM Admin_users WHERE LOWER(username)=LOWER($1)
+SELECT username, email, role, organization FROM Admin_users WHERE LOWER(username)=LOWER($1)
 `
 
 type GetAdminUserNoPwRow struct {
-	Username       string `json:"username"`
-	Email          string `json:"email"`
-	RoleID         int32  `json:"role_id"`
-	OrganizationID int32  `json:"organization_id"`
+	Username     string `json:"username"`
+	Email        string `json:"email"`
+	Role         string `json:"role"`
+	Organization string `json:"organization"`
 }
 
 func (q *Queries) GetAdminUserNoPw(ctx context.Context, lower string) (GetAdminUserNoPwRow, error) {
@@ -238,21 +238,21 @@ func (q *Queries) GetAdminUserNoPw(ctx context.Context, lower string) (GetAdminU
 	err := row.Scan(
 		&i.Username,
 		&i.Email,
-		&i.RoleID,
-		&i.OrganizationID,
+		&i.Role,
+		&i.Organization,
 	)
 	return i, err
 }
 
 const getAdminUsers = `-- name: GetAdminUsers :many
-SELECT username, email, role_id, organization_id FROM Admin_users WHERE organization_id = CASE WHEN $1=0 THEN organization_id ELSE $1 END
+SELECT username, email, role, organization FROM Admin_users WHERE organization = CASE WHEN $1='' THEN organization ELSE $1 END
 `
 
 type GetAdminUsersRow struct {
-	Username       string `json:"username"`
-	Email          string `json:"email"`
-	RoleID         int32  `json:"role_id"`
-	OrganizationID int32  `json:"organization_id"`
+	Username     string `json:"username"`
+	Email        string `json:"email"`
+	Role         string `json:"role"`
+	Organization string `json:"organization"`
 }
 
 func (q *Queries) GetAdminUsers(ctx context.Context, dollar_1 interface{}) ([]GetAdminUsersRow, error) {
@@ -267,8 +267,8 @@ func (q *Queries) GetAdminUsers(ctx context.Context, dollar_1 interface{}) ([]Ge
 		if err := rows.Scan(
 			&i.Username,
 			&i.Email,
-			&i.RoleID,
-			&i.OrganizationID,
+			&i.Role,
+			&i.Organization,
 		); err != nil {
 			return nil, err
 		}
@@ -515,7 +515,7 @@ func (q *Queries) GetEventsExeptClosed(ctx context.Context) ([]Event, error) {
 }
 
 const getExerciseDatabases = `-- name: GetExerciseDatabases :many
-SELECT id, name, organization_id, url, sign_key, auth_key FROM Exercise_dbs
+SELECT id, name, organization, url, sign_key, auth_key FROM Exercise_dbs
 `
 
 func (q *Queries) GetExerciseDatabases(ctx context.Context) ([]ExerciseDb, error) {
@@ -530,7 +530,7 @@ func (q *Queries) GetExerciseDatabases(ctx context.Context) ([]ExerciseDb, error
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
-			&i.OrganizationID,
+			&i.Organization,
 			&i.Url,
 			&i.SignKey,
 			&i.AuthKey,
@@ -548,19 +548,19 @@ func (q *Queries) GetExerciseDatabases(ctx context.Context) ([]ExerciseDb, error
 	return items, nil
 }
 
-const getOrgById = `-- name: GetOrgById :one
-SELECT id, name FROM Organizations WHERE id=$1
+const getOrgByName = `-- name: GetOrgByName :one
+SELECT id, name FROM Organizations WHERE LOWER(name)=LOWER($1)
 `
 
-func (q *Queries) GetOrgById(ctx context.Context, id int32) (Organization, error) {
-	row := q.db.QueryRowContext(ctx, getOrgById, id)
+func (q *Queries) GetOrgByName(ctx context.Context, orgname string) (Organization, error) {
+	row := q.db.QueryRowContext(ctx, getOrgByName, orgname)
 	var i Organization
 	err := row.Scan(&i.ID, &i.Name)
 	return i, err
 }
 
 const getProfiles = `-- name: GetProfiles :many
-SELECT id, name, secret, organization_id, challenges FROM profiles ORDER BY id asc
+SELECT id, name, secret, organization, challenges FROM profiles ORDER BY id asc
 `
 
 func (q *Queries) GetProfiles(ctx context.Context) ([]Profile, error) {
@@ -576,7 +576,7 @@ func (q *Queries) GetProfiles(ctx context.Context) ([]Profile, error) {
 			&i.ID,
 			&i.Name,
 			&i.Secret,
-			&i.OrganizationID,
+			&i.Organization,
 			&i.Challenges,
 		); err != nil {
 			return nil, err
@@ -590,24 +590,6 @@ func (q *Queries) GetProfiles(ctx context.Context) ([]Profile, error) {
 		return nil, err
 	}
 	return items, nil
-}
-
-const getRoleById = `-- name: GetRoleById :one
-SELECT id, name, write_all, read_all, write_local, read_local FROM Roles WHERE id=$1
-`
-
-func (q *Queries) GetRoleById(ctx context.Context, id int32) (Role, error) {
-	row := q.db.QueryRowContext(ctx, getRoleById, id)
-	var i Role
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.WriteAll,
-		&i.ReadAll,
-		&i.WriteLocal,
-		&i.ReadLocal,
-	)
-	return i, err
 }
 
 const getTeamCount = `-- name: GetTeamCount :many

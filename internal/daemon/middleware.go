@@ -41,16 +41,8 @@ func (d *daemon) createAdminToken(ctx context.Context, user database.AdminUser) 
 	atClaims["sub"] = user.Username
 	atClaims["participant"] = false
 	atClaims["email"] = user.Email
-	atClaims["organization_id"] = user.OrganizationID
-
-	role, err := d.db.GetRoleById(ctx, user.RoleID)
-	if err != nil {
-		return "", err
-	}
-	atClaims["write_all"] = role.WriteAll
-	atClaims["read_all"] = role.ReadAll
-	atClaims["write_local"] = role.WriteLocal
-	atClaims["read_local"] = role.ReadLocal
+	atClaims["organization"] = user.Organization
+	atClaims["role"] = user.Role
 
 	at := jwt.NewWithClaims(jwt.SigningMethodHS256, atClaims)
 	token, err := at.SignedString([]byte(d.conf.JwtSecret))
@@ -148,11 +140,8 @@ func (d *daemon) adminAuthMiddleware() gin.HandlerFunc {
 		c.Set("exp", claims["exp"])
 		c.Set("sub", claims["sub"])
 		c.Set("email", claims["email"])
-		c.Set("organization_id", claims["organization_id"])
-		c.Set("write_all", claims["write_all"])
-		c.Set("read_all", claims["read_all"])
-		c.Set("write_local", claims["write_local"])
-		c.Set("read_local", claims["read_local"])
+		c.Set("organization", claims["organization"])
+		c.Set("role", claims["role"])
 		c.Next()
 	}
 }

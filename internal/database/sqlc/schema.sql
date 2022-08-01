@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS Team (
 -- Admin related tables
 CREATE TABLE IF NOT EXISTS Organizations (
         id serial primary key,
-        name varchar (50) NOT NULL
+        name varchar (50) NOT NULL,
+        UNIQUE(name)
 );
 CREATE UNIQUE INDEX orgname_lower_index ON Organizations (LOWER(name));
 
@@ -40,7 +41,7 @@ CREATE TABLE IF NOT EXISTS Profiles (
         id serial primary key, 
         name varchar (50) NOT NULL, 
         secret boolean NOT NULL, 
-        organization_id integer NOT NULL REFERENCES Organizations (id) ON DELETE CASCADE,
+        organization varchar(50) NOT NULL REFERENCES Organizations (name) ON DELETE CASCADE,
         challenges text NOT NULL
 );        
 CREATE UNIQUE INDEX profilename_lower_index ON Profiles (LOWER(name));
@@ -50,25 +51,15 @@ CREATE TABLE IF NOT EXISTS Admin_users (
         username varchar (50) NOT NULL, 
         password varchar (255) NOT NULL,
         email varchar (255) NOT NULL,
-        role_id integer NOT NULL,
-        organization_id integer NOT NULL REFERENCES Organizations (id) ON DELETE CASCADE
+        role varchar (50) NOT NULL,
+        organization varchar (50) NOT NULL REFERENCES Organizations (name) ON DELETE CASCADE
 );
 CREATE UNIQUE INDEX username_lower_index ON Admin_users (LOWER(username));
-
-CREATE TABLE IF NOT EXISTS Roles (
-        id serial primary key, 
-        name varchar (50) NOT NULL,
-        write_all boolean NOT NULL,
-        read_all boolean NOT NULL,
-        write_local boolean NOT NULL,
-        read_local boolean NOT NULL
-);
-CREATE UNIQUE INDEX rolename_lower_index ON Roles (LOWER(name));
 
 CREATE TABLE IF NOT EXISTS Exercise_dbs (
         id serial primary key,
         name varchar (50) NOT NULL,
-        organization_id integer NOT NULL REFERENCES Organizations (id) ON DELETE CASCADE, 
+        organization varchar (50) NOT NULL REFERENCES Organizations (name) ON DELETE CASCADE, 
         url varchar (255) NOT NULL,
         sign_key varchar (255) NOT NULL,
         auth_key varchar (255) NOT NULL

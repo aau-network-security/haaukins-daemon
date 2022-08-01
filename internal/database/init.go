@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	_ "github.com/lib/pq"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 type DbConfig struct {
@@ -15,18 +17,22 @@ type DbConfig struct {
 	Password string `yaml:"password"`
 }
 
-func (conf *DbConfig) InitConn() (*Queries, error) {
+func (conf *DbConfig) InitConn() (*Queries, *gorm.DB, error) {
 	driver := "postgres"
-	connectstring := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable", conf.Host, conf.Username, conf.Password, conf.DbName)
+	connectstring := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable", conf.Host, conf.Username, conf.Password, conf.DbName, conf.Port)
 	// Setting up the database connection
 	conn, err := sql.Open(driver, connectstring)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// Pinging the connection to make sure that the db is alive
 	if err := conn.Ping(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+
+	// Setting up casbin adapter
+	gormDb, err := gorm.Open(postgres.Open(connectstring), &gorm.Config{})
+
 	db := New(conn)
-	return db, nil
+	return db, gormDb, nil
 }

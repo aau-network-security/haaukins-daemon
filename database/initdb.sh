@@ -39,9 +39,12 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
                 solved_challenges text NOT NULL
         );
 
+
+        -- Admin related tables
         CREATE TABLE IF NOT EXISTS Organizations (
                 id serial primary key,
-                name varchar (50) NOT NULL
+                name varchar (50) NOT NULL,
+                UNIQUE(name)
         );
         CREATE UNIQUE INDEX orgname_lower_index ON Organizations (LOWER(name));
 
@@ -49,7 +52,7 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
                 id serial primary key, 
                 name varchar (50) NOT NULL, 
                 secret boolean NOT NULL, 
-                organization_id integer NOT NULL REFERENCES Organizations (id) ON DELETE CASCADE,
+                organization varchar(50) NOT NULL REFERENCES Organizations (name) ON DELETE CASCADE,
                 challenges text NOT NULL
         );        
         CREATE UNIQUE INDEX profilename_lower_index ON Profiles (LOWER(name));
@@ -59,25 +62,15 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
                 username varchar (50) NOT NULL, 
                 password varchar (255) NOT NULL,
                 email varchar (255) NOT NULL,
-                role_id integer NOT NULL,
-                organization_id integer NOT NULL REFERENCES Organizations (id) ON DELETE CASCADE
+                role varchar (50) NOT NULL,
+                organization varchar (50) NOT NULL REFERENCES Organizations (name) ON DELETE CASCADE
         );
         CREATE UNIQUE INDEX username_lower_index ON Admin_users (LOWER(username));
-
-        CREATE TABLE IF NOT EXISTS Roles (
-                id serial primary key, 
-                name varchar (50) NOT NULL,
-                write_all boolean NOT NULL,
-                read_all boolean NOT NULL,
-                write_local boolean NOT NULL,
-                read_local boolean NOT NULL
-        );
-        CREATE UNIQUE INDEX rolename_lower_index ON Roles (LOWER(name));
 
         CREATE TABLE IF NOT EXISTS Exercise_dbs (
                 id serial primary key,
                 name varchar (50) NOT NULL,
-                organization_id integer NOT NULL REFERENCES Organizations (id) ON DELETE CASCADE, 
+                organization varchar (50) NOT NULL REFERENCES Organizations (name) ON DELETE CASCADE, 
                 url varchar (255) NOT NULL,
                 sign_key varchar (255) NOT NULL,
                 auth_key varchar (255) NOT NULL
@@ -102,14 +95,9 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
         CREATE UNIQUE INDEX frontendname_lower_index ON Frontends (LOWER(name));
 
 
+
         -- Setting up an administrative account with password admin
-        INSERT INTO Organizations (name) VALUES ('Administrators');
-        INSERT INTO Organizations (name) VALUES ('AAU');
-        INSERT INTO Organizations (name) VALUES ('DTU');
-        INSERT INTO Roles (name, write_all, read_all, write_local, read_local) VALUES ('SuperAdmin', true, true, true, true);
-        INSERT INTO Roles (name, write_all, read_all, write_local, read_local) VALUES ('SuperAdminNoWrite', false, true, false, true);
-        INSERT INTO Roles (name, write_all, read_all, write_local, read_local) VALUES ('Administrator', false, false, true, true);
-        INSERT INTO Roles (name, write_all, read_all, write_local, read_local) VALUES ('AdministratorNoWrite', false, false, false, true);
-        INSERT INTO Admin_users (username, password, email, role_id, organization_id) VALUES ('Administrator', '\$2a\$10\$s8RIrctKwSA/jib7jSaGE.Z4TdukcRP/Irkxse5dotyYT0uHb3b.2', 'cyber@es.aau.dk', (SELECT id FROM Roles WHERE name = 'SuperAdmin'), (SELECT id FROM Organizations WHERE name = 'Administrators'));
+        INSERT INTO Organizations (name) VALUES ('$ADMIN_ORG');
+        INSERT INTO Admin_users (username, password, email, role, organization) VALUES ('admin', '\$2a\$10\$s8RIrctKwSA/jib7jSaGE.Z4TdukcRP/Irkxse5dotyYT0uHb3b.2', 'cyber@es.aau.dk', 'superadmin', '$ADMIN_ORG');
         
 EOSQL

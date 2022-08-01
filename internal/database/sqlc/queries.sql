@@ -85,23 +85,20 @@ SELECT * FROM Exercise_dbs;
 -- name: GetAdminUser :one
 SELECT * FROM Admin_users WHERE LOWER(username)=LOWER(@username);
 
--- name: GetRoleById :one
-SELECT * FROM Roles WHERE id=$1;
-
--- name: GetOrgById :one
-SELECT * FROM Organizations WHERE id=$1;
+-- name: GetOrgByName :one
+SELECT * FROM Organizations WHERE LOWER(name)=LOWER(@orgName);
 
 -- name: CreateAdminUser :exec
-INSERT INTO Admin_users (username, password, email, role_id, organization_id) VALUES ($1, $2, $3, $4, $5);
+INSERT INTO Admin_users (username, password, email, role, organization) VALUES ($1, $2, $3, $4, $5);
 
 -- name: DeleteAdminUser :exec
 DELETE FROM Admin_users WHERE LOWER(username)=LOWER($1);
 
 -- name: GetAdminUserNoPw :one
-SELECT username, email, role_id, organization_id FROM Admin_users WHERE LOWER(username)=LOWER($1);
+SELECT username, email, role, organization FROM Admin_users WHERE LOWER(username)=LOWER($1);
 
 -- name: GetAdminUsers :many
-SELECT username, email, role_id, organization_id FROM Admin_users WHERE organization_id = CASE WHEN $1=0 THEN organization_id ELSE $1 END;
+SELECT username, email, role, organization FROM Admin_users WHERE organization = CASE WHEN $1='' THEN organization ELSE $1 END;
 
 -- name: UpdateAdminPassword :exec
 UPDATE Admin_users SET password = @password WHERE username = @username;

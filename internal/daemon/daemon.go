@@ -9,6 +9,8 @@ import (
 
 	"github.com/aau-network-security/haaukins-daemon/internal/database"
 	eproto "github.com/aau-network-security/haaukins-daemon/internal/exercise/ex-proto"
+	"github.com/casbin/casbin/v2"
+	gormadapter "github.com/casbin/gorm-adapter/v3"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -20,6 +22,7 @@ type daemon struct {
 	db          *database.Queries
 	exClients   map[string]eproto.ExerciseStoreClient
 	auditLogger *zerolog.Logger
+	enforcer    *casbin.Enforcer
 }
 
 func NewConfigFromFile(path string) (*Config, error) {
@@ -85,7 +88,7 @@ func NewConfigFromFile(path string) (*Config, error) {
 func New(conf *Config) (*daemon, error) {
 	ctx := context.Background()
 	log.Info().Msg("Creating daemon...")
-	db, err := conf.Database.InitConn()
+	db, gormDb, err := conf.Database.InitConn()
 	if err != nil {
 		log.Fatal().Err(err).Msg("[Haaukins-daemon] Failed to connect to database")
 		return nil, err
@@ -96,8 +99,6 @@ func New(conf *Config) (*daemon, error) {
 		log.Fatal().Err(err).Msg("[Haaukins-daemon] Failed to get currently connected exercise databases")
 		return nil, err
 	}
-	// Creating audit logger to log admin events seperately
-	auditLogger := zerolog.New(newRollingFile(conf)).With().Logger()
 
 	// Using a hashtable for exercise database connections
 	// If the database name is not in the hashtable we know that the database is not connected
@@ -120,11 +121,30 @@ func New(conf *Config) (*daemon, error) {
 		}
 	}
 
+	// Creating audit logger to log admin events seperately
+	auditLogger := zerolog.New(newRollingFile(conf)).With().Logger()
+
+	adapter, err := gormadapter.NewAdapterByDB(gormDb)
+	enforcer, err := casbin.NewEnforcer("config/rbac_model.conf", adapter, false)
+	for _, p := range conf.DefaultPolicies {
+		if !enforcer.HasPolicy(p) {
+			if _, err := enforcer.AddPolicy(p); err != nil {
+				log.Fatal().Err(err).Msg("Error adding missing policy")
+			}
+		}
+	}
+	if !enforcer.HasGroupingPolicy("admin", "superadmin", conf.AdminOrg) {
+		if _, err := enforcer.AddGroupingPolicy("admin", "superadmin", conf.AdminOrg); err != nil {
+			log.Fatal().Err(err).Msg("Error administrator")
+		}
+	}
+
 	d := &daemon{
 		conf:        conf,
 		db:          db,
 		exClients:   exClients,
 		auditLogger: &auditLogger,
+		enforcer:    enforcer,
 	}
 	return d, nil
 }

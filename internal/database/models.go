@@ -10,12 +10,12 @@ import (
 )
 
 type AdminUser struct {
-	ID             int32  `json:"id"`
-	Username       string `json:"username"`
-	Password       string `json:"password"`
-	Email          string `json:"email"`
-	RoleID         int32  `json:"role_id"`
-	OrganizationID int32  `json:"organization_id"`
+	ID           int32  `json:"id"`
+	Username     string `json:"username"`
+	Password     string `json:"password"`
+	Email        string `json:"email"`
+	Role         string `json:"role"`
+	Organization string `json:"organization"`
 }
 
 type Event struct {
@@ -37,12 +37,12 @@ type Event struct {
 }
 
 type ExerciseDb struct {
-	ID             int32  `json:"id"`
-	Name           string `json:"name"`
-	OrganizationID int32  `json:"organization_id"`
-	Url            string `json:"url"`
-	SignKey        string `json:"sign_key"`
-	AuthKey        string `json:"auth_key"`
+	ID           int32  `json:"id"`
+	Name         string `json:"name"`
+	Organization string `json:"organization"`
+	Url          string `json:"url"`
+	SignKey      string `json:"sign_key"`
+	AuthKey      string `json:"auth_key"`
 }
 
 type Frontend struct {
@@ -66,20 +66,11 @@ type Organization struct {
 }
 
 type Profile struct {
-	ID             int32  `json:"id"`
-	Name           string `json:"name"`
-	Secret         bool   `json:"secret"`
-	OrganizationID int32  `json:"organization_id"`
-	Challenges     string `json:"challenges"`
-}
-
-type Role struct {
-	ID         int32  `json:"id"`
-	Name       string `json:"name"`
-	WriteAll   bool   `json:"write_all"`
-	ReadAll    bool   `json:"read_all"`
-	WriteLocal bool   `json:"write_local"`
-	ReadLocal  bool   `json:"read_local"`
+	ID           int32  `json:"id"`
+	Name         string `json:"name"`
+	Secret       bool   `json:"secret"`
+	Organization string `json:"organization"`
+	Challenges   string `json:"challenges"`
 }
 
 type Team struct {
