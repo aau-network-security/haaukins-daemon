@@ -25,6 +25,21 @@ type daemon struct {
 	enforcer    *casbin.Enforcer
 }
 
+var defaultPolicies = [][]string{
+	{"role::superadmin", "org::Admins", "objects::Admins", "(read|write)"},
+	{"role::superadmin", "org::Admins", "organizations", "(read|write)"},
+	{"role::superadmin", "org::Admins", "secretchals::Admins", "(read|write)"},
+}
+
+var defaultObjectGroups = [][]string{
+	{"g2", "events::Admins", "objects::Admins"},
+	{"g2", "roles::Admins", "objects::Admins"},
+	{"g2", "exdbs::Admins", "objects::Admins"},
+	{"g2", "registries::Admins", "objects::Admins"},
+	{"g2", "users::Admins", "objects::Admins"},
+	{"g2", "role::superadmin", "roles::Admins"},
+}
+
 func NewConfigFromFile(path string) (*Config, error) {
 	f, err := ioutil.ReadFile(path)
 	if err != nil {
@@ -93,6 +108,31 @@ func New(conf *Config) (*daemon, error) {
 		log.Fatal().Err(err).Msg("[Haaukins-daemon] Failed to connect to database")
 		return nil, err
 	}
+
+	adapter, err := gormadapter.NewAdapterByDB(gormDb)
+	enforcer, err := casbin.NewEnforcer("config/rbac_model.conf", adapter, false)
+	for _, p := range defaultPolicies {
+		if !enforcer.HasPolicy(p) {
+			if _, err := enforcer.AddPolicy(p); err != nil {
+				log.Fatal().Err(err).Msg("Error adding missing policy")
+			}
+		}
+	}
+
+	for _, g := range defaultObjectGroups {
+		if !enforcer.HasNamedGroupingPolicy(g[0], g[1:]) {
+			if _, err := enforcer.AddNamedGroupingPolicy(g[0], g[1:]); err != nil {
+				log.Fatal().Err(err).Msg("Error adding missing policy")
+			}
+		}
+	}
+	// Adding initial admin account in admin org
+	if !enforcer.HasGroupingPolicy("admin", "role::superadmin", "org::Admins") {
+		if _, err := enforcer.AddGroupingPolicy("admin", "role::superadmin", "org::Admins"); err != nil {
+			log.Fatal().Err(err).Msg("Error administrator")
+		}
+	}
+
 	// Getting exercise database connections stored in the database
 	exersiceDatabases, err := db.GetExerciseDatabases(ctx)
 	if err != nil {
@@ -123,21 +163,6 @@ func New(conf *Config) (*daemon, error) {
 
 	// Creating audit logger to log admin events seperately
 	auditLogger := zerolog.New(newRollingFile(conf)).With().Logger()
-
-	adapter, err := gormadapter.NewAdapterByDB(gormDb)
-	enforcer, err := casbin.NewEnforcer("config/rbac_model.conf", adapter, false)
-	for _, p := range conf.DefaultPolicies {
-		if !enforcer.HasPolicy(p) {
-			if _, err := enforcer.AddPolicy(p); err != nil {
-				log.Fatal().Err(err).Msg("Error adding missing policy")
-			}
-		}
-	}
-	if !enforcer.HasGroupingPolicy("admin", "superadmin", conf.AdminOrg) {
-		if _, err := enforcer.AddGroupingPolicy("admin", "superadmin", conf.AdminOrg); err != nil {
-			log.Fatal().Err(err).Msg("Error administrator")
-		}
-	}
 
 	d := &daemon{
 		conf:        conf,

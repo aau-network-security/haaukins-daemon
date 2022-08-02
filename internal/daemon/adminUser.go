@@ -108,7 +108,7 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 		return
 	}
 	sub := admin.Username
-	dom := req.Organization
+	dom := admin.Organization
 	obj := req.Role
 	act := "write"
 	if err := d.enforcer.LoadPolicy(); err != nil {
