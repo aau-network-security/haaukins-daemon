@@ -105,3 +105,12 @@ UPDATE Admin_users SET password = @password WHERE username = @username;
 
 -- name: UpdateAdminEmail :exec
 UPDATE Admin_users SET email = @email WHERE username = @username;
+
+-- name: CheckIfUserExists :one
+SELECT EXISTS( SELECT 1 FROM Admin_users WHERE lower(username) = lower(@username) );
+
+-- name: CheckIfOrgExists :one
+SELECT EXISTS( SELECT 1 FROM Organizations WHERE lower(name) = lower(@orgName) );
+
+-- name: AddOrganization :exec
+INSERT INTO Organizations (name, owner_user, owner_email) VALUES (@org, @ownerUsername, @ownerEmail);

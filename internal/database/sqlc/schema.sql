@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS Team (
 CREATE TABLE IF NOT EXISTS Organizations (
         id serial primary key,
         name varchar (255) NOT NULL,
+        owner_user varchar(255) NOT NULL,
+        owner_email varchar(255) NOT NULL,
         UNIQUE(name)
 );
 CREATE UNIQUE INDEX orgname_lower_index ON Organizations (LOWER(name));

@@ -44,6 +44,8 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
         CREATE TABLE IF NOT EXISTS Organizations (
                 id serial primary key,
                 name varchar (255) NOT NULL,
+                owner_user varchar(255) NOT NULL,
+                owner_email varchar(255) NOT NULL,
                 UNIQUE(name)
         );
         CREATE UNIQUE INDEX orgname_lower_index ON Organizations (LOWER(name));
@@ -97,7 +99,7 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
 
 
         -- Setting up an administrative account with password admin
-        INSERT INTO Organizations (name) VALUES ('org::Admins');
-        INSERT INTO Admin_users (username, password, email, role, organization) VALUES ('admin', '\$2a\$10\$s8RIrctKwSA/jib7jSaGE.Z4TdukcRP/Irkxse5dotyYT0uHb3b.2', 'cyber@es.aau.dk', 'role::superadmin', 'org::Admins');
+        INSERT INTO Organizations (name, owner_user, owner_email) VALUES ('org::Admins', 'admin', 'cyber@es.aau.dk');
+        INSERT INTO Admin_users (username, password, email, role, organization) VALUES ('admin', '\$2a\$10\$uwUoW.w5OZKEa5/UJrYyM.fz9vjH3z1sGsZWXZ2Nmf0obL9OK80kC', 'cyber@es.aau.dk', 'role::superadmin', 'org::Admins');
         
 EOSQL
