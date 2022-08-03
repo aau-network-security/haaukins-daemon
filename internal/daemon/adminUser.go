@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/aau-network-security/haaukins-daemon/internal/database"
@@ -56,14 +55,14 @@ func (d *daemon) adminLogin(c *gin.Context) {
 		dummyHash := "$2a$10$s8RIrctKwSA/jib7jSaGE.Z4TdukcRP/Irkxse5dotyYT0uHb3b.2"
 		fakePassword := "fakepassword"
 		_ = verifyPassword(dummyHash, fakePassword)
-		c.JSON(http.StatusOK, APIResponse{Status: "Incorrect username or password"})
+		c.JSON(http.StatusOK, APIResponse{Status: incorrectUsernameOrPasswordError})
 		return
 	}
 
 	// Check if password matches that which is in the database
 	match := verifyPassword(user.Password, req.Password)
 	if !match {
-		c.JSON(http.StatusOK, APIResponse{Status: "Incorrect username or password"})
+		c.JSON(http.StatusOK, APIResponse{Status: incorrectUsernameOrPasswordError})
 		return
 	}
 
@@ -90,7 +89,6 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 
 	// Unpack the jwt claims passed in the gin context to a struct
 	admin := unpackAdminClaims(c)
-	log.Debug().Msgf("admin claims: %v", admin)
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -98,26 +96,17 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 		Str("NewUser", req.Username).
 		Msg("AdminUser is trying to create a new user")
 
-	// Check if role to assign actually exists
-	//Todo casbin check on role
-	// Check if org to assign actually exists
-	_, err := d.db.GetOrgByName(ctx, req.Organization)
-	if err != nil {
-		log.Error().Err(err).Msgf("Error finding org for new user")
-		c.JSON(http.StatusBadRequest, APIResponse{Status: "Organization does not exist"})
-		return
-	}
 	sub := admin.Username
 	dom := admin.Organization
-	obj := req.Role
+	obj := fmt.Sprintf("role::%s", req.Role)
 	act := "write"
+	log.Debug().Str("sub", sub).Str("dom", dom).Str("obj", obj).Msg("Admin")
 	if err := d.enforcer.LoadPolicy(); err != nil {
 		log.Error().Err(err).Msgf("Error loading policies")
 		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 		return
 	}
-	ok, err := d.enforcer.Enforce(fmt.Sprint(sub), dom, obj, act)
-	log.Debug().Str("subject", sub).Str("dom", dom).Str("obj", obj).Msgf("Trying to authorize: %v, %v", ok, err)
+	// Check if user has access
 	if authorized, err := d.enforcer.Enforce(sub, dom, obj, act); authorized || err != nil {
 		if err != nil {
 			log.Error().Err(err).Msgf("Encountered an error while authorizing")
@@ -126,25 +115,19 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 		}
 		// Password should be more than 8 characters
 		if len(req.Password) < 8 {
-			c.JSON(http.StatusBadRequest, APIResponse{Status: "Password has to be at least 8 characters"})
+			c.JSON(http.StatusBadRequest, APIResponse{Status: passwordTooShortError})
 			return
 		}
 		// Create new user if it does not already exist
-		alreadyExists, err := d.createAdminUser(ctx, req)
-		if err != nil || alreadyExists {
-			if alreadyExists {
-				log.Error().Err(err).Msgf("Error creating admin user")
-				c.JSON(http.StatusInternalServerError, APIResponse{Status: "User already exists"})
-				return
-			}
+		alreadyExists, err := d.createAdminUser(ctx, req, dom)
+		if err != nil {
 			log.Error().Err(err).Msgf("Error creating admin user")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
 		}
-		// Create casbin user
-		if _, err := d.enforcer.AddRoleForUserInDomain(strings.ToLower(req.Username), req.Role, req.Organization); err != nil {
-			log.Error().Err(err).Msgf("Encountered an error while assigning user to role and org")
-			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+		if alreadyExists {
+			log.Error().Msgf("Error creating admin user: %s", userExistsError)
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: userExistsError})
 			return
 		}
 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
@@ -384,7 +367,7 @@ func (d *daemon) getAdminUser(c *gin.Context) {
 // 	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 // }
 
-func (d *daemon) createAdminUser(ctx context.Context, user adminUserRequest) (bool, error) {
+func (d *daemon) createAdminUser(ctx context.Context, user adminUserRequest, org string) (bool, error) {
 	// Create password hash from password
 	pwHash, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
@@ -395,13 +378,26 @@ func (d *daemon) createAdminUser(ctx context.Context, user adminUserRequest) (bo
 		Username:     user.Username,
 		Password:     string(pwHash),
 		Email:        user.Email,
-		Role:         user.Role,
-		Organization: user.Organization,
+		Role:         fmt.Sprintf("role::%s", user.Role),
+		Organization: org,
 	}
+	log.Debug().Msgf("New User:%v", newUser)
+	userExists, err := d.db.CheckIfUserExists(ctx, user.Username)
+	if err != nil {
+		return false, err
+	}
+	if userExists {
+		return true, nil
+	}
+
 	// Create the admin user
 	if err := d.db.CreateAdminUser(ctx, newUser); err != nil {
-		// User already exists
-		return true, err
+		return false, err
+	}
+
+	// Create casbin group
+	if _, err := d.enforcer.AddGroupingPolicy(newUser.Username, newUser.Role, newUser.Organization); err != nil {
+		return false, err
 	}
 	return false, nil
 }
