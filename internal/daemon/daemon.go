@@ -25,6 +25,13 @@ type daemon struct {
 	enforcer    *casbin.Enforcer
 }
 
+const (
+	orgExistsError                   = "organization already exists"
+	userExistsError                  = "user already exists"
+	passwordTooShortError            = "password must be at least 8 characters"
+	incorrectUsernameOrPasswordError = "incorrect username or password"
+)
+
 var defaultPolicies = [][]string{
 	{"role::superadmin", "org::Admins", "objects::Admins", "(read|write)"},
 	{"role::superadmin", "org::Admins", "organizations", "(read|write)"},
