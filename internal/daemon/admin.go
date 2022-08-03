@@ -7,5 +7,5 @@ import (
 func (d *daemon) adminSubrouter(r *gin.RouterGroup) {
 
 	d.adminUserSubrouter(r)
-
+	d.adminorgSubrouter(r)
 }
