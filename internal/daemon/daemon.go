@@ -33,9 +33,9 @@ const (
 )
 
 var defaultPolicies = [][]string{
-	{"role::superadmin", "org::Admins", "objects::Admins", "(read|write)"},
-	{"role::superadmin", "org::Admins", "organizations", "(read|write)"},
-	{"role::superadmin", "org::Admins", "secretchals::Admins", "(read|write)"},
+	{"role::superadmin", "Admins", "objects::Admins", "(read|write)"},
+	{"role::superadmin", "Admins", "organizations", "(read|write)"},
+	{"role::superadmin", "Admins", "secretchals::Admins", "(read|write)"},
 }
 
 var defaultObjectGroups = [][]string{
@@ -134,8 +134,8 @@ func New(conf *Config) (*daemon, error) {
 		}
 	}
 	// Adding initial admin account in admin org
-	if !enforcer.HasGroupingPolicy("admin", "role::superadmin", "org::Admins") {
-		if _, err := enforcer.AddGroupingPolicy("admin", "role::superadmin", "org::Admins"); err != nil {
+	if !enforcer.HasGroupingPolicy("admin", "role::superadmin", "Admins") {
+		if _, err := enforcer.AddGroupingPolicy("admin", "role::superadmin", "Admins"); err != nil {
 			log.Fatal().Err(err).Msg("Error administrator")
 		}
 	}

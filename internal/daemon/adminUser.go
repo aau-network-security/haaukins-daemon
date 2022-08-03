@@ -22,6 +22,7 @@ type adminUserRequest struct {
 	VerifyAdminPassword string `json:"verify_admin_password,omitempty"`
 }
 
+//TODO finish user endpoints with casbin implementation
 func (d *daemon) adminUserSubrouter(r *gin.RouterGroup) {
 	user := r.Group("/users")
 	// Public endpoints
@@ -163,41 +164,42 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 // 		c.JSON(http.StatusBadRequest, APIResponse{Status: "Could not find user to delete"})
 // 		return
 // 	}
-// 	// Getting role info for user to delete
-// 	userRole, err := d.db.GetRoleById(ctx, user.RoleID)
-// 	if err != nil {
-// 		log.Error().Err(err).Msg("Error getting user role for user to delete")
-// 		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error, please contact an server administrator"})
-// 		return
-// 	}
+// 	sub := admin.Username
+// 	dom := admin.Organization
+// 	obj1 := user.Role
+// 	obj2 := fmt.Sprintf("users::%s")
+// 	var requests = [][]string{
+// 		{sub, dom, },
 
-// 	if admin.WriteAll { // User is allowed to create new users with no restrictions
-// 		if err := d.db.DeleteAdminUser(ctx, req.Username); err != nil {
-// 			log.Error().Err(err).Msg("Error deleting admin user")
-// 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
-// 			return
-// 		}
-// 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
-// 		return
-// 	} else if admin.WriteLocal { // User is only allowed to write within their organization
-// 		if !authOrganizationAccess(admin, user.OrganizationID) {
-// 			c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized, you do not have access to this organization"})
-// 			return
-// 		}
-// 		// Check if admin can actually delete the user, deny if user to delete has more privileges
-// 		if !authRoleAccess(admin, userRole) {
-// 			c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized, you cannot delete a user which has more permissions than yourself"})
-// 			return
-// 		}
-// 		// If authorized delete the user
-// 		if err := d.db.DeleteAdminUser(ctx, req.Username); err != nil {
-// 			log.Error().Err(err).Msg("Error deleting admin user")
-// 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
-// 			return
-// 		}
-// 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
-// 		return
 // 	}
+// 	if d.enforcer.BatchEnforce()
+// 	// if admin.WriteAll { // User is allowed to create new users with no restrictions
+// 	// 	if err := d.db.DeleteAdminUser(ctx, req.Username); err != nil {
+// 	// 		log.Error().Err(err).Msg("Error deleting admin user")
+// 	// 		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+// 	// 		return
+// 	// 	}
+// 	// 	c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+// 	// 	return
+// 	// } else if admin.WriteLocal { // User is only allowed to write within their organization
+// 	// 	if !authOrganizationAccess(admin, user.OrganizationID) {
+// 	// 		c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized, you do not have access to this organization"})
+// 	// 		return
+// 	// 	}
+// 	// 	// Check if admin can actually delete the user, deny if user to delete has more privileges
+// 	// 	if !authRoleAccess(admin, userRole) {
+// 	// 		c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized, you cannot delete a user which has more permissions than yourself"})
+// 	// 		return
+// 	// 	}
+// 	// 	// If authorized delete the user
+// 	// 	if err := d.db.DeleteAdminUser(ctx, req.Username); err != nil {
+// 	// 		log.Error().Err(err).Msg("Error deleting admin user")
+// 	// 		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+// 	// 		return
+// 	// 	}
+// 	// 	c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+// 	// 	return
+// 	// }
 
 // 	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 // }

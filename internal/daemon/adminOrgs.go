@@ -31,20 +31,21 @@ type adminOrgRequest struct {
 }
 
 var orgCreationPolicies = [][]string{
-	{"role::superadmin", "org::", "objects::", "(read|write)"},
-	{"role::administrator", "org::", "objects::", "(read|write)"},
-	{"role::developer", "org::", "events::", "(read|write)"},
-	{"role::developer", "org::", "exdbs::", "(read|write)"},
-	{"role::developer", "org::", "registries::", "(read|write)"},
-	{"role::developer", "org::", "secretchals::", "(read|write)"},
-	{"role::developer", "org::", "users::", "read"},
-	{"role::user", "org::", "users::", "(read|write)"},
-	{"role::user", "org::", "events::", "(read|write)"},
-	{"role::user", "org::", "role::user", "(read|write)"},
-	{"role::user", "org::", "role::npuser", "(read|write)"},
-	{"role::npuser", "org::", "events::", "(read|write)"},
+	{"role::superadmin", "", "objects::", "(read|write)"},
+	{"role::administrator", "", "objects::", "(read|write)"},
+	{"role::developer", "", "events::", "(read|write)"},
+	{"role::developer", "", "exdbs::", "(read|write)"},
+	{"role::developer", "", "registries::", "(read|write)"},
+	{"role::developer", "", "secretchals::", "(read|write)"},
+	{"role::developer", "", "users::", "read"},
+	{"role::user", "", "users::", "(read|write)"},
+	{"role::user", "", "events::", "(read|write)"},
+	{"role::user", "", "role::user", "(read|write)"},
+	{"role::user", "", "role::npuser", "(read|write)"},
+	{"role::npuser", "", "events::", "(read|write)"},
 }
 
+//
 // g2 policies
 var orgCreationGroupPolicies = [][]string{
 	{"events::", "objects::"},
@@ -60,7 +61,7 @@ var orgCreationGroupPolicies = [][]string{
 }
 
 // g3 policies
-var orgCreationDomainHirachyPolicy = []string{"org::Admins", ""}
+var orgCreationDomainHirachyPolicy = []string{"Admins", ""}
 
 func (d *daemon) newOrganization(c *gin.Context) {
 	ctx := context.Background()
@@ -119,6 +120,7 @@ func (d *daemon) updateOrganization(c *gin.Context) {
 
 }
 
+// TODO Delete all policies related to organizations including user policies etc.
 func (d *daemon) deleteOrganization(c *gin.Context) {
 
 }
@@ -143,7 +145,7 @@ func (d *daemon) creatOrgWithAdmin(ctx context.Context, org string, admin adminU
 	}
 	// insert org and user into db
 	orgParams := database.AddOrganizationParams{
-		Org:           fmt.Sprintf("org::%s", org),
+		Org:           org,
 		Ownerusername: admin.Username,
 		Owneremail:    admin.Email,
 	}
@@ -167,12 +169,12 @@ func (d *daemon) addOrgPolicies(org string) error {
 	if err != nil {
 		return err
 	}
-	// Populate policies with organization
+	// Populate policies with organization where string matches regex ex. "users::"
 	var policies [][]string
 	policies = append(policies, orgCreationPolicies...)
 	for i := 0; i < len(policies); i++ {
 		for j := 0; j < len(policies[i]); j++ {
-			if regex.MatchString(policies[i][j]) {
+			if regex.MatchString(policies[i][j]) || policies[i][j] == "" {
 				policies[i][j] = fmt.Sprintf("%s%s", policies[i][j], org)
 			}
 		}
@@ -186,7 +188,7 @@ func (d *daemon) addOrgPolicies(org string) error {
 	groups = append(groups, orgCreationGroupPolicies...)
 	for i := 0; i < len(groups); i++ {
 		for j := 0; j < len(groups[i]); j++ {
-			if regex.MatchString(groups[i][j]) {
+			if regex.MatchString(groups[i][j]) || groups[i][j] == "" {
 				groups[i][j] = fmt.Sprintf("%s%s", groups[i][j], org)
 			}
 		}
@@ -197,7 +199,7 @@ func (d *daemon) addOrgPolicies(org string) error {
 	}
 
 	// Add domain to Admins domain in casbin
-	orgCreationDomainHirachyPolicy[1] = fmt.Sprintf("org::%s", org)
+	orgCreationDomainHirachyPolicy[1] = org
 	if _, err := d.enforcer.AddNamedGroupingPolicy("g3", orgCreationDomainHirachyPolicy); err != nil {
 		return err
 	}
