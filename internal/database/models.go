@@ -61,8 +61,10 @@ type HaaukinsAgent struct {
 }
 
 type Organization struct {
-	ID   int32  `json:"id"`
-	Name string `json:"name"`
+	ID         int32  `json:"id"`
+	Name       string `json:"name"`
+	OwnerUser  string `json:"owner_user"`
+	OwnerEmail string `json:"owner_email"`
 }
 
 type Profile struct {

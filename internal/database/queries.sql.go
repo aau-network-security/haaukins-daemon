@@ -52,6 +52,21 @@ func (q *Queries) AddEvent(ctx context.Context, arg AddEventParams) error {
 	return err
 }
 
+const addOrganization = `-- name: AddOrganization :exec
+INSERT INTO Organizations (name, owner_user, owner_email) VALUES ($1, $2, $3)
+`
+
+type AddOrganizationParams struct {
+	Org           string `json:"org"`
+	Ownerusername string `json:"ownerusername"`
+	Owneremail    string `json:"owneremail"`
+}
+
+func (q *Queries) AddOrganization(ctx context.Context, arg AddOrganizationParams) error {
+	_, err := q.db.ExecContext(ctx, addOrganization, arg.Org, arg.Ownerusername, arg.Owneremail)
+	return err
+}
+
 const addProfile = `-- name: AddProfile :exec
 INSERT INTO profiles (name, secret, challenges) VALUES ($1, $2, $3)
 `
@@ -94,6 +109,28 @@ func (q *Queries) AddTeam(ctx context.Context, arg AddTeamParams) error {
 		arg.SolvedChallenges,
 	)
 	return err
+}
+
+const checkIfOrgExists = `-- name: CheckIfOrgExists :one
+SELECT EXISTS( SELECT 1 FROM Organizations WHERE lower(name) = lower($1) )
+`
+
+func (q *Queries) CheckIfOrgExists(ctx context.Context, orgname string) (bool, error) {
+	row := q.db.QueryRowContext(ctx, checkIfOrgExists, orgname)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const checkIfUserExists = `-- name: CheckIfUserExists :one
+SELECT EXISTS( SELECT 1 FROM Admin_users WHERE lower(username) = lower($1) )
+`
+
+func (q *Queries) CheckIfUserExists(ctx context.Context, username string) (bool, error) {
+	row := q.db.QueryRowContext(ctx, checkIfUserExists, username)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const checkProfileExists = `-- name: CheckProfileExists :one
@@ -549,13 +586,18 @@ func (q *Queries) GetExerciseDatabases(ctx context.Context) ([]ExerciseDb, error
 }
 
 const getOrgByName = `-- name: GetOrgByName :one
-SELECT id, name FROM Organizations WHERE LOWER(name)=LOWER($1)
+SELECT id, name, owner_user, owner_email FROM Organizations WHERE LOWER(name)=LOWER($1)
 `
 
 func (q *Queries) GetOrgByName(ctx context.Context, orgname string) (Organization, error) {
 	row := q.db.QueryRowContext(ctx, getOrgByName, orgname)
 	var i Organization
-	err := row.Scan(&i.ID, &i.Name)
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.OwnerUser,
+		&i.OwnerEmail,
+	)
 	return i, err
 }
 
