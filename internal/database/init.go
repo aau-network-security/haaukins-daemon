@@ -1,7 +1,6 @@
 package database
 
 import (
-	"database/sql"
 	"fmt"
 
 	_ "github.com/lib/pq"
@@ -18,10 +17,17 @@ type DbConfig struct {
 }
 
 func (conf *DbConfig) InitConn() (*Queries, *gorm.DB, error) {
-	driver := "postgres"
+	// driver := "postgres"
 	connectstring := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable", conf.Host, conf.Username, conf.Password, conf.DbName, conf.Port)
-	// Setting up the database connection
-	conn, err := sql.Open(driver, connectstring)
+
+	// Setting up casbin adapter
+	gormDb, err := gorm.Open(postgres.Open(connectstring), &gorm.Config{})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Setting up sqlc connection
+	conn, err := gormDb.DB()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -29,9 +35,6 @@ func (conf *DbConfig) InitConn() (*Queries, *gorm.DB, error) {
 	if err := conn.Ping(); err != nil {
 		return nil, nil, err
 	}
-
-	// Setting up casbin adapter
-	gormDb, err := gorm.Open(postgres.Open(connectstring), &gorm.Config{})
 
 	db := New(conn)
 	return db, gormDb, nil
