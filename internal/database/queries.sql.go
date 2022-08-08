@@ -145,12 +145,13 @@ func (q *Queries) CheckProfileExists(ctx context.Context, name string) (bool, er
 }
 
 const createAdminUser = `-- name: CreateAdminUser :exec
-INSERT INTO Admin_users (username, password, email, role, organization) VALUES ($1, $2, $3, $4, $5)
+INSERT INTO Admin_users (username, password, full_name, email, role, organization) VALUES ($1, $2, $3, $4, $5, $6)
 `
 
 type CreateAdminUserParams struct {
 	Username     string `json:"username"`
 	Password     string `json:"password"`
+	FullName     string `json:"full_name"`
 	Email        string `json:"email"`
 	Role         string `json:"role"`
 	Organization string `json:"organization"`
@@ -160,6 +161,7 @@ func (q *Queries) CreateAdminUser(ctx context.Context, arg CreateAdminUserParams
 	_, err := q.db.ExecContext(ctx, createAdminUser,
 		arg.Username,
 		arg.Password,
+		arg.FullName,
 		arg.Email,
 		arg.Role,
 		arg.Organization,
@@ -241,7 +243,7 @@ func (q *Queries) EarliestDate(ctx context.Context) (time.Time, error) {
 }
 
 const getAdminUser = `-- name: GetAdminUser :one
-SELECT id, username, password, email, role, organization FROM Admin_users WHERE LOWER(username)=LOWER($1)
+SELECT id, username, password, full_name, email, role, organization FROM Admin_users WHERE LOWER(username)=LOWER($1)
 `
 
 func (q *Queries) GetAdminUser(ctx context.Context, username string) (AdminUser, error) {
@@ -251,6 +253,7 @@ func (q *Queries) GetAdminUser(ctx context.Context, username string) (AdminUser,
 		&i.ID,
 		&i.Username,
 		&i.Password,
+		&i.FullName,
 		&i.Email,
 		&i.Role,
 		&i.Organization,
@@ -259,11 +262,12 @@ func (q *Queries) GetAdminUser(ctx context.Context, username string) (AdminUser,
 }
 
 const getAdminUserNoPw = `-- name: GetAdminUserNoPw :one
-SELECT username, email, role, organization FROM Admin_users WHERE LOWER(username)=LOWER($1)
+SELECT username, full_name, email, role, organization FROM Admin_users WHERE LOWER(username)=LOWER($1)
 `
 
 type GetAdminUserNoPwRow struct {
 	Username     string `json:"username"`
+	FullName     string `json:"full_name"`
 	Email        string `json:"email"`
 	Role         string `json:"role"`
 	Organization string `json:"organization"`
@@ -274,6 +278,7 @@ func (q *Queries) GetAdminUserNoPw(ctx context.Context, lower string) (GetAdminU
 	var i GetAdminUserNoPwRow
 	err := row.Scan(
 		&i.Username,
+		&i.FullName,
 		&i.Email,
 		&i.Role,
 		&i.Organization,
@@ -282,18 +287,19 @@ func (q *Queries) GetAdminUserNoPw(ctx context.Context, lower string) (GetAdminU
 }
 
 const getAdminUsers = `-- name: GetAdminUsers :many
-SELECT username, email, role, organization FROM Admin_users WHERE organization = CASE WHEN $1='' THEN organization ELSE $1 END
+SELECT username, full_name, email, role, organization FROM Admin_users WHERE organization = CASE WHEN $1='' THEN organization ELSE $1 END
 `
 
 type GetAdminUsersRow struct {
 	Username     string `json:"username"`
+	FullName     string `json:"full_name"`
 	Email        string `json:"email"`
 	Role         string `json:"role"`
 	Organization string `json:"organization"`
 }
 
-func (q *Queries) GetAdminUsers(ctx context.Context, dollar_1 interface{}) ([]GetAdminUsersRow, error) {
-	rows, err := q.db.QueryContext(ctx, getAdminUsers, dollar_1)
+func (q *Queries) GetAdminUsers(ctx context.Context, organization interface{}) ([]GetAdminUsersRow, error) {
+	rows, err := q.db.QueryContext(ctx, getAdminUsers, organization)
 	if err != nil {
 		return nil, err
 	}
@@ -303,6 +309,7 @@ func (q *Queries) GetAdminUsers(ctx context.Context, dollar_1 interface{}) ([]Ge
 		var i GetAdminUsersRow
 		if err := rows.Scan(
 			&i.Username,
+			&i.FullName,
 			&i.Email,
 			&i.Role,
 			&i.Organization,

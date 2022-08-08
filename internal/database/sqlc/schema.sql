@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS Admin_users (
         id serial primary key, 
         username varchar (255) NOT NULL, 
         password varchar (255) NOT NULL,
+        full_name varchar (255) NOT NULL,
         email varchar (255) NOT NULL,
         role varchar (255) NOT NULL,
         organization varchar (255) NOT NULL REFERENCES Organizations (name) ON DELETE CASCADE

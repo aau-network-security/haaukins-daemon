@@ -63,6 +63,7 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
                 id serial primary key, 
                 username varchar (255) NOT NULL, 
                 password varchar (255) NOT NULL,
+                full_name varchar (255) NOT NULL,
                 email varchar (255) NOT NULL,
                 role varchar (255) NOT NULL,
                 organization varchar (255) NOT NULL REFERENCES Organizations (name) ON DELETE CASCADE
@@ -100,6 +101,6 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
 
         -- Setting up an administrative account with password admin
         INSERT INTO Organizations (name, owner_user, owner_email) VALUES ('Admins', 'admin', 'cyber@es.aau.dk');
-        INSERT INTO Admin_users (username, password, email, role, organization) VALUES ('admin', '\$2a\$10\$uwUoW.w5OZKEa5/UJrYyM.fz9vjH3z1sGsZWXZ2Nmf0obL9OK80kC', 'cyber@es.aau.dk', 'role::superadmin', 'Admins');
+        INSERT INTO Admin_users (username, password, full_name, email, role, organization) VALUES ('admin', '\$2a\$10\$uwUoW.w5OZKEa5/UJrYyM.fz9vjH3z1sGsZWXZ2Nmf0obL9OK80kC', 'Mikkel Høst Christiansen', 'cyber@es.aau.dk', 'role::superadmin', 'Admins');
         
 EOSQL

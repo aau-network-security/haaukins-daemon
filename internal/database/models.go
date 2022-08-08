@@ -13,6 +13,7 @@ type AdminUser struct {
 	ID           int32  `json:"id"`
 	Username     string `json:"username"`
 	Password     string `json:"password"`
+	FullName     string `json:"full_name"`
 	Email        string `json:"email"`
 	Role         string `json:"role"`
 	Organization string `json:"organization"`

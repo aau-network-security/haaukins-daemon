@@ -89,16 +89,16 @@ SELECT * FROM Admin_users WHERE LOWER(username)=LOWER(@username);
 SELECT * FROM Organizations WHERE LOWER(name)=LOWER(@orgName);
 
 -- name: CreateAdminUser :exec
-INSERT INTO Admin_users (username, password, email, role, organization) VALUES ($1, $2, $3, $4, $5);
+INSERT INTO Admin_users (username, password, full_name, email, role, organization) VALUES ($1, $2, $3, $4, $5, $6);
 
 -- name: DeleteAdminUser :exec
 DELETE FROM Admin_users WHERE LOWER(username)=LOWER($1);
 
 -- name: GetAdminUserNoPw :one
-SELECT username, email, role, organization FROM Admin_users WHERE LOWER(username)=LOWER($1);
+SELECT username, full_name, email, role, organization FROM Admin_users WHERE LOWER(username)=LOWER($1);
 
 -- name: GetAdminUsers :many
-SELECT username, email, role, organization FROM Admin_users WHERE organization = CASE WHEN $1='' THEN organization ELSE $1 END;
+SELECT username, full_name, email, role, organization FROM Admin_users WHERE organization = CASE WHEN @organization='' THEN organization ELSE @organization END;
 
 -- name: UpdateAdminPassword :exec
 UPDATE Admin_users SET password = @password WHERE username = @username;
