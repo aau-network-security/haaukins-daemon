@@ -35,7 +35,6 @@ const (
 var defaultPolicies = [][]string{
 	{"role::superadmin", "Admins", "objects::Admins", "(read|write)"},
 	{"role::superadmin", "Admins", "organizations", "(read|write)"},
-	{"role::superadmin", "Admins", "secretchals::Admins", "(read|write)"},
 }
 
 var defaultObjectGroups = [][]string{
@@ -44,6 +43,11 @@ var defaultObjectGroups = [][]string{
 	{"g2", "exdbs::Admins", "objects::Admins"},
 	{"g2", "registries::Admins", "objects::Admins"},
 	{"g2", "users::Admins", "objects::Admins"},
+	{"g2", "exercises::Admins", "objects::Admins"},
+	{"g2", "secretchals::Admins", "objects::Admins"},
+	{"g2", "vms::Admins", "objects::Admins"},
+	{"g2", "agents::Admins", "objects::Admins"},
+	{"g2", "challengeProfiles::Admins", "objects::Admins"},
 	{"g2", "role::superadmin", "roles::Admins"},
 }
 
