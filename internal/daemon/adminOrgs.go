@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"regexp"
 	"time"
 
 	"github.com/aau-network-security/haaukins-daemon/internal/database"
@@ -165,34 +164,25 @@ func (d *daemon) creatOrgWithAdmin(ctx context.Context, org string, admin adminU
 }
 
 func (d *daemon) addOrgPolicies(org string) error {
-	regex, err := regexp.Compile("(^.*::$)")
+
+	// Populate policies with organization where string matches regex ex. "users::"
+	policies, err := createPolicies(orgCreationPolicies, org)
 	if err != nil {
 		return err
 	}
-	// Populate policies with organization where string matches regex ex. "users::"
-	var policies [][]string
-	policies = append(policies, orgCreationPolicies...)
-	for i := 0; i < len(policies); i++ {
-		for j := 0; j < len(policies[i]); j++ {
-			if regex.MatchString(policies[i][j]) || policies[i][j] == "" {
-				policies[i][j] = fmt.Sprintf("%s%s", policies[i][j], org)
-			}
-		}
-	}
+	log.Debug().Msgf("Add policies: %v", policies)
+	log.Debug().Msgf("Default: %v", orgCreationPolicies)
 	if _, err := d.enforcer.AddPolicies(policies); err != nil {
 		return err
 	}
 
 	// Populate groups with organization
-	var groups [][]string
-	groups = append(groups, orgCreationGroupPolicies...)
-	for i := 0; i < len(groups); i++ {
-		for j := 0; j < len(groups[i]); j++ {
-			if regex.MatchString(groups[i][j]) || groups[i][j] == "" {
-				groups[i][j] = fmt.Sprintf("%s%s", groups[i][j], org)
-			}
-		}
+	groups, err := createPolicies(orgCreationGroupPolicies, org)
+	if err != nil {
+		return err
 	}
+	log.Debug().Msgf("Add groups: %v", groups)
+	log.Debug().Msgf("Default: %v", orgCreationGroupPolicies)
 	// Add groups to casbin
 	if _, err := d.enforcer.AddNamedGroupingPolicies("g2", groups); err != nil {
 		return err
