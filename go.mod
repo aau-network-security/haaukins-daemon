@@ -7,6 +7,7 @@ require (
 	github.com/casbin/gorm-adapter/v3 v3.7.4
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/gin-gonic/gin v1.8.1
+	github.com/google/go-cmp v0.5.8 // indirect
 	github.com/google/uuid v1.3.0
 	github.com/lib/pq v1.10.6
 	github.com/rs/zerolog v1.27.0
