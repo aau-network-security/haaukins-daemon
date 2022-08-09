@@ -188,6 +188,7 @@ func New(conf *Config) (*daemon, error) {
 func (d *daemon) Run() error {
 
 	r := gin.Default()
+	r.SetTrustedProxies([]string{"127.0.0.1"})
 	d.setupRouters(r)
 	return r.Run(":8080")
 }
@@ -198,4 +199,8 @@ func (d *daemon) setupRouters(r *gin.Engine) {
 
 	d.adminSubrouter(admin)
 	d.eventSubrouter(event)
+}
+
+func exDbConnectRoutine() {
+
 }
