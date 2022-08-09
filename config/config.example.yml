@@ -8,4 +8,11 @@ db-config:
   username: haaukins
   password: haaukins
 
+auditlog:
+  - directory: /path/to/logs/dir
+  - fileName: auditlog.log
+  - max-backups: 10
+  - max-size: 10
+  - max-age: 30
+
 jwtSecret: test

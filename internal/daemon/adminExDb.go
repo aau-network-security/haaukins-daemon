@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"context"
 	"net/http"
 	"time"
 
@@ -29,7 +28,7 @@ type adminExDbRequest struct {
 }
 
 func (d *daemon) addExDb(c *gin.Context) {
-	ctx := context.Background()
+	//ctx := context.Background()
 	// Unpack user request into go struct
 	var req adminExDbRequest
 	if err := c.BindJSON(&req); err != nil {
