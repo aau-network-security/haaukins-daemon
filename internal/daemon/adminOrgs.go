@@ -12,7 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func (d *daemon) adminorgSubrouter(r *gin.RouterGroup) {
+func (d *daemon) adminOrgSubrouter(r *gin.RouterGroup) {
 	org := r.Group("/orgs")
 	org.Use(corsMiddleware())
 	org.Use(d.adminAuthMiddleware())
