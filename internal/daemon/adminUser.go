@@ -103,11 +103,13 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 	obj := fmt.Sprintf("role::%s", req.Role)
 	act := "write"
 	log.Debug().Str("sub", sub).Str("dom", dom).Str("obj", obj).Msg("Admin")
-	if err := d.enforcer.LoadPolicy(); err != nil {
-		log.Error().Err(err).Msgf("Error loading policies")
-		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
-		return
-	}
+	// TODO Waiting on an answer from github, but would be nice only to load relevant policies
+	// TODO especially if we start getting alot of them
+	// if err := d.enforcer.LoadPolicy(); err != nil {
+	// 	log.Error().Err(err).Msgf("Error loading policies")
+	// 	c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+	// 	return
+	// }
 	// Check if user has access
 	if authorized, err := d.enforcer.Enforce(sub, dom, obj, act); authorized || err != nil {
 		if err != nil {
