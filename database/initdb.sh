@@ -76,7 +76,8 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
                 organization varchar (255) NOT NULL REFERENCES Organizations (name) ON DELETE CASCADE, 
                 url varchar (255) NOT NULL,
                 sign_key varchar (255) NOT NULL,
-                auth_key varchar (255) NOT NULL
+                auth_key varchar (255) NOT NULL,
+                tls boolean NOT NULL
         );
         CREATE UNIQUE INDEX exdbname_lower_index ON Exercise_dbs (LOWER(name));
 
