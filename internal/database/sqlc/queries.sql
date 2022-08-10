@@ -112,5 +112,11 @@ SELECT EXISTS( SELECT 1 FROM Admin_users WHERE lower(username) = lower(@username
 -- name: CheckIfOrgExists :one
 SELECT EXISTS( SELECT 1 FROM Organizations WHERE lower(name) = lower(@orgName) );
 
+-- name: CheckIfExDbExists :one
+SELECT EXISTS( SELECT 1 FROM Exercise_dbs WHERE lower(name) = lower(@exDbName) );
+
 -- name: AddOrganization :exec
 INSERT INTO Organizations (name, owner_user, owner_email) VALUES (@org, @ownerUsername, @ownerEmail);
+
+-- name: AddExerciseDb :exec
+INSERT INTO Exercise_dbs (name, organization, url, sign_key, auth_key, tls) VALUES (@exDbName, @org, @url, @sign_key, @auth_key, @tls);
