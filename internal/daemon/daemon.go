@@ -114,14 +114,36 @@ func NewConfigFromFile(path string) (*Config, error) {
 func New(conf *Config) (*daemon, error) {
 	ctx := context.Background()
 	log.Info().Msg("Creating daemon...")
+	// TODO rewrte init function if filtered adapter is used
 	db, gormDb, err := conf.Database.InitConn()
 	if err != nil {
 		log.Fatal().Err(err).Msg("[Haaukins-daemon] Failed to connect to database")
-		return nil, err
 	}
 
+	// dataSource := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable", conf.Database.Host, conf.Database.Username, conf.Database.Password, conf.Database.DbName, conf.Database.Port)
+	// adapter, err := gormadapter.NewFilteredAdapter("postgres", dataSource, true)
+	// if err != nil {
+	// 	log.Fatal().Err(err).Msg("Failed to create casbin adapter")
+	// }
+
 	adapter, err := gormadapter.NewAdapterByDB(gormDb)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to create casbin adapter")
+	}
+
 	enforcer, err := casbin.NewEnforcer("config/rbac_model.conf", adapter, false)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to create casbin enforcer")
+	}
+
+	// filter := gormadapter.Filter{
+	// 	V1: []string{"Admins"},
+	// 	V2: []string{"objects::Admins"},
+	// }
+	// if err := enforcer.LoadFilteredPolicy(filter); err != nil {
+	// 	log.Fatal().Err(err).Msg("Error loading policies")
+	// }
+
 	for _, p := range defaultPolicies {
 		if !enforcer.HasPolicy(p) {
 			if _, err := enforcer.AddPolicy(p); err != nil {
@@ -154,13 +176,15 @@ func New(conf *Config) (*daemon, error) {
 	// Using a hashtable for exercise database connections
 	// If the database name is not in the hashtable we know that the database is not connected
 	log.Info().Msg("Connecting to currently stored exercise databases...")
+	// TODO make a new exClient type which holds both the connection and the owner organization of each db
+	// TODO And add a public boolean for exercise databases that are accessible by all.
 	exClients := make(map[string]eproto.ExerciseStoreClient)
 	for _, exDb := range exersiceDatabases {
 		exDbConfig := ServiceConfig{
 			Grpc:    exDb.Url,
 			AuthKey: exDb.AuthKey,
 			SignKey: exDb.SignKey,
-			Enabled: true,
+			Enabled: exDb.Tls,
 		}
 		exClient, err := NewExerciseClientConn(exDbConfig)
 		if err != nil {
