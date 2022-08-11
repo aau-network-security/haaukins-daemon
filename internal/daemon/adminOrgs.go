@@ -14,7 +14,6 @@ import (
 
 func (d *daemon) adminOrgSubrouter(r *gin.RouterGroup) {
 	org := r.Group("/orgs")
-	org.Use(corsMiddleware())
 	org.Use(d.adminAuthMiddleware())
 
 	org.POST("", d.newOrganization)

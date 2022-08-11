@@ -23,11 +23,9 @@ type adminUserRequest struct {
 	VerifyAdminPassword string `json:"verify_admin_password,omitempty"`
 }
 
-//TODO finish user endpoints with casbin implementation
 func (d *daemon) adminUserSubrouter(r *gin.RouterGroup) {
 	user := r.Group("/users")
 	// Public endpoints
-	user.Use(corsMiddleware())
 	user.POST("/login", d.adminLogin)
 
 	// Private endpoints
@@ -48,7 +46,6 @@ func (d *daemon) adminLogin(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "Error"})
 		return
 	}
-
 	// Get user information
 	user, err := d.db.GetAdminUser(ctx, req.Username)
 	if err != nil {
@@ -57,14 +54,14 @@ func (d *daemon) adminLogin(c *gin.Context) {
 		dummyHash := "$2a$10$s8RIrctKwSA/jib7jSaGE.Z4TdukcRP/Irkxse5dotyYT0uHb3b.2"
 		fakePassword := "fakepassword"
 		_ = verifyPassword(dummyHash, fakePassword)
-		c.JSON(http.StatusOK, APIResponse{Status: incorrectUsernameOrPasswordError})
+		c.JSON(http.StatusUnauthorized, APIResponse{Status: incorrectUsernameOrPasswordError})
 		return
 	}
 
 	// Check if password matches that which is in the database
 	match := verifyPassword(user.Password, req.Password)
 	if !match {
-		c.JSON(http.StatusOK, APIResponse{Status: incorrectUsernameOrPasswordError})
+		c.JSON(http.StatusUnauthorized, APIResponse{Status: incorrectUsernameOrPasswordError})
 		return
 	}
 

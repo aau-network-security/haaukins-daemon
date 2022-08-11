@@ -13,7 +13,6 @@ import (
 
 func (d *daemon) adminExDbSubrouter(r *gin.RouterGroup) {
 	exDb := r.Group("/exdbs")
-	exDb.Use(corsMiddleware())
 	exDb.Use(d.adminAuthMiddleware())
 
 	exDb.POST("", d.addExDb)
