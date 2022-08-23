@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	github.com/casbin/casbin/v2 v2.51.2
-	github.com/casbin/gorm-adapter/v3 v3.7.4
+	github.com/casbin/gorm-adapter/v3 v3.8.0
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/gin-contrib/cors v1.4.0
 	github.com/gin-gonic/gin v1.8.1
