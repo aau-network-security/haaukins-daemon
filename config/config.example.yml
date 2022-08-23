@@ -1,6 +1,13 @@
 host: localhost
 port: 8080
 
+auditLog: 
+  directory: /path/to/log/dir
+  fileName: AuditLog.log
+  max-backups: 10
+  max-size: 10
+  max-age: 30
+
 db-config:
   host: 127.0.0.1
   port: 5432
@@ -8,11 +15,11 @@ db-config:
   username: haaukins
   password: haaukins
 
-auditlog:
-  - directory: /path/to/logs/dir
-  - fileName: auditlog.log
-  - max-backups: 10
-  - max-size: 10
-  - max-age: 30
+exercise-service:
+  grpc: localhost
+  sign-key: dev-sign-key
+  auth-key: dev-auth-key
+  tls-enabled: false
+  
 
 jwtSecret: test
