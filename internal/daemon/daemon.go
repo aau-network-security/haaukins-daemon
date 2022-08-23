@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"context"
 	"errors"
 	"io/ioutil"
 	"os"
@@ -22,7 +21,7 @@ import (
 type daemon struct {
 	conf        *Config
 	db          *database.Queries
-	exClients   map[string]eproto.ExerciseStoreClient
+	exClient    eproto.ExerciseStoreClient
 	auditLogger *zerolog.Logger
 	enforcer    *casbin.Enforcer
 }
@@ -42,7 +41,6 @@ var defaultPolicies = [][]string{
 var defaultObjectGroups = [][]string{
 	{"g2", "events::Admins", "objects::Admins"},
 	{"g2", "roles::Admins", "objects::Admins"},
-	{"g2", "exdbs::Admins", "objects::Admins"},
 	{"g2", "registries::Admins", "objects::Admins"},
 	{"g2", "users::Admins", "objects::Admins"},
 	{"g2", "exercises::Admins", "objects::Admins"},
@@ -114,12 +112,18 @@ func NewConfigFromFile(path string) (*Config, error) {
 }
 
 func New(conf *Config) (*daemon, error) {
-	ctx := context.Background()
+	//ctx := context.Background()
 	log.Info().Msg("Creating daemon...")
 	// TODO rewrte init function if filtered adapter is used
 	db, gormDb, err := conf.Database.InitConn()
 	if err != nil {
 		log.Fatal().Err(err).Msg("[Haaukins-daemon] Failed to connect to database")
+	}
+
+	exClient, err := NewExerciseClientConn(conf.ExerciseService)
+	if err != nil {
+		log.Fatal().Err(err).Msgf("[exercise-service]: error on creating gRPC communication")
+
 	}
 
 	// dataSource := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable", conf.Database.Host, conf.Database.Username, conf.Database.Password, conf.Database.DbName, conf.Database.Port)
@@ -168,43 +172,13 @@ func New(conf *Config) (*daemon, error) {
 		}
 	}
 
-	// Getting exercise database connections stored in the database
-	exersiceDatabases, err := db.GetExerciseDatabases(ctx)
-	if err != nil {
-		log.Fatal().Err(err).Msg("[Haaukins-daemon] Failed to get currently connected exercise databases")
-		return nil, err
-	}
-
-	// Using a hashtable for exercise database connections
-	// If the database name is not in the hashtable we know that the database is not connected
-	log.Info().Msg("Connecting to currently stored exercise databases...")
-	// TODO make a new exClient type which holds both the connection and the owner organization of each db
-	// TODO And add a public boolean for exercise databases that are accessible by all.
-	exClients := make(map[string]eproto.ExerciseStoreClient)
-	for _, exDb := range exersiceDatabases {
-		exDbConfig := ServiceConfig{
-			Grpc:    exDb.Url,
-			AuthKey: exDb.AuthKey,
-			SignKey: exDb.SignKey,
-			Enabled: exDb.Tls,
-		}
-		exClient, err := NewExerciseClientConn(exDbConfig)
-		if err != nil {
-			log.Warn().Err(err).Msgf("[exercise-service]: error on creating gRPC communication")
-
-		} else {
-			exClients[exDb.Name] = exClient
-			log.Debug().Str("Url", exDbConfig.Grpc).Msg("Exercise service connected !")
-		}
-	}
-
 	// Creating audit logger to log admin events seperately
 	auditLogger := zerolog.New(newRollingFile(conf)).With().Logger()
 
 	d := &daemon{
 		conf:        conf,
 		db:          db,
-		exClients:   exClients,
+		exClient:    exClient,
 		auditLogger: &auditLogger,
 		enforcer:    enforcer,
 	}
@@ -215,6 +189,7 @@ func (d *daemon) Run() error {
 
 	r := gin.Default()
 	r.SetTrustedProxies([]string{"127.0.0.1"})
+	// Setting up CORS
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"POST", "GET", "OPTIONS", "PUT", "DELETE"},
@@ -233,8 +208,4 @@ func (d *daemon) setupRouters(r *gin.Engine) {
 
 	d.adminSubrouter(admin)
 	d.eventSubrouter(event)
-}
-
-func exDbConnectRoutine() {
-
 }

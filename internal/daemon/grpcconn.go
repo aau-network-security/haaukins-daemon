@@ -28,13 +28,6 @@ var (
 	UnauthorizedErr  = errors.New("You seem to not be logged in")
 )
 
-type ServiceConfig struct {
-	Grpc    string
-	AuthKey string
-	SignKey string
-	Enabled bool
-}
-
 type Creds struct {
 	Token    string
 	Insecure bool
@@ -109,8 +102,8 @@ func NewExerciseClientConn(config ServiceConfig) (eproto.ExerciseStoreClient, er
 	if err != nil {
 		return nil, fmt.Errorf("[exercise-service]: Error in constructing auth credentials %v", err)
 	}
-	if config.Enabled {
-		log.Debug().Bool("TLS", config.Enabled).Msg(" secure connection enabled for creating secure [exercise-service] client")
+	if config.TLSEnabled {
+		log.Debug().Bool("TLS", config.TLSEnabled).Msg(" secure connection enabled for creating secure [exercise-service] client")
 		dialOpts := []grpc.DialOption{
 			grpc.WithTransportCredentials(creds),
 			grpc.WithPerRPCCredentials(authCreds),

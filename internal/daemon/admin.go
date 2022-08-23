@@ -5,9 +5,6 @@ import (
 )
 
 func (d *daemon) adminSubrouter(r *gin.RouterGroup) {
-
 	d.adminUserSubrouter(r)
 	d.adminOrgSubrouter(r)
-	d.adminExDbSubrouter(r)
-
 }
