@@ -16,4 +16,5 @@ type APIResponse struct {
 	Token  string                        `json:"token,omitempty"`
 	User   *database.GetAdminUserNoPwRow `json:"user,omitempty"`
 	Users  []database.GetAdminUsersRow   `json:"users,omitempty"`
+	Orgs   []database.Organization       `json:"orgs,omitempty"`
 }

@@ -18,7 +18,7 @@ func unpackAdminClaims(c *gin.Context) AdminClaims {
 	}
 }
 
-func createPolicies(s [][]string, org string) ([][]string, error) {
+func assemblePolicies(s [][]string, org string) ([][]string, error) {
 	regex, err := regexp.Compile("(^.*::$)")
 	if err != nil {
 		return nil, err
