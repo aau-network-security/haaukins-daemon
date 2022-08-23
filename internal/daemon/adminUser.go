@@ -166,12 +166,11 @@ func (d *daemon) deleteAdminUser(c *gin.Context) {
 	}
 	// Setting up an array of casbin requests in format sub, dom, obj and act
 	var requests = [][]interface{}{
-		{admin.Username, admin.Organization, "users::Admins", "write"},
 		{admin.Username, admin.Organization, fmt.Sprintf("users::%s", userToDelete.Organization), "write"},
 		{admin.Username, admin.Organization, userToDelete.Role, "write"},
 	}
 	// Trying to authorize user
-	if authorized, err := d.enforcer.BatchEnforce(requests); authorized[0] || (authorized[1] && authorized[2]) || err != nil {
+	if authorized, err := d.enforcer.BatchEnforce(requests); (authorized[0] && authorized[1]) || err != nil {
 		if err != nil {
 			log.Error().Err(err).Msgf("Encountered an error while authorizing user delete")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
@@ -223,12 +222,11 @@ func (d *daemon) updateAdminUser(c *gin.Context) {
 	}
 	// Setting up an array of casbin requests in format sub, dom, obj and act
 	var requests = [][]interface{}{
-		{admin.Username, admin.Organization, "users::Admins", "write"},
 		{admin.Username, admin.Organization, fmt.Sprintf("users::%s", currUser.Organization), "write"},
 		{admin.Username, admin.Organization, currUser.Role, "write"},
 	}
 
-	if authorized, err := d.enforcer.BatchEnforce(requests); authorized[0] || (authorized[1] && authorized[2]) || err != nil {
+	if authorized, err := d.enforcer.BatchEnforce(requests); (authorized[0] && authorized[1]) || err != nil {
 		if err != nil {
 			log.Error().Err(err).Msgf("Encountered an error while authorizing user update")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
