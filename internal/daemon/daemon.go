@@ -41,7 +41,6 @@ var defaultPolicies = [][]string{
 var defaultObjectGroups = [][]string{
 	{"g2", "events::Admins", "objects::Admins"},
 	{"g2", "roles::Admins", "objects::Admins"},
-	{"g2", "registries::Admins", "objects::Admins"},
 	{"g2", "users::Admins", "objects::Admins"},
 	{"g2", "exercises::Admins", "objects::Admins"},
 	{"g2", "secretchals::Admins", "objects::Admins"},

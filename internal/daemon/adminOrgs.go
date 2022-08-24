@@ -33,7 +33,6 @@ var orgCreationPolicies = [][]string{
 	{"role::superadmin", "", "objects::", "(read|write)"},
 	{"role::administrator", "", "objects::", "(read|write)"},
 	{"role::developer", "", "events::", "(read|write)"},
-	{"role::developer", "", "registries::", "(read|write)"},
 	{"role::developer", "", "secretchals::", "(read|write)"},
 	{"role::developer", "", "exercises::", "(read|write)"},
 	{"role::developer", "", "challengeProfiles::", "(read|write)"},
@@ -58,7 +57,6 @@ var orgCreationPolicies = [][]string{
 var orgCreationGroupPolicies = [][]string{
 	{"events::", "objects::"},
 	{"roles::", "objects::"},
-	{"registries::", "objects::"},
 	{"users::", "objects::"},
 	{"secretchals::", "objects::"},
 	{"exercises::", "objects::"},
