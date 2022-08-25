@@ -20,21 +20,20 @@ type AdminUser struct {
 }
 
 type Event struct {
-	ID                int32         `json:"id"`
-	Tag               string        `json:"tag"`
-	Name              string        `json:"name"`
-	Available         int32         `json:"available"`
-	Capacity          int32         `json:"capacity"`
-	Status            sql.NullInt32 `json:"status"`
-	Frontends         string        `json:"frontends"`
-	Exercises         string        `json:"exercises"`
-	StartedAt         time.Time     `json:"started_at"`
-	FinishExpected    time.Time     `json:"finish_expected"`
-	FinishedAt        time.Time     `json:"finished_at"`
-	Createdby         string        `json:"createdby"`
-	Onlyvpn           sql.NullInt32 `json:"onlyvpn"`
-	Secretkey         string        `json:"secretkey"`
-	Disabledexercises string        `json:"disabledexercises"`
+	ID             int32         `json:"id"`
+	Tag            string        `json:"tag"`
+	Organization   string        `json:"organization"`
+	Name           string        `json:"name"`
+	Available      int32         `json:"available"`
+	Capacity       int32         `json:"capacity"`
+	Status         sql.NullInt32 `json:"status"`
+	Frontend       string        `json:"frontend"`
+	Exercises      string        `json:"exercises"`
+	StartedAt      time.Time     `json:"started_at"`
+	FinishExpected time.Time     `json:"finish_expected"`
+	FinishedAt     time.Time     `json:"finished_at"`
+	Createdby      string        `json:"createdby"`
+	Secretkey      string        `json:"secretkey"`
 }
 
 type Frontend struct {
@@ -45,11 +44,13 @@ type Frontend struct {
 }
 
 type HaaukinsAgent struct {
-	ID      int32  `json:"id"`
-	Name    string `json:"name"`
-	Url     string `json:"url"`
-	SignKey string `json:"sign_key"`
-	AuthKey string `json:"auth_key"`
+	ID       int32  `json:"id"`
+	Name     string `json:"name"`
+	Capacity int32  `json:"capacity"`
+	Url      string `json:"url"`
+	SignKey  string `json:"sign_key"`
+	AuthKey  string `json:"auth_key"`
+	Tls      bool   `json:"tls"`
 }
 
 type Organization struct {

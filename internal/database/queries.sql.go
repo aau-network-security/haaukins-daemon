@@ -12,24 +12,22 @@ import (
 )
 
 const addEvent = `-- name: AddEvent :exec
-INSERT INTO event (tag, name, available, capacity, frontends, status, exercises, started_at, finish_expected, finished_at, createdby, onlyvpn,secretKey, disabledExercises) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,$11,$12,$13,$14)
+INSERT INTO event (tag, name, available, capacity, frontend, status, exercises, started_at, finish_expected, finished_at, createdby, secretKey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,$11,$12)
 `
 
 type AddEventParams struct {
-	Tag               string        `json:"tag"`
-	Name              string        `json:"name"`
-	Available         int32         `json:"available"`
-	Capacity          int32         `json:"capacity"`
-	Frontends         string        `json:"frontends"`
-	Status            sql.NullInt32 `json:"status"`
-	Exercises         string        `json:"exercises"`
-	StartedAt         time.Time     `json:"started_at"`
-	FinishExpected    time.Time     `json:"finish_expected"`
-	FinishedAt        time.Time     `json:"finished_at"`
-	Createdby         string        `json:"createdby"`
-	Onlyvpn           sql.NullInt32 `json:"onlyvpn"`
-	Secretkey         string        `json:"secretkey"`
-	Disabledexercises string        `json:"disabledexercises"`
+	Tag            string        `json:"tag"`
+	Name           string        `json:"name"`
+	Available      int32         `json:"available"`
+	Capacity       int32         `json:"capacity"`
+	Frontend       string        `json:"frontend"`
+	Status         sql.NullInt32 `json:"status"`
+	Exercises      string        `json:"exercises"`
+	StartedAt      time.Time     `json:"started_at"`
+	FinishExpected time.Time     `json:"finish_expected"`
+	FinishedAt     time.Time     `json:"finished_at"`
+	Createdby      string        `json:"createdby"`
+	Secretkey      string        `json:"secretkey"`
 }
 
 func (q *Queries) AddEvent(ctx context.Context, arg AddEventParams) error {
@@ -38,16 +36,14 @@ func (q *Queries) AddEvent(ctx context.Context, arg AddEventParams) error {
 		arg.Name,
 		arg.Available,
 		arg.Capacity,
-		arg.Frontends,
+		arg.Frontend,
 		arg.Status,
 		arg.Exercises,
 		arg.StartedAt,
 		arg.FinishExpected,
 		arg.FinishedAt,
 		arg.Createdby,
-		arg.Onlyvpn,
 		arg.Secretkey,
-		arg.Disabledexercises,
 	)
 	return err
 }
@@ -353,7 +349,7 @@ func (q *Queries) GetAdminUsers(ctx context.Context, organization interface{}) (
 }
 
 const getAllEvents = `-- name: GetAllEvents :many
-SELECT id, tag, name, available, capacity, status, frontends, exercises, started_at, finish_expected, finished_at, createdby, onlyvpn, secretkey, disabledexercises FROM event
+SELECT id, tag, organization, name, available, capacity, status, frontend, exercises, started_at, finish_expected, finished_at, createdby, secretkey FROM event
 `
 
 func (q *Queries) GetAllEvents(ctx context.Context) ([]Event, error) {
@@ -368,19 +364,18 @@ func (q *Queries) GetAllEvents(ctx context.Context) ([]Event, error) {
 		if err := rows.Scan(
 			&i.ID,
 			&i.Tag,
+			&i.Organization,
 			&i.Name,
 			&i.Available,
 			&i.Capacity,
 			&i.Status,
-			&i.Frontends,
+			&i.Frontend,
 			&i.Exercises,
 			&i.StartedAt,
 			&i.FinishExpected,
 			&i.FinishedAt,
 			&i.Createdby,
-			&i.Onlyvpn,
 			&i.Secretkey,
-			&i.Disabledexercises,
 		); err != nil {
 			return nil, err
 		}
@@ -450,7 +445,7 @@ func (q *Queries) GetEventStatus(ctx context.Context, tag string) ([]sql.NullInt
 }
 
 const getEventsByStatus = `-- name: GetEventsByStatus :many
-SELECT id, tag, name, available, capacity, status, frontends, exercises, started_at, finish_expected, finished_at, createdby, onlyvpn, secretkey, disabledexercises FROM event WHERE status=$1
+SELECT id, tag, organization, name, available, capacity, status, frontend, exercises, started_at, finish_expected, finished_at, createdby, secretkey FROM event WHERE status=$1
 `
 
 func (q *Queries) GetEventsByStatus(ctx context.Context, status sql.NullInt32) ([]Event, error) {
@@ -465,19 +460,18 @@ func (q *Queries) GetEventsByStatus(ctx context.Context, status sql.NullInt32) (
 		if err := rows.Scan(
 			&i.ID,
 			&i.Tag,
+			&i.Organization,
 			&i.Name,
 			&i.Available,
 			&i.Capacity,
 			&i.Status,
-			&i.Frontends,
+			&i.Frontend,
 			&i.Exercises,
 			&i.StartedAt,
 			&i.FinishExpected,
 			&i.FinishedAt,
 			&i.Createdby,
-			&i.Onlyvpn,
 			&i.Secretkey,
-			&i.Disabledexercises,
 		); err != nil {
 			return nil, err
 		}
@@ -493,7 +487,7 @@ func (q *Queries) GetEventsByStatus(ctx context.Context, status sql.NullInt32) (
 }
 
 const getEventsByUser = `-- name: GetEventsByUser :many
-SELECT id, tag, name, available, capacity, status, frontends, exercises, started_at, finish_expected, finished_at, createdby, onlyvpn, secretkey, disabledexercises FROM event WHERE status!=$1 and createdby=$2
+SELECT id, tag, organization, name, available, capacity, status, frontend, exercises, started_at, finish_expected, finished_at, createdby, secretkey FROM event WHERE status!=$1 and createdby=$2
 `
 
 type GetEventsByUserParams struct {
@@ -513,19 +507,18 @@ func (q *Queries) GetEventsByUser(ctx context.Context, arg GetEventsByUserParams
 		if err := rows.Scan(
 			&i.ID,
 			&i.Tag,
+			&i.Organization,
 			&i.Name,
 			&i.Available,
 			&i.Capacity,
 			&i.Status,
-			&i.Frontends,
+			&i.Frontend,
 			&i.Exercises,
 			&i.StartedAt,
 			&i.FinishExpected,
 			&i.FinishedAt,
 			&i.Createdby,
-			&i.Onlyvpn,
 			&i.Secretkey,
-			&i.Disabledexercises,
 		); err != nil {
 			return nil, err
 		}
@@ -541,7 +534,7 @@ func (q *Queries) GetEventsByUser(ctx context.Context, arg GetEventsByUserParams
 }
 
 const getEventsExeptClosed = `-- name: GetEventsExeptClosed :many
-SELECT id, tag, name, available, capacity, status, frontends, exercises, started_at, finish_expected, finished_at, createdby, onlyvpn, secretkey, disabledexercises FROM event WHERE status!=3
+SELECT id, tag, organization, name, available, capacity, status, frontend, exercises, started_at, finish_expected, finished_at, createdby, secretkey FROM event WHERE status!=3
 `
 
 func (q *Queries) GetEventsExeptClosed(ctx context.Context) ([]Event, error) {
@@ -556,19 +549,53 @@ func (q *Queries) GetEventsExeptClosed(ctx context.Context) ([]Event, error) {
 		if err := rows.Scan(
 			&i.ID,
 			&i.Tag,
+			&i.Organization,
 			&i.Name,
 			&i.Available,
 			&i.Capacity,
 			&i.Status,
-			&i.Frontends,
+			&i.Frontend,
 			&i.Exercises,
 			&i.StartedAt,
 			&i.FinishExpected,
 			&i.FinishedAt,
 			&i.Createdby,
-			&i.Onlyvpn,
 			&i.Secretkey,
-			&i.Disabledexercises,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getHaaukinsAgents = `-- name: GetHaaukinsAgents :many
+SELECT id, name, capacity, url, sign_key, auth_key, tls FROM Haaukins_agents
+`
+
+func (q *Queries) GetHaaukinsAgents(ctx context.Context) ([]HaaukinsAgent, error) {
+	rows, err := q.db.QueryContext(ctx, getHaaukinsAgents)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []HaaukinsAgent
+	for rows.Next() {
+		var i HaaukinsAgent
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Capacity,
+			&i.Url,
+			&i.SignKey,
+			&i.AuthKey,
+			&i.Tls,
 		); err != nil {
 			return nil, err
 		}

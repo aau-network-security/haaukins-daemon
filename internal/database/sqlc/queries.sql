@@ -20,7 +20,7 @@ INSERT INTO team (tag, event_id, email, name, password, created_at, last_access,
 DELETE FROM team WHERE tag=$1 and event_id = $2;
 
 -- name: AddEvent :exec
-INSERT INTO event (tag, name, available, capacity, frontends, status, exercises, started_at, finish_expected, finished_at, createdby, onlyvpn,secretKey, disabledExercises) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,$11,$12,$13,$14);
+INSERT INTO event (tag, name, available, capacity, frontend, status, exercises, started_at, finish_expected, finished_at, createdby, secretKey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,$11,$12);
 
 -- name: UpdateCloseEvent :exec
 UPDATE event SET tag = $2, finished_at = $3 WHERE tag = $1;
@@ -123,3 +123,6 @@ UPDATE Organizations SET owner_user = @ownerUsername, owner_email = @ownerEmail 
 
 -- name: DeleteOrganization :exec
 DELETE FROM Organizations WHERE lower(name) = lower(@orgName);
+
+-- name: GetHaaukinsAgents :many
+SELECT * FROM Haaukins_agents;

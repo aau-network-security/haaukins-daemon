@@ -11,20 +11,19 @@ EOSQL
 PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_USER" --dbname "$HAAUKINSDB_NAME" <<-EOSQL
         CREATE TABLE IF NOT EXISTS Event ( 
                 id serial primary key, 
-                tag varchar (255) NOT NULL, 
+                tag varchar (255) NOT NULL,
+                organization varchar (255) NOT NULL,
                 name varchar (255) NOT NULL, 
                 available integer NOT NULL, 
                 capacity integer NOT NULL, 
                 status integer, 
-                frontends text NOT NULL, 
+                frontend text NOT NULL, 
                 exercises text NOT NULL, 
                 started_at timestamp NOT NULL,
                 finish_expected timestamp NOT NULL, 
                 finished_at timestamp NOT NULL, 
-                createdBy text NOT NULL, 
-                onlyVPN integer, 
-                secretKey text NOT NULL, 
-                disabledExercises text NOT NULL
+                createdBy text NOT NULL,
+                secretKey text NOT NULL
         );
 
         CREATE TABLE IF NOT EXISTS Team (
@@ -73,9 +72,11 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
         CREATE TABLE IF NOT EXISTS Haaukins_agents (
                 id serial primary key,
                 name varchar (255) NOT NULL,
+                capacity integer NOT NULL,
                 url varchar (255) NOT NULL,
                 sign_key varchar (255) NOT NULL,
-                auth_key varchar (255) NOT NULL
+                auth_key varchar (255) NOT NULL,
+                tls boolean NOT NULL
         );
         CREATE UNIQUE INDEX agentname_lower_index ON Haaukins_agents (LOWER(name));
 
