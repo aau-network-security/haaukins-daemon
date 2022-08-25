@@ -1,6 +1,12 @@
 package daemon
 
-import "github.com/aau-network-security/haaukins-daemon/internal/database"
+import (
+	"sync"
+
+	"github.com/aau-network-security/haaukins-daemon/internal/agent"
+	"github.com/aau-network-security/haaukins-daemon/internal/database"
+	"github.com/gin-gonic/gin"
+)
 
 type AdminClaims struct {
 	Username     string `json:"username"`
@@ -17,4 +23,23 @@ type APIResponse struct {
 	User   *database.GetAdminUserNoPwRow `json:"user,omitempty"`
 	Users  []database.GetAdminUsersRow   `json:"users,omitempty"`
 	Orgs   []database.Organization       `json:"orgs,omitempty"`
+}
+
+type eventPool struct {
+	m               sync.RWMutex
+	host            string
+	notFoundHandler gin.HandlerFunc
+	events          map[string]event
+}
+
+type event struct {
+	tag            string
+	teams          map[string]team
+	frontendPort   uint
+	labs           map[string]agent.Lab
+	exercises      []string
+	unassignedLabs <-chan agent.Lab
+}
+
+type team struct {
 }
