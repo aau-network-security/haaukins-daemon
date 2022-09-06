@@ -11,7 +11,7 @@ import (
 
 	"github.com/aau-network-security/haaukins-daemon/internal/agent"
 	"github.com/aau-network-security/haaukins-daemon/internal/database"
-	eproto "github.com/aau-network-security/haaukins-daemon/internal/exercise/ex-proto"
+	eproto "github.com/aau-network-security/haaukins-exercises/proto"
 	"github.com/casbin/casbin/v2"
 	gormadapter "github.com/casbin/gorm-adapter/v3"
 	"github.com/gin-contrib/cors"

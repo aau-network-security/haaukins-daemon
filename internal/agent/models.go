@@ -3,7 +3,7 @@ package agent
 import (
 	"sync"
 
-	aproto "github.com/aau-network-security/haaukins-daemon/internal/agent/proto"
+	aproto "github.com/aau-network-security/haaukins-agent/pkg/proto"
 )
 
 type AgentPool struct {

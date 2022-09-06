@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	aproto "github.com/aau-network-security/haaukins-daemon/internal/agent/proto"
-	eproto "github.com/aau-network-security/haaukins-daemon/internal/exercise/ex-proto"
+	aproto "github.com/aau-network-security/haaukins-agent/pkg/proto"
+	eproto "github.com/aau-network-security/haaukins-exercises/proto"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
