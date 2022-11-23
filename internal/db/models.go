@@ -19,6 +19,16 @@ type AdminUser struct {
 	Organization string
 }
 
+type Agent struct {
+	ID        int32
+	Name      string
+	Url       string
+	SignKey   string
+	AuthKey   string
+	Tls       bool
+	Statelock bool
+}
+
 type Event struct {
 	ID             int32
 	Tag            string
@@ -41,16 +51,6 @@ type Frontend struct {
 	Name     string
 	Image    string
 	Memorymb sql.NullInt32
-}
-
-type HaaukinsAgent struct {
-	ID       int32
-	Name     string
-	Capacity int32
-	Url      string
-	SignKey  string
-	AuthKey  string
-	Tls      bool
 }
 
 type Organization struct {

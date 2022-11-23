@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	aproto "github.com/aau-network-security/haaukins-agent/pkg/proto"
 	"github.com/aau-network-security/haaukins-daemon/internal/agent"
 	"github.com/aau-network-security/haaukins-daemon/internal/db"
 	eproto "github.com/aau-network-security/haaukins-exercises/proto"
@@ -30,6 +31,7 @@ type daemon struct {
 	auditLogger *zerolog.Logger
 	enforcer    *casbin.Enforcer
 	cache       *redis.Client
+	newLabs     chan aproto.Lab
 	eventpool   *eventPool
 	m           sync.RWMutex
 }
@@ -136,13 +138,14 @@ func New(conf *Config) (*daemon, error) {
 
 	}
 
+	newLabs := make(chan aproto.Lab, 1000)
 	// Connecting to all haaukins agents
 	log.Info().Msg("Connecting to haaukins agents...")
-	agentsInDb, err := db.GetHaaukinsAgents(ctx)
+	agentsInDb, err := db.GetAgents(ctx)
 	if err != nil {
 		log.Fatal().Err(err).Msg("could not get haaukins agents from database")
 	}
-	agents := make(map[string]agent.HaaukinsAgent)
+	agents := make(map[string]*agent.Agent)
 	for _, a := range agentsInDb {
 		agentConfig := ServiceConfig{
 			Grpc:       a.Url,
@@ -154,10 +157,17 @@ func New(conf *Config) (*daemon, error) {
 		if err != nil {
 			log.Warn().Err(err).Msg("error connecting to agent at url: " + agentConfig.Grpc)
 		} else {
-			var agentToAdd = agent.HaaukinsAgent{
-				Client:   client,
-				Capacity: a.Capacity,
-				CapUsed:  0,
+			streamCtx, cancel := context.WithCancel(context.Background())
+			var agentToAdd = &agent.Agent{
+				Name:      a.Name,
+				Client:    client,
+				StateLock: false,
+				Errors:    []error{},
+				Close:     cancel,
+			}
+			if err := agentToAdd.ConnectToStreams(streamCtx, newLabs); err != nil {
+				log.Error().Err(err).Msg("error connecting to agent streams")
+				continue
 			}
 			agents[a.Name] = agentToAdd
 		}
@@ -222,6 +232,7 @@ func New(conf *Config) (*daemon, error) {
 		agentPool:   &agentPool,
 		auditLogger: &auditLogger,
 		enforcer:    enforcer,
+		newLabs:     newLabs,
 	}
 	return d, nil
 }
@@ -244,8 +255,8 @@ func (d *daemon) Run() error {
 }
 
 func (d *daemon) setupRouters(r *gin.Engine) {
-	admin := r.Group("/api/v1/admin")
-	event := r.Group("/api/v1/event")
+	admin := r.Group("/v1/admin")
+	event := r.Group("/v1/event")
 
 	d.adminSubrouter(admin)
 	d.eventSubrouter(event)

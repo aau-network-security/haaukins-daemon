@@ -298,7 +298,7 @@ func (d *daemon) checkAndApplyUpdates(ctx context.Context, updatedOrg adminOrgRe
 	if err != nil {
 		return err
 	}
-	newOwner, err := d.db.GetAdminUser(ctx, updatedOrg.OrgOwner.Username)
+	newOwner, err := d.db.GetAdminUserByUsername(ctx, updatedOrg.OrgOwner.Username)
 	if err != nil {
 		return err
 	}

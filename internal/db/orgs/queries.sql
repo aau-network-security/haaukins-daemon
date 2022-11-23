@@ -1,14 +1,17 @@
 -- name: CheckIfOrgExists :one
-SELECT EXISTS( SELECT 1 FROM Organizations WHERE lower(name) = lower(@orgName) );
+SELECT EXISTS( SELECT 1 FROM organizations WHERE lower(name) = lower(@orgName) );
 
 -- name: AddOrganization :exec
-INSERT INTO Organizations (name, owner_user, owner_email) VALUES (@org, @ownerUsername, @ownerEmail);
+INSERT INTO organizations (name, owner_user, owner_email) VALUES (@org, @ownerUsername, @ownerEmail);
 
 -- name: GetOrganizations :many
-SELECT * FROM Organizations;
+SELECT * FROM organizations;
 
 -- name: UpdateOrganization :exec
-UPDATE Organizations SET owner_user = @ownerUsername, owner_email = @ownerEmail WHERE lower(name) = lower(@orgName);
+UPDATE organizations SET owner_user = @ownerUsername, owner_email = @ownerEmail WHERE lower(name) = lower(@orgName);
 
 -- name: DeleteOrganization :exec
-DELETE FROM Organizations WHERE lower(name) = lower(@orgName);
+DELETE FROM organizations WHERE lower(name) = lower(@orgName);
+
+-- name: GetOrgByName :one
+SELECT * FROM organizations WHERE LOWER(name)=LOWER(@orgName);

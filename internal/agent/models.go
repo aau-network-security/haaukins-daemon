@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"sync"
 
 	aproto "github.com/aau-network-security/haaukins-agent/pkg/proto"
@@ -8,17 +9,23 @@ import (
 
 type AgentPool struct {
 	M      sync.RWMutex
-	Agents map[string]HaaukinsAgent
+	Agents map[string]*Agent
 }
 
-type HaaukinsAgent struct {
+type Agent struct {
+	Name      string
 	Client    aproto.AgentClient
-	Capacity  int32
-	CapUsed   int32
+	Close     context.CancelFunc
+	Resources Resources
 	Heartbeat string
+	StateLock bool
 	Errors    []error
 }
 
+type Resources struct {
+	Memory string
+	Cpu    string
+}
 type Lab struct {
 	tag         string
 	guacPort    uint

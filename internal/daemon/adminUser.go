@@ -38,6 +38,8 @@ func (d *daemon) adminUserSubrouter(r *gin.RouterGroup) {
 
 }
 
+// TODO Overall make sure that incoming request parameters are validated
+
 func (d *daemon) adminLogin(c *gin.Context) {
 	ctx := context.Background()
 	var req adminUserRequest
@@ -47,7 +49,7 @@ func (d *daemon) adminLogin(c *gin.Context) {
 		return
 	}
 	// Get user information
-	user, err := d.db.GetAdminUser(ctx, req.Username)
+	user, err := d.db.GetAdminUserByUsername(ctx, req.Username)
 	if err != nil {
 		log.Error().Err(err).Msgf("Error in admin login. Could not find user with username: %s", req.Username)
 		// Run hashing algorithm to prevent timed enumeration attacks on usernames
@@ -158,7 +160,7 @@ func (d *daemon) deleteAdminUser(c *gin.Context) {
 		Msg("AdminUser is trying to delete user")
 
 	// Getting info for user to delete
-	userToDelete, err := d.db.GetAdminUser(ctx, req.Username)
+	userToDelete, err := d.db.GetAdminUserByUsername(ctx, req.Username)
 	if err != nil {
 		log.Error().Err(err).Msg("Error getting admin user for deletion")
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "Could not find user to delete"})
@@ -177,7 +179,7 @@ func (d *daemon) deleteAdminUser(c *gin.Context) {
 			return
 		}
 		// Delete user info from database
-		if err := d.db.DeleteAdminUser(ctx, req.Username); err != nil {
+		if err := d.db.DeleteAdminUserByUsername(ctx, req.Username); err != nil {
 			log.Error().Err(err).Msg("Error deleting admin user")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
@@ -214,7 +216,7 @@ func (d *daemon) updateAdminUser(c *gin.Context) {
 		Msg("AdminUser is updating user")
 
 	// Get current user info for comparison
-	currUser, err := d.db.GetAdminUser(ctx, req.Username)
+	currUser, err := d.db.GetAdminUserByUsername(ctx, req.Username)
 	if err != nil {
 		log.Error().Err(err).Msg("Error getting user")
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "Could not find user to update"})
@@ -270,7 +272,7 @@ func (d *daemon) getAdminUser(c *gin.Context) {
 		Msg("AdminUser is listing users")
 
 	// Get the user to return without showing the pw hash
-	user, err := d.db.GetAdminUserNoPw(ctx, username)
+	user, err := d.db.GetAdminUserNoPwByUsername(ctx, username)
 	if err != nil {
 		log.Error().Err(err).Msg("Error getting admin user")
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "Could not find user"})
@@ -331,7 +333,7 @@ func (d *daemon) getAdminUsers(c *gin.Context) {
 			}
 			c.JSON(http.StatusOK, APIResponse{Status: "OK", Users: users})
 			return
-		} else if authorized[1] {
+		} else if authorized[1] { // Some organisational user
 			users, err := d.db.GetAdminUsers(ctx, admin.Organization)
 			if err != nil {
 				log.Error().Err(err).Msg("Error getting admin users")
@@ -386,7 +388,7 @@ func (d *daemon) createAdminUser(ctx context.Context, user adminUserRequest, org
 // updateAdminUser holds the logic for updating the pasword or email for a user, and is called from the updateAdminUser handler
 func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUserRequest, currUser db.AdminUser, admin AdminClaims) error {
 	// Get admininfo for password verification to prevent unauthorized updates of users
-	adminInfo, err := d.db.GetAdminUser(ctx, admin.Username)
+	adminInfo, err := d.db.GetAdminUserByUsername(ctx, admin.Username)
 	if err != nil {
 		return err
 	}

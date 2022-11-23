@@ -9,7 +9,7 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
 EOSQL
 
 PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_USER" --dbname "$HAAUKINSDB_NAME" <<-EOSQL
-        CREATE TABLE IF NOT EXISTS Event ( 
+        CREATE TABLE IF NOT EXISTS events ( 
                 id serial primary key, 
                 tag varchar (255) NOT NULL,
                 organization varchar (255) NOT NULL,
@@ -26,7 +26,7 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
                 secretKey text NOT NULL
         );
 
-        CREATE TABLE IF NOT EXISTS Team (
+        CREATE TABLE IF NOT EXISTS teams (
                 id serial primary key,
                 tag varchar(255) NOT NULL,
                 event_id integer NOT NULL,
@@ -40,58 +40,58 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
 
 
         -- Admin related tables
-        CREATE TABLE IF NOT EXISTS Organizations (
+        CREATE TABLE IF NOT EXISTS organizations (
                 id serial primary key,
                 name varchar (255) NOT NULL,
                 owner_user varchar(255) NOT NULL,
                 owner_email varchar(255) NOT NULL,
                 UNIQUE(name)
         );
-        CREATE UNIQUE INDEX orgname_lower_index ON Organizations (LOWER(name));
+        CREATE UNIQUE INDEX orgname_lower_index ON organizations (LOWER(name));
 
-        CREATE TABLE IF NOT EXISTS Profiles (
+        CREATE TABLE IF NOT EXISTS profiles (
                 id serial primary key, 
                 name varchar (255) NOT NULL, 
                 secret boolean NOT NULL, 
-                organization varchar(255) NOT NULL REFERENCES Organizations (name) ON DELETE CASCADE,
+                organization varchar(255) NOT NULL REFERENCES organizations (name) ON DELETE CASCADE,
                 challenges text NOT NULL
         );        
-        CREATE UNIQUE INDEX profilename_lower_index ON Profiles (LOWER(name));
+        CREATE UNIQUE INDEX profilename_lower_index ON profiles (LOWER(name));
 
-        CREATE TABLE IF NOT EXISTS Admin_users (
+        CREATE TABLE IF NOT EXISTS admin_users (
                 id serial primary key, 
                 username varchar (255) NOT NULL, 
                 password varchar (255) NOT NULL,
                 full_name varchar (255) NOT NULL,
                 email varchar (255) NOT NULL,
                 role varchar (255) NOT NULL,
-                organization varchar (255) NOT NULL REFERENCES Organizations (name) ON DELETE CASCADE
+                organization varchar (255) NOT NULL REFERENCES organizations (name) ON DELETE CASCADE
         );
         CREATE UNIQUE INDEX username_lower_index ON Admin_users (LOWER(username));
 
-        CREATE TABLE IF NOT EXISTS Haaukins_agents (
+        CREATE TABLE IF NOT EXISTS agents (
                 id serial primary key,
                 name varchar (255) NOT NULL,
-                capacity integer NOT NULL,
                 url varchar (255) NOT NULL,
                 sign_key varchar (255) NOT NULL,
                 auth_key varchar (255) NOT NULL,
-                tls boolean NOT NULL
+                tls boolean NOT NULL DEFAULT true,
+                statelock boolean NOT NULL DEFAULT false
         );
-        CREATE UNIQUE INDEX agentname_lower_index ON Haaukins_agents (LOWER(name));
+        CREATE UNIQUE INDEX agentname_lower_index ON agents (LOWER(name));
 
-        CREATE TABLE IF NOT EXISTS Frontends (
+        CREATE TABLE IF NOT EXISTS frontends (
                 id serial primary key, 
                 name varchar (255) NOT NULL,
                 image varchar (255) NOT NULL,
                 memoryMB integer
         );
-        CREATE UNIQUE INDEX frontendname_lower_index ON Frontends (LOWER(name));
+        CREATE UNIQUE INDEX frontendname_lower_index ON frontends (LOWER(name));
 
 
 
         -- Setting up an administrative account with password admin
-        INSERT INTO Organizations (name, owner_user, owner_email) VALUES ('Admins', 'admin', 'cyber@es.aau.dk');
-        INSERT INTO Admin_users (username, password, full_name, email, role, organization) VALUES ('admin', '\$2a\$10\$uwUoW.w5OZKEa5/UJrYyM.fz9vjH3z1sGsZWXZ2Nmf0obL9OK80kC', 'Mikkel Høst Christiansen', 'cyber@es.aau.dk', 'role::superadmin', 'Admins');
+        INSERT INTO organizations (name, owner_user, owner_email) VALUES ('Admins', 'admin', 'cyber@es.aau.dk');
+        INSERT INTO admin_users (username, password, full_name, email, role, organization) VALUES ('admin', '\$2a\$10\$uwUoW.w5OZKEa5/UJrYyM.fz9vjH3z1sGsZWXZ2Nmf0obL9OK80kC', 'Mikkel Høst Christiansen', 'cyber@es.aau.dk', 'role::superadmin', 'Admins');
         
 EOSQL

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aau-network-security/haaukins-agent/pkg/proto"
 	aproto "github.com/aau-network-security/haaukins-agent/pkg/proto"
 	eproto "github.com/aau-network-security/haaukins-exercises/proto"
 	"github.com/dgrijalva/jwt-go"
@@ -133,7 +134,7 @@ func NewAgentClientConnection(config ServiceConfig) (aproto.AgentClient, error) 
 	creds := enableClientCertificates()
 	authCreds, err := constructAuthCreds(config.AuthKey, config.SignKey)
 	if err != nil {
-		return nil, fmt.Errorf("[exercise-service]: Error in constructing auth credentials %v", err)
+		return nil, fmt.Errorf("[agent]: Error in constructing auth credentials %v", err)
 	}
 	if config.TLSEnabled {
 		log.Debug().Bool("TLS", config.TLSEnabled).Msg(" TLS for agent enabled, creating secure connection...")
@@ -164,5 +165,12 @@ func NewAgentClientConnection(config ServiceConfig) (aproto.AgentClient, error) 
 		return nil, TranslateRPCErr(err)
 	}
 	client := aproto.NewAgentClient(conn)
+	ctx := context.Background()
+	// Ping to make sure the sign and auth keys supplied are valid
+	pong, err := client.Ping(ctx, &proto.PingRequest{Ping: "ping"})
+	if err != nil {
+		return nil, err
+	}
+	log.Debug().Str("pong", pong.Pong).Msg("recieved pong from agent")
 	return client, nil
 }
