@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/aau-network-security/haaukins-daemon/internal/database"
+	"github.com/aau-network-security/haaukins-daemon/internal/db"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -34,7 +34,7 @@ const psyduck string = `
 `
 
 // todo Need to create different tokens based on it is an admin login or participant login
-func (d *daemon) createAdminToken(ctx context.Context, user database.AdminUser) (string, error) {
+func (d *daemon) createAdminToken(ctx context.Context, user db.AdminUser) (string, error) {
 	atClaims := jwt.MapClaims{}
 	atClaims["exp"] = time.Now().Add(time.Hour * 24).Unix()
 	atClaims["jti"] = uuid.New()

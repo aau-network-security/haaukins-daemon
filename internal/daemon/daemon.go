@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/aau-network-security/haaukins-daemon/internal/agent"
-	"github.com/aau-network-security/haaukins-daemon/internal/database"
+	"github.com/aau-network-security/haaukins-daemon/internal/db"
 	eproto "github.com/aau-network-security/haaukins-exercises/proto"
 	"github.com/casbin/casbin/v2"
 	gormadapter "github.com/casbin/gorm-adapter/v3"
@@ -24,7 +24,7 @@ import (
 
 type daemon struct {
 	conf        *Config
-	db          *database.Queries
+	db          *db.Queries
 	exClient    eproto.ExerciseStoreClient
 	agentPool   *agent.AgentPool
 	auditLogger *zerolog.Logger

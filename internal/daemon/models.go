@@ -4,7 +4,7 @@ import (
 	"sync"
 
 	"github.com/aau-network-security/haaukins-daemon/internal/agent"
-	"github.com/aau-network-security/haaukins-daemon/internal/database"
+	"github.com/aau-network-security/haaukins-daemon/internal/db"
 	"github.com/gin-gonic/gin"
 )
 
@@ -18,11 +18,11 @@ type AdminClaims struct {
 }
 
 type APIResponse struct {
-	Status string                        `json:"status,omitempty"`
-	Token  string                        `json:"token,omitempty"`
-	User   *database.GetAdminUserNoPwRow `json:"user,omitempty"`
-	Users  []database.GetAdminUsersRow   `json:"users,omitempty"`
-	Orgs   []database.Organization       `json:"orgs,omitempty"`
+	Status string                  `json:"status,omitempty"`
+	Token  string                  `json:"token,omitempty"`
+	User   *db.GetAdminUserNoPwRow `json:"user,omitempty"`
+	Users  []db.GetAdminUsersRow   `json:"users,omitempty"`
+	Orgs   []db.Organization       `json:"orgs,omitempty"`
 }
 
 type eventPool struct {

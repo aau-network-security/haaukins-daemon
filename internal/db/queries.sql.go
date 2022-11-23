@@ -3,7 +3,7 @@
 //   sqlc v1.14.0
 // source: queries.sql
 
-package database
+package db
 
 import (
 	"context"
@@ -16,18 +16,18 @@ INSERT INTO event (tag, name, available, capacity, frontend, status, exercises, 
 `
 
 type AddEventParams struct {
-	Tag            string        `json:"tag"`
-	Name           string        `json:"name"`
-	Available      int32         `json:"available"`
-	Capacity       int32         `json:"capacity"`
-	Frontend       string        `json:"frontend"`
-	Status         sql.NullInt32 `json:"status"`
-	Exercises      string        `json:"exercises"`
-	StartedAt      time.Time     `json:"started_at"`
-	FinishExpected time.Time     `json:"finish_expected"`
-	FinishedAt     time.Time     `json:"finished_at"`
-	Createdby      string        `json:"createdby"`
-	Secretkey      string        `json:"secretkey"`
+	Tag            string
+	Name           string
+	Available      int32
+	Capacity       int32
+	Frontend       string
+	Status         sql.NullInt32
+	Exercises      string
+	StartedAt      time.Time
+	FinishExpected time.Time
+	FinishedAt     time.Time
+	Createdby      string
+	Secretkey      string
 }
 
 func (q *Queries) AddEvent(ctx context.Context, arg AddEventParams) error {
@@ -53,9 +53,9 @@ INSERT INTO Organizations (name, owner_user, owner_email) VALUES ($1, $2, $3)
 `
 
 type AddOrganizationParams struct {
-	Org           string `json:"org"`
-	Ownerusername string `json:"ownerusername"`
-	Owneremail    string `json:"owneremail"`
+	Org           string
+	Ownerusername string
+	Owneremail    string
 }
 
 func (q *Queries) AddOrganization(ctx context.Context, arg AddOrganizationParams) error {
@@ -68,9 +68,9 @@ INSERT INTO profiles (name, secret, challenges) VALUES ($1, $2, $3)
 `
 
 type AddProfileParams struct {
-	Name       string `json:"name"`
-	Secret     bool   `json:"secret"`
-	Challenges string `json:"challenges"`
+	Name       string
+	Secret     bool
+	Challenges string
 }
 
 func (q *Queries) AddProfile(ctx context.Context, arg AddProfileParams) error {
@@ -83,14 +83,14 @@ INSERT INTO team (tag, event_id, email, name, password, created_at, last_access,
 `
 
 type AddTeamParams struct {
-	Tag              string    `json:"tag"`
-	EventID          int32     `json:"event_id"`
-	Email            string    `json:"email"`
-	Name             string    `json:"name"`
-	Password         string    `json:"password"`
-	CreatedAt        time.Time `json:"created_at"`
-	LastAccess       time.Time `json:"last_access"`
-	SolvedChallenges string    `json:"solved_challenges"`
+	Tag              string
+	EventID          int32
+	Email            string
+	Name             string
+	Password         string
+	CreatedAt        time.Time
+	LastAccess       time.Time
+	SolvedChallenges string
 }
 
 func (q *Queries) AddTeam(ctx context.Context, arg AddTeamParams) error {
@@ -134,8 +134,8 @@ SELECT EXISTS( SELECT 1 FROM Admin_users WHERE lower(username) = lower($1) AND l
 `
 
 type CheckIfUserExistsInOrgParams struct {
-	Username     string `json:"username"`
-	Organization string `json:"organization"`
+	Username     string
+	Organization string
 }
 
 func (q *Queries) CheckIfUserExistsInOrg(ctx context.Context, arg CheckIfUserExistsInOrgParams) (bool, error) {
@@ -161,12 +161,12 @@ INSERT INTO Admin_users (username, password, full_name, email, role, organizatio
 `
 
 type CreateAdminUserParams struct {
-	Username     string `json:"username"`
-	Password     string `json:"password"`
-	FullName     string `json:"full_name"`
-	Email        string `json:"email"`
-	Role         string `json:"role"`
-	Organization string `json:"organization"`
+	Username     string
+	Password     string
+	FullName     string
+	Email        string
+	Role         string
+	Organization string
 }
 
 func (q *Queries) CreateAdminUser(ctx context.Context, arg CreateAdminUserParams) error {
@@ -213,8 +213,8 @@ DELETE FROM team WHERE tag=$1 and event_id = $2
 `
 
 type DeleteTeamParams struct {
-	Tag     string `json:"tag"`
-	EventID int32  `json:"event_id"`
+	Tag     string
+	EventID int32
 }
 
 func (q *Queries) DeleteTeam(ctx context.Context, arg DeleteTeamParams) error {
@@ -227,8 +227,8 @@ SELECT EXISTS (select tag from event where tag=$1 and status!=$2)
 `
 
 type DoesEventExistParams struct {
-	Tag    string        `json:"tag"`
-	Status sql.NullInt32 `json:"status"`
+	Tag    string
+	Status sql.NullInt32
 }
 
 func (q *Queries) DoesEventExist(ctx context.Context, arg DoesEventExistParams) (bool, error) {
@@ -243,8 +243,8 @@ DELETE FROM event WHERE tag=$1 and status=$2
 `
 
 type DropEventParams struct {
-	Tag    string        `json:"tag"`
-	Status sql.NullInt32 `json:"status"`
+	Tag    string
+	Status sql.NullInt32
 }
 
 func (q *Queries) DropEvent(ctx context.Context, arg DropEventParams) error {
@@ -287,11 +287,11 @@ SELECT username, full_name, email, role, organization FROM Admin_users WHERE LOW
 `
 
 type GetAdminUserNoPwRow struct {
-	Username     string `json:"username"`
-	FullName     string `json:"full_name"`
-	Email        string `json:"email"`
-	Role         string `json:"role"`
-	Organization string `json:"organization"`
+	Username     string
+	FullName     string
+	Email        string
+	Role         string
+	Organization string
 }
 
 func (q *Queries) GetAdminUserNoPw(ctx context.Context, lower string) (GetAdminUserNoPwRow, error) {
@@ -312,11 +312,11 @@ SELECT username, full_name, email, role, organization FROM Admin_users WHERE org
 `
 
 type GetAdminUsersRow struct {
-	Username     string `json:"username"`
-	FullName     string `json:"full_name"`
-	Email        string `json:"email"`
-	Role         string `json:"role"`
-	Organization string `json:"organization"`
+	Username     string
+	FullName     string
+	Email        string
+	Role         string
+	Organization string
 }
 
 func (q *Queries) GetAdminUsers(ctx context.Context, organization interface{}) ([]GetAdminUsersRow, error) {
@@ -491,8 +491,8 @@ SELECT id, tag, organization, name, available, capacity, status, frontend, exerc
 `
 
 type GetEventsByUserParams struct {
-	Status    sql.NullInt32 `json:"status"`
-	Createdby string        `json:"createdby"`
+	Status    sql.NullInt32
+	Createdby string
 }
 
 func (q *Queries) GetEventsByUser(ctx context.Context, arg GetEventsByUserParams) ([]Event, error) {
@@ -798,8 +798,8 @@ UPDATE Admin_users SET email = $1 WHERE username = $2
 `
 
 type UpdateAdminEmailParams struct {
-	Email    string `json:"email"`
-	Username string `json:"username"`
+	Email    string
+	Username string
 }
 
 func (q *Queries) UpdateAdminEmail(ctx context.Context, arg UpdateAdminEmailParams) error {
@@ -812,8 +812,8 @@ UPDATE Admin_users SET password = $1 WHERE username = $2
 `
 
 type UpdateAdminPasswordParams struct {
-	Password string `json:"password"`
-	Username string `json:"username"`
+	Password string
+	Username string
 }
 
 func (q *Queries) UpdateAdminPassword(ctx context.Context, arg UpdateAdminPasswordParams) error {
@@ -826,9 +826,9 @@ UPDATE event SET tag = $2, finished_at = $3 WHERE tag = $1
 `
 
 type UpdateCloseEventParams struct {
-	Tag        string    `json:"tag"`
-	Tag_2      string    `json:"tag_2"`
-	FinishedAt time.Time `json:"finished_at"`
+	Tag        string
+	Tag_2      string
+	FinishedAt time.Time
 }
 
 func (q *Queries) UpdateCloseEvent(ctx context.Context, arg UpdateCloseEventParams) error {
@@ -841,8 +841,8 @@ UPDATE event SET status = $2 WHERE tag = $1
 `
 
 type UpdateEventStatusParams struct {
-	Tag    string        `json:"tag"`
-	Status sql.NullInt32 `json:"status"`
+	Tag    string
+	Status sql.NullInt32
 }
 
 func (q *Queries) UpdateEventStatus(ctx context.Context, arg UpdateEventStatusParams) error {
@@ -856,8 +856,8 @@ UPDATE team SET last_access = $2 WHERE tag = $1
 `
 
 type UpdateExercisesParams struct {
-	Tag        string    `json:"tag"`
-	LastAccess time.Time `json:"last_access"`
+	Tag        string
+	LastAccess time.Time
 }
 
 // UPDATE event SET exercises = (SELECT (SELECT exercises FROM event WHERE id = $1) || $2) WHERE id=$1;
@@ -871,9 +871,9 @@ UPDATE Organizations SET owner_user = $1, owner_email = $2 WHERE lower(name) = l
 `
 
 type UpdateOrganizationParams struct {
-	Ownerusername string `json:"ownerusername"`
-	Owneremail    string `json:"owneremail"`
-	Orgname       string `json:"orgname"`
+	Ownerusername string
+	Owneremail    string
+	Orgname       string
 }
 
 func (q *Queries) UpdateOrganization(ctx context.Context, arg UpdateOrganizationParams) error {
@@ -886,9 +886,9 @@ UPDATE profiles SET secret = $1, challenges = $2 WHERE name = $3
 `
 
 type UpdateProfileParams struct {
-	Secret     bool   `json:"secret"`
-	Challenges string `json:"challenges"`
-	Name       string `json:"name"`
+	Secret     bool
+	Challenges string
+	Name       string
 }
 
 func (q *Queries) UpdateProfile(ctx context.Context, arg UpdateProfileParams) error {
@@ -901,9 +901,9 @@ UPDATE team SET password = $1 WHERE tag = $2 and event_id = $3
 `
 
 type UpdateTeamPasswordParams struct {
-	Password string `json:"password"`
-	Tag      string `json:"tag"`
-	EventID  int32  `json:"event_id"`
+	Password string
+	Tag      string
+	EventID  int32
 }
 
 func (q *Queries) UpdateTeamPassword(ctx context.Context, arg UpdateTeamPasswordParams) error {
@@ -916,8 +916,8 @@ UPDATE team SET solved_challenges = $2 WHERE tag = $1
 `
 
 type UpdateTeamSolvedChlParams struct {
-	Tag              string `json:"tag"`
-	SolvedChallenges string `json:"solved_challenges"`
+	Tag              string
+	SolvedChallenges string
 }
 
 func (q *Queries) UpdateTeamSolvedChl(ctx context.Context, arg UpdateTeamSolvedChlParams) error {

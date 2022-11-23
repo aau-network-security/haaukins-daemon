@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aau-network-security/haaukins-daemon/internal/database"
+	"github.com/aau-network-security/haaukins-daemon/internal/db"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
@@ -283,7 +283,7 @@ func (d *daemon) checkAndApplyUpdates(ctx context.Context, updatedOrg adminOrgRe
 	}
 
 	// Make sure the new user actually is linked to the organization
-	checkExistsParams := database.CheckIfUserExistsInOrgParams{
+	checkExistsParams := db.CheckIfUserExistsInOrgParams{
 		Username:     updatedOrg.OrgOwner.Username,
 		Organization: updatedOrg.OrgName,
 	}
@@ -319,7 +319,7 @@ func (d *daemon) checkAndApplyUpdates(ctx context.Context, updatedOrg adminOrgRe
 	}
 
 	//Update the organization if all checks has passed
-	updateParams := database.UpdateOrganizationParams{
+	updateParams := db.UpdateOrganizationParams{
 		Ownerusername: newOwner.Username,
 		Owneremail:    newOwner.Email,
 		Orgname:       updatedOrg.OrgName,
@@ -353,7 +353,7 @@ func (d *daemon) creatOrgWithAdmin(ctx context.Context, newOrg adminOrgRequest) 
 		return errors.New(passwordTooShortError)
 	}
 	// insert org and user into db
-	orgParams := database.AddOrganizationParams{
+	orgParams := db.AddOrganizationParams{
 		Org:           newOrg.OrgName,
 		Ownerusername: newOrg.OrgOwner.Username,
 		Owneremail:    newOrg.OrgOwner.Email,

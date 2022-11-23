@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/aau-network-security/haaukins-daemon/internal/database"
+	"github.com/aau-network-security/haaukins-daemon/internal/db"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
@@ -354,7 +354,7 @@ func (d *daemon) createAdminUser(ctx context.Context, user adminUserRequest, org
 		return false, err
 	}
 	// Passing request data to query param struct
-	newUser := database.CreateAdminUserParams{
+	newUser := db.CreateAdminUserParams{
 		Username:     user.Username,
 		Password:     string(pwHash),
 		FullName:     user.FullName,
@@ -384,7 +384,7 @@ func (d *daemon) createAdminUser(ctx context.Context, user adminUserRequest, org
 }
 
 // updateAdminUser holds the logic for updating the pasword or email for a user, and is called from the updateAdminUser handler
-func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUserRequest, currUser database.AdminUser, admin AdminClaims) error {
+func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUserRequest, currUser db.AdminUser, admin AdminClaims) error {
 	// Get admininfo for password verification to prevent unauthorized updates of users
 	adminInfo, err := d.db.GetAdminUser(ctx, admin.Username)
 	if err != nil {
@@ -408,7 +408,7 @@ func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUser
 			return err
 		}
 		// Pass the password hash and user to update into the query param struct
-		newPw := database.UpdateAdminPasswordParams{
+		newPw := db.UpdateAdminPasswordParams{
 			Password: string(newPwHash),
 			Username: updatedUser.Username,
 		}
@@ -422,7 +422,7 @@ func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUser
 	if updatedUser.Email != currUser.Email && updatedUser.Email != "" {
 		log.Debug().Msg("Updating email")
 		// Pass the email and user to update into the query param struct
-		newEmail := database.UpdateAdminEmailParams{
+		newEmail := db.UpdateAdminEmailParams{
 			Email:    updatedUser.Email,
 			Username: updatedUser.Username,
 		}
