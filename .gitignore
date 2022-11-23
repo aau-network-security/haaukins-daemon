@@ -8,3 +8,4 @@ logs
 casbin.md
 .env
 .data
+.logs
