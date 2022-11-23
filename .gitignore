@@ -6,3 +6,5 @@ main
 logs
 .VSCodeCounter
 casbin.md
+.env
+.data
