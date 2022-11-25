@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	aproto "github.com/aau-network-security/haaukins-agent/pkg/proto"
+	"google.golang.org/grpc"
 )
 
 type AgentPool struct {
@@ -14,7 +14,7 @@ type AgentPool struct {
 
 type Agent struct {
 	Name      string
-	Client    aproto.AgentClient
+	Conn      *grpc.ClientConn
 	Close     context.CancelFunc
 	Resources Resources
 	Heartbeat string

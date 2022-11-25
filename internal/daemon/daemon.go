@@ -153,14 +153,14 @@ func New(conf *Config) (*daemon, error) {
 			SignKey:    a.SignKey,
 			TLSEnabled: a.Tls,
 		}
-		client, err := NewAgentClientConnection(agentConfig)
+		conn, err := NewAgentConnection(agentConfig)
 		if err != nil {
 			log.Warn().Err(err).Msg("error connecting to agent at url: " + agentConfig.Grpc)
 		} else {
 			streamCtx, cancel := context.WithCancel(context.Background())
 			var agentToAdd = &agent.Agent{
 				Name:      a.Name,
-				Client:    client,
+				Conn:      conn,
 				StateLock: false,
 				Errors:    []error{},
 				Close:     cancel,

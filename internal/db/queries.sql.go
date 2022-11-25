@@ -368,6 +368,25 @@ func (q *Queries) GetAdminUsers(ctx context.Context, organization interface{}) (
 	return items, nil
 }
 
+const getAgentByName = `-- name: GetAgentByName :one
+SELECT id, name, url, sign_key, auth_key, tls, statelock FROM agents WHERE lower(name) = lower($1)
+`
+
+func (q *Queries) GetAgentByName(ctx context.Context, name string) (Agent, error) {
+	row := q.db.QueryRowContext(ctx, getAgentByName, name)
+	var i Agent
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Url,
+		&i.SignKey,
+		&i.AuthKey,
+		&i.Tls,
+		&i.Statelock,
+	)
+	return i, err
+}
+
 const getAgents = `-- name: GetAgents :many
 SELECT id, name, url, sign_key, auth_key, tls, statelock FROM agents
 `

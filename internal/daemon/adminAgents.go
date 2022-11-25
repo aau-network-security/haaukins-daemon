@@ -93,17 +93,17 @@ func (d *daemon) newAgent(c *gin.Context) {
 			SignKey:    req.SignKey,
 			TLSEnabled: req.Tls,
 		}
-		client, err := NewAgentClientConnection(serviceConf)
+		conn, err := NewAgentConnection(serviceConf)
 		if err != nil {
 			log.Error().Err(err).Msg("error connecting to new agent")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: fmt.Sprintf("error connecting to new agent: %v", err)})
 			return
 		}
-		
+
 		streamCtx, cancel := context.WithCancel(context.Background())
 		agentForPool := &agent.Agent{
 			Name:      req.Name,
-			Client:    client,
+			Conn:      conn,
 			StateLock: false,
 			Errors:    []error{},
 			Close:     cancel,
@@ -244,7 +244,81 @@ func (d *daemon) deleteAgent(c *gin.Context) {
 
 // Remove streams and recreate if it for some reason lost connection
 func (d *daemon) reconnectAgent(c *gin.Context) {
+	ctx := context.Background()
 
+	admin := unpackAdminClaims(c)
+	d.auditLogger.Info().
+		Time("UTC", time.Now().UTC()).
+		Str("AdminUser", admin.Username).
+		Str("AdminEmail", admin.Email).
+		Msg("AdminUser is trying to delete an agent")
+
+	sub := admin.Username
+	dom := admin.Organization
+	obj := "agents::Admins"
+	act := "write"
+	if authorized, err := d.enforcer.Enforce(sub, dom, obj, act); authorized || err != nil {
+		if err != nil {
+			log.Error().Err(err).Msgf("Encountered an error while authorizing agent reconnection")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+		agentName := c.Param("agent")
+		d.agentPool.RemoveAgent(agentName)
+
+		exists, err := d.db.CheckIfAgentExists(ctx, agentName)
+		if err != nil {
+			log.Error().Err(err).Msgf("Error checking if agent exists")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+		if !exists {
+			log.Error().Str("agentName", agentName).Msg("agent with that name does not exists")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "agent with that name does not exists"})
+			return
+		}
+
+		dbAgent, err := d.db.GetAgentByName(ctx, agentName)
+		if err != nil {
+			log.Error().Err(err).Msg("error getting agent from db")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: fmt.Sprintf("error getting agent from db: %v", err)})
+			return
+		}
+		serviceConf := ServiceConfig{
+			Grpc:       dbAgent.Url,
+			AuthKey:    dbAgent.AuthKey,
+			SignKey:    dbAgent.SignKey,
+			TLSEnabled: dbAgent.Tls,
+		}
+		conn, err := NewAgentConnection(serviceConf)
+		if err != nil {
+			log.Error().Err(err).Msg("error reconnecting to agent")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: fmt.Sprintf("error reconnecting to agent: %v", err)})
+			return
+		}
+
+		streamCtx, cancel := context.WithCancel(context.Background())
+		agentForPool := &agent.Agent{
+			Name:      dbAgent.Name,
+			Conn:      conn,
+			StateLock: false,
+			Errors:    []error{},
+			Close:     cancel,
+		}
+
+		if err := agentForPool.ConnectToStreams(streamCtx, d.newLabs); err != nil {
+			log.Error().Err(err).Msg("error connecting to agent streams")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: fmt.Sprintf("error connecting to agent streams: %v", err)})
+			return
+		}
+
+		d.agentPool.AddAgent(agentForPool)
+
+		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+		return
+	}
+
+	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 }
 
 func (d *daemon) lockAgentState(c *gin.Context) {

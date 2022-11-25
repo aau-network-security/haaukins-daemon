@@ -129,7 +129,7 @@ func NewExerciseClientConn(config ServiceConfig) (eproto.ExerciseStoreClient, er
 	return client, nil
 }
 
-func NewAgentClientConnection(config ServiceConfig) (aproto.AgentClient, error) {
+func NewAgentConnection(config ServiceConfig) (*grpc.ClientConn, error) {
 	log.Debug().Str("url", config.Grpc).Msg("connecting to agent")
 	creds := enableClientCertificates()
 	authCreds, err := constructAuthCreds(config.AuthKey, config.SignKey)
@@ -145,12 +145,21 @@ func NewAgentClientConnection(config ServiceConfig) (aproto.AgentClient, error) 
 			grpc.WithReturnConnectionError(),
 			grpc.WithTimeout(time.Second * 3),
 		}
+
 		conn, err := grpc.Dial(config.Grpc, dialOpts...)
 		if err != nil {
 			return nil, TranslateRPCErr(err)
 		}
 		client := aproto.NewAgentClient(conn)
-		return client, nil
+		ctx := context.Background()
+		// Ping to make sure the sign and auth keys supplied are valid
+		pong, err := client.Ping(ctx, &proto.PingRequest{Ping: "ping"})
+		if err != nil {
+			return nil, err
+		}
+		log.Debug().Str("pong", pong.Pong).Msg("recieved pong from agent")
+
+		return conn, nil
 	}
 	authCreds.Insecure = true
 	dialOpts := []grpc.DialOption{
@@ -160,10 +169,12 @@ func NewAgentClientConnection(config ServiceConfig) (aproto.AgentClient, error) 
 		grpc.WithReturnConnectionError(),
 		grpc.WithTimeout(time.Second * 3),
 	}
+
 	conn, err := grpc.Dial(config.Grpc, dialOpts...)
 	if err != nil {
 		return nil, TranslateRPCErr(err)
 	}
+
 	client := aproto.NewAgentClient(conn)
 	ctx := context.Background()
 	// Ping to make sure the sign and auth keys supplied are valid
@@ -172,5 +183,6 @@ func NewAgentClientConnection(config ServiceConfig) (aproto.AgentClient, error) 
 		return nil, err
 	}
 	log.Debug().Str("pong", pong.Pong).Msg("recieved pong from agent")
-	return client, nil
+
+	return conn, nil
 }
