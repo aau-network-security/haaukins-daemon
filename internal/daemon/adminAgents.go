@@ -26,10 +26,10 @@ func (d *daemon) adminAgentsSubrouter(r *gin.RouterGroup) {
 	// Additional routes
 	agent.GET("/reconnect/:agent", d.reconnectAgent)
 	agent.GET("/agentstate/lock/:agent", d.lockAgentState)
-	agent.GET("/agentstate/unlock/:agent", d.lockAgentState)
+	agent.GET("/agentstate/unlock/:agent", d.unlockAgentState)
 }
 
-type agentRequest struct {
+type AgentRequest struct {
 	Name    string `json:"name"`
 	Url     string `json:"url,omitempty"`
 	SignKey string `json:"sign-key,omitempty"`
@@ -37,11 +37,21 @@ type agentRequest struct {
 	Tls     bool   `json:"tls,omitempty"`
 }
 
+type AgentResponse struct {
+	Name       string `json:"name"`
+	Url        string `json:"url"`
+	SignKey    string `json:"sign-key"`
+	AuthKey    string `json:"auth-key"`
+	Tls        bool   `json:"tls,omitempty"`
+	StateLock  bool   `json:"state-lock"`
+	ActiveLabs uint64 `json:"active-labs"`
+}
+
 // Creates a new agent connection and stores connection information in the database
 func (d *daemon) newAgent(c *gin.Context) {
 	ctx := context.Background()
 
-	var req agentRequest
+	var req AgentRequest
 	if err := c.BindJSON(&req); err != nil {
 		log.Error().Err(err).Msg("Error parsing request data: ")
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "error parsing request"})
@@ -166,13 +176,32 @@ func (d *daemon) getAgents(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
 		}
+		var resp []AgentResponse
+		for _, a := range agents {
+			aFromPool, err := d.agentPool.GetAgent(a.Name)
+			if err != nil {
+				log.Error().Err(err).Msg("error getting agent from pool")
+				continue
+			}
+			aResp := AgentResponse{
+				Name:       a.Name,
+				Url:        a.Url,
+				SignKey:    a.SignKey,
+				AuthKey:    a.AuthKey,
+				Tls:        a.Tls,
+				StateLock:  aFromPool.StateLock,
+				ActiveLabs: aFromPool.ActiveLabs,
+			}
+			resp = append(resp, aResp)
+		}
 
-		c.JSON(http.StatusOK, APIResponse{Status: "OK", Agents: agents})
+		c.JSON(http.StatusOK, APIResponse{Status: "OK", Agents: resp})
 		return
 	}
 	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 }
 
+// TODO: Not critical atm can just delete and recreate the agent
 // Updates an agent with ex. new sign, authkey or url recreates a connection with the new information
 func (d *daemon) updateAgent(c *gin.Context) {
 
@@ -182,7 +211,7 @@ func (d *daemon) updateAgent(c *gin.Context) {
 func (d *daemon) deleteAgent(c *gin.Context) {
 	ctx := context.Background()
 
-	var req agentRequest
+	var req AgentRequest
 	if err := c.BindJSON(&req); err != nil {
 		log.Error().Err(err).Msg("Error parsing request data: ")
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "error parsing request"})
@@ -322,16 +351,72 @@ func (d *daemon) reconnectAgent(c *gin.Context) {
 }
 
 func (d *daemon) lockAgentState(c *gin.Context) {
+	admin := unpackAdminClaims(c)
+	d.auditLogger.Info().
+		Time("UTC", time.Now().UTC()).
+		Str("AdminUser", admin.Username).
+		Str("AdminEmail", admin.Email).
+		Msg("AdminUser is trying to delete an agent")
 
+	sub := admin.Username
+	dom := admin.Organization
+	obj := "agents::Admins"
+	act := "write"
+	if authorized, err := d.enforcer.Enforce(sub, dom, obj, act); authorized || err != nil {
+		if err != nil {
+			log.Error().Err(err).Msgf("Encountered an error while authorizing agent reconnection")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+
+		agentName := c.Param("agent")
+		if err := d.agentPool.UpdateAgentState(agentName, true); err != nil {
+			log.Error().Err(err).Msg("error updating agent state")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "agent does not exist"})
+			return
+		}
+
+		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+		return
+	}
+	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 }
 
 func (d *daemon) unlockAgentState(c *gin.Context) {
+	admin := unpackAdminClaims(c)
+	d.auditLogger.Info().
+		Time("UTC", time.Now().UTC()).
+		Str("AdminUser", admin.Username).
+		Str("AdminEmail", admin.Email).
+		Msg("AdminUser is trying to delete an agent")
 
+	sub := admin.Username
+	dom := admin.Organization
+	obj := "agents::Admins"
+	act := "write"
+	if authorized, err := d.enforcer.Enforce(sub, dom, obj, act); authorized || err != nil {
+		if err != nil {
+			log.Error().Err(err).Msgf("Encountered an error while authorizing agent reconnection")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+
+		agentName := c.Param("agent")
+		if err := d.agentPool.UpdateAgentState(agentName, false); err != nil {
+			log.Error().Err(err).Msg("error updating agent state")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "agent does not exist in agent pool"})
+			return
+		}
+
+		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+		return
+	}
+	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 }
 
 // Validates the agentRequest sent by the user
 // You can enable or disable specific validation checks with their corresponding booleans
-func validateRequestParams(req agentRequest, name, url, signKey, authKey bool) error {
+func validateRequestParams(req AgentRequest, name, url, signKey, authKey bool) error {
 	if req.Name == "" && name {
 		return errors.New("name can't be empty")
 	}

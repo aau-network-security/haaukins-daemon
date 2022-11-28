@@ -11,44 +11,6 @@ import (
 )
 
 // Send a heartbeat to all agents in the database, remove/add agent if connection status changes
-func (a *AgentPool) heartbeatRutine() {
-}
-
-func (ap *AgentPool) AddAgent(agent *Agent) {
-	ap.M.Lock()
-	defer ap.M.Unlock()
-
-	ap.Agents[agent.Name] = agent
-}
-
-func (ap *AgentPool) RemoveAgent(name string) error {
-	ap.M.Lock()
-	defer ap.M.Unlock()
-
-	agent, ok := ap.Agents[name]
-	if !ok {
-		return fmt.Errorf("no agent found with name: \"%s\" in agentpool", name)
-	}
-	agent.Close()
-	agent.Conn.Close()
-	delete(ap.Agents, name)
-
-	return nil
-}
-
-// TODO updates cpu and mem usage
-func (ap *AgentPool) updateAgent() {
-
-}
-
-func (a *Agent) ConnectToStreams(ctx context.Context, newLabs chan aproto.Lab) error {
-	if err := a.connectToMonitoringStream(ctx, newLabs); err != nil {
-
-	}
-
-	return nil
-}
-
 func (a *Agent) connectToMonitoringStream(routineCtx context.Context, newLabs chan aproto.Lab) error {
 	client := aproto.NewAgentClient(a.Conn)
 	stream, err := client.MonitorStream(routineCtx)
@@ -85,10 +47,69 @@ func (a *Agent) connectToMonitoringStream(routineCtx context.Context, newLabs ch
 				for _, l := range msg.NewLabs {
 					log.Debug().Str("lab-tag", l.Tag).Msg("recieved lab from agent")
 				}
-				log.Debug().Str("hb", msg.Hb).Float64("cpu", msg.Cpu).Float64("mem", msg.Mem).Msg("monitoring parameters ")
+				log.Debug().Str("hb", msg.Hb).Float64("cpu", msg.Cpu).Float64("mem", msg.Mem).Uint64("memAvailable", msg.MemAvailable).Msg("monitoring parameters ")
 			}
 			time.Sleep(1 * time.Second)
 		}
 	}(routineCtx, stream, newLabs)
 	return nil
 }
+
+func (a *Agent) ConnectToStreams(ctx context.Context, newLabs chan aproto.Lab) error {
+	if err := a.connectToMonitoringStream(ctx, newLabs); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (ap *AgentPool) AddAgent(agent *Agent) {
+	ap.M.Lock()
+	defer ap.M.Unlock()
+
+	ap.Agents[agent.Name] = agent
+}
+
+func (ap *AgentPool) RemoveAgent(name string) error {
+	ap.M.Lock()
+	defer ap.M.Unlock()
+
+	agent, ok := ap.Agents[name]
+	if !ok {
+		return fmt.Errorf("no agent found with name: \"%s\" in agentpool", name)
+	}
+	agent.Close()
+	agent.Conn.Close()
+	delete(ap.Agents, name)
+
+	return nil
+}
+
+// TODO updates cpu and mem usage
+func (ap *AgentPool) UpdateAgentState(name string, lock bool) error {
+	ap.M.Lock()
+	defer ap.M.Unlock()
+
+	_, ok := ap.Agents[name]
+	if !ok {
+		return fmt.Errorf("no agent found with name: \"%s\" in agentpool",name)
+	}
+
+	ap.Agents[name].StateLock = lock
+	return nil
+}
+
+func (ap *AgentPool) GetAgent(name string) (*Agent, error) {
+	ap.M.RLock()
+	defer ap.M.RUnlock()
+
+	agent, ok := ap.Agents[name]
+	if !ok {
+		return nil, fmt.Errorf("no agent found with name: \"%s\" in agentpool", name)
+	}
+
+	return agent, nil
+}
+
+
+
+

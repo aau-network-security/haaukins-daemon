@@ -13,13 +13,14 @@ type AgentPool struct {
 }
 
 type Agent struct {
-	Name      string
-	Conn      *grpc.ClientConn
-	Close     context.CancelFunc
-	Resources Resources
-	Heartbeat string
-	StateLock bool
-	Errors    []error
+	Name       string
+	Conn       *grpc.ClientConn
+	Close      context.CancelFunc
+	Resources  Resources
+	Heartbeat  string
+	StateLock  bool
+	ActiveLabs uint64
+	Errors     []error
 }
 
 type Resources struct {

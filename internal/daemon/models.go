@@ -23,7 +23,7 @@ type APIResponse struct {
 	User   *db.GetAdminUserNoPwByUsernameRow `json:"user,omitempty"`
 	Users  []db.GetAdminUsersRow             `json:"users,omitempty"`
 	Orgs   []db.Organization                 `json:"orgs,omitempty"`
-	Agents []db.Agent                        `json:"agents,omitempty"`
+	Agents []AgentResponse                   `json:"agents,omitempty"`
 }
 
 type eventPool struct {

@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
 );
 CREATE UNIQUE INDEX username_lower_index ON Admin_users (LOWER(username));
 
+-- TODO remove statelock from db
 CREATE TABLE IF NOT EXISTS agents (
         id serial primary key,
         name varchar (255) NOT NULL,
