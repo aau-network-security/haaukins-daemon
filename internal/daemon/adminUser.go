@@ -30,17 +30,11 @@ func (d *daemon) adminUserSubrouter(r *gin.RouterGroup) {
 
 	// Private endpoints
 	user.Use(d.adminAuthMiddleware())
-	user.GET("/token/validate", d.validateToken)
 	user.POST("", d.newAdminUser)
 	user.GET("/:username", d.getAdminUser)
 	user.GET("", d.getAdminUsers)
 	user.PUT("", d.updateAdminUser)
 	user.DELETE("", d.deleteAdminUser)
-
-}
-
-// Just an empty endpoint to make sure the authmiddleware is run
-func (d *daemon) validateToken(c *gin.Context) {
 
 }
 
@@ -81,7 +75,14 @@ func (d *daemon) adminLogin(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, APIResponse{Status: "OK", Token: token})
+	userToReturn, err := d.db.GetAdminUserNoPwByUsername(ctx, req.Username)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting admin user from database")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, APIResponse{Status: "OK", Token: token, User: &userToReturn})
 }
 
 func (d *daemon) newAdminUser(c *gin.Context) {
