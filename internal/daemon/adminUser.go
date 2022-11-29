@@ -30,11 +30,17 @@ func (d *daemon) adminUserSubrouter(r *gin.RouterGroup) {
 
 	// Private endpoints
 	user.Use(d.adminAuthMiddleware())
+	user.GET("/token/validate", d.validateToken)
 	user.POST("", d.newAdminUser)
 	user.GET("/:username", d.getAdminUser)
 	user.GET("", d.getAdminUsers)
 	user.PUT("", d.updateAdminUser)
 	user.DELETE("", d.deleteAdminUser)
+
+}
+
+// Just an empty endpoint to make sure the authmiddleware is run
+func (d *daemon) validateToken(c *gin.Context) {
 
 }
 
