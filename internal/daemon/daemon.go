@@ -57,6 +57,7 @@ var defaultObjectGroups = [][]string{
 	{"g2", "vms::Admins", "objects::Admins"},
 	{"g2", "agents::Admins", "objects::Admins"},
 	{"g2", "challengeProfiles::Admins", "objects::Admins"},
+	{"g2", "settings::Admins", "objects::Admins"},
 	{"g2", "role::superadmin", "roles::Admins"},
 }
 
