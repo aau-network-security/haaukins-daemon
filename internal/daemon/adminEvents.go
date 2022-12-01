@@ -7,14 +7,32 @@ import (
 )
 
 func (d *daemon) eventSubrouter(r *gin.RouterGroup) {
-	//gtaAPI := r.Group("/gta")
-	//gtaAPI.Use(tokenAuthMiddleware())
+	events := r.Group("/events")
+	
 
-	// Gm user management
-	r.GET("/", d.testHandlerTwo)
+	
+	events.Use(d.adminAuthMiddleware())
+	// CRUD
+	events.POST("/", d.newEvent)
+	events.GET("/", d.getEvents)
+
+	// Additional routes
+	events.POST("/exercise/add", d.addExerciseToEvent)
+	events.POST("/exercise/reset", d.resetExerciseInEvent)
+}
+
+func (d *daemon) newEvent(c *gin.Context) {
+	c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+}
+
+func (d *daemon) getEvents(c *gin.Context) {
 
 }
 
-func (d *daemon) testHandlerTwo(c *gin.Context) {
-	c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+func (d *daemon) addExerciseToEvent(c *gin.Context) {
+
+}
+
+func (d *daemon) resetExerciseInEvent(c *gin.Context) {
+
 }
