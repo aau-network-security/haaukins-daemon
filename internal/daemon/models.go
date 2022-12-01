@@ -18,12 +18,12 @@ type AdminClaims struct {
 }
 
 type APIResponse struct {
-	Status string                            `json:"status,omitempty"`
-	Token  string                            `json:"token,omitempty"`
-	User   *db.GetAdminUserNoPwByUsernameRow `json:"user,omitempty"`
-	Users  []db.GetAdminUsersRow             `json:"users,omitempty"`
-	Orgs   []db.Organization                 `json:"orgs,omitempty"`
-	Agents []AgentResponse                   `json:"agents,omitempty"`
+	Status   string             `json:"status,omitempty"`
+	Token    string             `json:"token,omitempty"`
+	UserInfo *AdminUserReponse  `json:"userinfo,omitempty"`
+	Users    []AdminUserReponse `json:"users,omitempty"`
+	Orgs     []db.Organization  `json:"orgs,omitempty"`
+	Agents   []AgentResponse    `json:"agents,omitempty"`
 }
 
 type eventPool struct {

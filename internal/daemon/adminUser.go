@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/aau-network-security/haaukins-daemon/internal/db"
@@ -21,6 +22,11 @@ type adminUserRequest struct {
 	Role                string `json:"role,omitempty"`
 	Organization        string `json:"organization,omitempty"`
 	VerifyAdminPassword string `json:"verify_admin_password,omitempty"`
+}
+
+type AdminUserReponse struct {
+	User  interface{}       `json:"user,omitempty"`
+	Perms map[string]string `json:"perms,omitempty"`
 }
 
 func (d *daemon) adminUserSubrouter(r *gin.RouterGroup) {
@@ -75,14 +81,26 @@ func (d *daemon) adminLogin(c *gin.Context) {
 		return
 	}
 
-	userToReturn, err := d.db.GetAdminUserNoPwByUsername(ctx, req.Username)
+	dbUser, err := d.db.GetAdminUserNoPwByUsername(ctx, req.Username)
 	if err != nil {
 		log.Error().Err(err).Msg("error getting admin user from database")
 		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 		return
 	}
 
-	c.JSON(http.StatusOK, APIResponse{Status: "OK", Token: token, User: &userToReturn})
+	perms, err := d.getDetailedUserPerms(dbUser.Username, dbUser.Organization)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting implicit permissions for user")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+		return
+	}
+
+	userToReturn := &AdminUserReponse{
+		User:  &dbUser,
+		Perms: perms,
+	}
+
+	c.JSON(http.StatusOK, APIResponse{Status: "OK", Token: token, UserInfo: userToReturn})
 }
 
 func (d *daemon) newAdminUser(c *gin.Context) {
@@ -278,17 +296,28 @@ func (d *daemon) getAdminUser(c *gin.Context) {
 		Str("Username", username).
 		Msg("AdminUser is listing users")
 
-	// Get the user to return without showing the pw hash
-	user, err := d.db.GetAdminUserNoPwByUsername(ctx, username)
+	// Get the dbUser to return without showing the pw hash
+	dbUser, err := d.db.GetAdminUserNoPwByUsername(ctx, username)
 	if err != nil {
 		log.Error().Err(err).Msg("Error getting admin user")
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "Could not find user"})
 		return
 	}
+	perms, err := d.getDetailedUserPerms(dbUser.Username, dbUser.Organization)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting implicit permissions for user")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+		return
+	}
+
+	userToReturn := &AdminUserReponse{
+		User:  &dbUser,
+		Perms: perms,
+	}
 	// Setting up casbin request
 	sub := admin.Username
 	dom := admin.Organization
-	obj := fmt.Sprintf("users::%s", user.Organization)
+	obj := fmt.Sprintf("users::%s", dbUser.Organization)
 	act := "read"
 	// Trying to authorize user
 	if authorized, err := d.enforcer.Enforce(sub, dom, obj, act); authorized || err != nil {
@@ -297,10 +326,10 @@ func (d *daemon) getAdminUser(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
 		}
-		c.JSON(http.StatusOK, APIResponse{Status: "OK", User: &user})
+		c.JSON(http.StatusOK, APIResponse{Status: "OK", UserInfo: userToReturn})
 		return
-	} else if admin.Username == user.Username {
-		c.JSON(http.StatusOK, APIResponse{Status: "OK", User: &user})
+	} else if admin.Username == dbUser.Username {
+		c.JSON(http.StatusOK, APIResponse{Status: "OK", UserInfo: userToReturn})
 		return
 	}
 	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
@@ -338,7 +367,21 @@ func (d *daemon) getAdminUsers(c *gin.Context) {
 				c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 				return
 			}
-			c.JSON(http.StatusOK, APIResponse{Status: "OK", Users: users})
+			usersWithPerms := []AdminUserReponse{}
+			for _, dbUser := range users {
+				perms, err := d.getDetailedUserPerms(dbUser.Username, dbUser.Organization)
+				if err != nil {
+					log.Error().Err(err).Msg("error getting implicit permissions for user")
+					c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+					return
+				}
+				userToReturn := AdminUserReponse{
+					User:  dbUser,
+					Perms: perms,
+				}
+				usersWithPerms = append(usersWithPerms, userToReturn)
+			}
+			c.JSON(http.StatusOK, APIResponse{Status: "OK", Users: usersWithPerms})
 			return
 		} else if authorized[1] { // Some organisational user
 			users, err := d.db.GetAdminUsers(ctx, admin.Organization)
@@ -347,7 +390,21 @@ func (d *daemon) getAdminUsers(c *gin.Context) {
 				c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 				return
 			}
-			c.JSON(http.StatusOK, APIResponse{Status: "OK", Users: users})
+			usersWithPerms := []AdminUserReponse{}
+			for _, dbUser := range users {
+				perms, err := d.getDetailedUserPerms(dbUser.Username, dbUser.Organization)
+				if err != nil {
+					log.Error().Err(err).Msg("error getting implicit permissions for user")
+					c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+					return
+				}
+				userToReturn := AdminUserReponse{
+					User:  dbUser,
+					Perms: perms,
+				}
+				usersWithPerms = append(usersWithPerms, userToReturn)
+			}
+			c.JSON(http.StatusOK, APIResponse{Status: "OK", Users: usersWithPerms})
 			return
 		}
 	}
@@ -442,4 +499,31 @@ func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUser
 	}
 
 	return nil
+}
+
+func (d *daemon) getDetailedUserPerms(username, userorg string) (map[string]string, error) {
+	perms, err := d.enforcer.GetImplicitPermissionsForUser(username, userorg)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting implicit permissions for user")
+		return nil, err
+	}
+	permsToReturn := make(map[string]string)
+	for _, p := range perms {
+		// index 2 holds the object and index 3 holds the accessRights
+		object := strings.Split(p[2], "::")[0]
+
+		if object == "objects" {
+			// gets the children object of the object group policy
+			detailedPerms := d.enforcer.GetFilteredNamedGroupingPolicy("g2", 1, p[2])
+			for _, perm := range detailedPerms {
+				object = strings.Split(perm[0], "::")[0]
+				permsToReturn[object] = p[3]
+			}
+			continue
+		}
+		accessRights := p[3]
+		permsToReturn[object] = accessRights
+	}
+
+	return permsToReturn, nil
 }
