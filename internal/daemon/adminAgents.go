@@ -14,19 +14,19 @@ import (
 )
 
 func (d *daemon) adminAgentsSubrouter(r *gin.RouterGroup) {
-	agent := r.Group("/agents")
-	agent.Use(d.adminAuthMiddleware())
+	agents := r.Group("/agents")
+	agents.Use(d.adminAuthMiddleware())
 
 	// CRUD
-	agent.POST("", d.newAgent)
-	agent.GET("", d.getAgents)
-	agent.PUT("", d.updateAgent)
-	agent.DELETE("", d.deleteAgent)
+	agents.POST("", d.newAgent)
+	agents.GET("", d.getAgents)
+	agents.PUT("", d.updateAgent)
+	agents.DELETE("", d.deleteAgent)
 
 	// Additional routes
-	agent.GET("/reconnect/:agent", d.reconnectAgent)
-	agent.GET("/agentstate/lock/:agent", d.lockAgentState)
-	agent.GET("/agentstate/unlock/:agent", d.unlockAgentState)
+	agents.GET("/reconnect/:agent", d.reconnectAgent)
+	agents.GET("/agentstate/lock/:agent", d.lockAgentState)
+	agents.GET("/agentstate/unlock/:agent", d.unlockAgentState)
 }
 
 type AgentRequest struct {
