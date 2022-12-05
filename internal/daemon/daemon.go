@@ -147,6 +147,7 @@ func New(conf *Config) (*daemon, error) {
 		log.Fatal().Err(err).Msg("could not get haaukins agents from database")
 	}
 	agents := make(map[string]*agent.Agent)
+	agentPool := agent.AgentPool{}
 	for _, a := range agentsInDb {
 		agentConfig := ServiceConfig{
 			Grpc:       a.Url,
@@ -166,16 +167,14 @@ func New(conf *Config) (*daemon, error) {
 				Errors:    []error{},
 				Close:     cancel,
 			}
-			if err := agentToAdd.ConnectToStreams(streamCtx, newLabs); err != nil {
+			if err := agentPool.ConnectToStreams(streamCtx, newLabs, agentToAdd); err != nil {
 				log.Error().Err(err).Msg("error connecting to agent streams")
 				continue
 			}
 			agents[a.Name] = agentToAdd
 		}
 	}
-	agentPool := agent.AgentPool{
-		Agents: agents,
-	}
+	agentPool.Agents = agents
 	// dataSource := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable", conf.Database.Host, conf.Database.Username, conf.Database.Password, conf.Database.DbName, conf.Database.Port)
 	// adapter, err := gormadapter.NewFilteredAdapter("postgres", dataSource, true)
 	// if err != nil {

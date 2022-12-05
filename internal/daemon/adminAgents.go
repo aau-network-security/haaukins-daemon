@@ -39,12 +39,13 @@ type AgentRequest struct {
 
 type AgentResponse struct {
 	Name       string `json:"name"`
+	Connected  bool   `json:"connected"`
 	Url        string `json:"url"`
-	SignKey    string `json:"sign-key"`
-	AuthKey    string `json:"auth-key"`
-	Tls        bool   `json:"tls,omitempty"`
-	StateLock  bool   `json:"state-lock"`
-	ActiveLabs uint64 `json:"active-labs"`
+	SignKey    string `json:"signKey"`
+	AuthKey    string `json:"authKey"`
+	Tls        bool   `json:"tls"`
+	StateLock  bool   `json:"stateLock"`
+	ActiveLabs uint64 `json:"activeLabs"`
 }
 
 // Creates a new agent connection and stores connection information in the database
@@ -119,7 +120,7 @@ func (d *daemon) newAgent(c *gin.Context) {
 			Close:     cancel,
 		}
 
-		if err := agentForPool.ConnectToStreams(streamCtx, d.newLabs); err != nil {
+		if err := d.agentPool.ConnectToStreams(streamCtx, d.newLabs, agentForPool); err != nil {
 			log.Error().Err(err).Msg("error connecting to agent streams")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: fmt.Sprintf("error connecting to agent streams: %v", err)})
 			return
@@ -179,12 +180,23 @@ func (d *daemon) getAgents(c *gin.Context) {
 		var resp []AgentResponse
 		for _, a := range agents {
 			aFromPool, err := d.agentPool.GetAgent(a.Name)
+			var aResp AgentResponse
 			if err != nil {
 				log.Error().Err(err).Msg("error getting agent from pool")
+				aResp = AgentResponse{
+					Name:      a.Name,
+					Connected: false,
+					Url:       a.Url,
+					SignKey:   a.SignKey,
+					AuthKey:   a.AuthKey,
+					Tls:       a.Tls,
+				}
+				resp = append(resp, aResp)
 				continue
 			}
-			aResp := AgentResponse{
+			aResp = AgentResponse{
 				Name:       a.Name,
+				Connected:  true,
 				Url:        a.Url,
 				SignKey:    a.SignKey,
 				AuthKey:    a.AuthKey,
@@ -335,7 +347,7 @@ func (d *daemon) reconnectAgent(c *gin.Context) {
 			Close:     cancel,
 		}
 
-		if err := agentForPool.ConnectToStreams(streamCtx, d.newLabs); err != nil {
+		if err := d.agentPool.ConnectToStreams(streamCtx, d.newLabs, agentForPool); err != nil {
 			log.Error().Err(err).Msg("error connecting to agent streams")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: fmt.Sprintf("error connecting to agent streams: %v", err)})
 			return

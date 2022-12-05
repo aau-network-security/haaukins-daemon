@@ -11,7 +11,7 @@ import (
 )
 
 // Send a heartbeat to all agents in the database, remove/add agent if connection status changes
-func (a *Agent) connectToMonitoringStream(routineCtx context.Context, newLabs chan aproto.Lab) error {
+func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, newLabs chan aproto.Lab, a *Agent) error {
 	client := aproto.NewAgentClient(a.Conn)
 	stream, err := client.MonitorStream(routineCtx)
 	if err != nil {
@@ -31,6 +31,7 @@ func (a *Agent) connectToMonitoringStream(routineCtx context.Context, newLabs ch
 				if err := stream.Send(&aproto.PingRequest{Ping: "ping"}); err != nil {
 					log.Error().Err(err).Msg("error sending monitoring ping request")
 					if err == io.EOF {
+						ap.RemoveAgent(a.Name)
 						return
 					}
 					continue
@@ -39,6 +40,7 @@ func (a *Agent) connectToMonitoringStream(routineCtx context.Context, newLabs ch
 				if err != nil {
 					log.Error().Err(err).Msg("error recieving new labs")
 					if err == io.EOF {
+						ap.RemoveAgent(a.Name)
 						return
 					}
 					continue
@@ -55,8 +57,8 @@ func (a *Agent) connectToMonitoringStream(routineCtx context.Context, newLabs ch
 	return nil
 }
 
-func (a *Agent) ConnectToStreams(ctx context.Context, newLabs chan aproto.Lab) error {
-	if err := a.connectToMonitoringStream(ctx, newLabs); err != nil {
+func (ap *AgentPool) ConnectToStreams(ctx context.Context, newLabs chan aproto.Lab, a *Agent) error {
+	if err := ap.connectToMonitoringStream(ctx, newLabs, a); err != nil {
 		return err
 	}
 	return nil
@@ -91,7 +93,7 @@ func (ap *AgentPool) UpdateAgentState(name string, lock bool) error {
 
 	_, ok := ap.Agents[name]
 	if !ok {
-		return fmt.Errorf("no agent found with name: \"%s\" in agentpool",name)
+		return fmt.Errorf("no agent found with name: \"%s\" in agentpool", name)
 	}
 
 	ap.Agents[name].StateLock = lock
