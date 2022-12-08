@@ -49,7 +49,8 @@ func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, newLa
 				for _, l := range msg.NewLabs {
 					log.Debug().Str("lab-tag", l.Tag).Msg("recieved lab from agent")
 				}
-				log.Debug().Str("hb", msg.Hb).Float64("cpu", msg.Cpu).Float64("mem", msg.Mem).Uint64("memAvailable", msg.MemAvailable).Msg("monitoring parameters ")
+				ap.UpdateAgentMetrics(a.Name, msg.Resources.Cpu, msg.Resources.Mem, msg.Resources.LabCount, msg.Resources.VmCount, msg.Resources.ContainerCount)
+				log.Debug().Str("hb", msg.Hb).Float64("cpu", msg.Resources.Cpu).Float64("mem", msg.Resources.Mem).Uint64("memAvailable", msg.Resources.MemAvailable).Msg("monitoring parameters ")
 			}
 			time.Sleep(1 * time.Second)
 		}
@@ -98,6 +99,24 @@ func (ap *AgentPool) UpdateAgentState(name string, lock bool) error {
 
 	ap.Agents[name].StateLock = lock
 	return nil
+}
+
+func (ap *AgentPool) UpdateAgentMetrics(name string, cpu, memory float64, labCount, vmCount, containerCount uint32) (*Agent, error) {
+	ap.M.Lock()
+	defer ap.M.Unlock()
+
+	_, ok := ap.Agents[name]
+	if !ok {
+		return nil, fmt.Errorf("no agent found with name: \"%s\" in agentpool", name)
+	}
+
+	ap.Agents[name].Resources.Cpu = cpu
+	ap.Agents[name].Resources.Memory = memory
+	ap.Agents[name].Resources.ContainerCount = containerCount
+	ap.Agents[name].Resources.VmCount = vmCount
+	ap.Agents[name].Resources.LabCount = labCount
+
+	return ap.Agents[name], nil
 }
 
 func (ap *AgentPool) GetAgent(name string) (*Agent, error) {

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -10,20 +11,25 @@ import (
 	"github.com/aau-network-security/haaukins-daemon/internal/agent"
 	"github.com/aau-network-security/haaukins-daemon/internal/db"
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog/log"
 )
 
 func (d *daemon) adminAgentsSubrouter(r *gin.RouterGroup) {
 	agents := r.Group("/agents")
+
+	agents.GET("/ws/:agent", d.agentWebsocket)
+
 	agents.Use(d.adminAuthMiddleware())
 
 	// CRUD
 	agents.POST("", d.newAgent)
 	agents.GET("", d.getAgents)
 	agents.PUT("", d.updateAgent)
-	agents.DELETE("", d.deleteAgent)
+	agents.DELETE("/:agent", d.deleteAgent)
 
 	// Additional routes
+
 	agents.GET("/reconnect/:agent", d.reconnectAgent)
 	agents.GET("/agentstate/lock/:agent", d.lockAgentState)
 	agents.GET("/agentstate/unlock/:agent", d.unlockAgentState)
@@ -223,19 +229,7 @@ func (d *daemon) updateAgent(c *gin.Context) {
 func (d *daemon) deleteAgent(c *gin.Context) {
 	ctx := context.Background()
 
-	var req AgentRequest
-	if err := c.BindJSON(&req); err != nil {
-		log.Error().Err(err).Msg("Error parsing request data: ")
-		c.JSON(http.StatusBadRequest, APIResponse{Status: "error parsing request"})
-		return
-	}
-
-	// Validate all request parameters
-	if err := validateRequestParams(req, true, false, false, false); err != nil {
-		log.Error().Err(err).Msg("error validation request")
-		c.JSON(http.StatusBadRequest, APIResponse{Status: err.Error()})
-		return
-	}
+	agentName := c.Param("agent")
 
 	admin := unpackAdminClaims(c)
 	d.auditLogger.Info().
@@ -255,22 +249,22 @@ func (d *daemon) deleteAgent(c *gin.Context) {
 			return
 		}
 
-		exists, err := d.db.CheckIfAgentExists(ctx, req.Name)
+		exists, err := d.db.CheckIfAgentExists(ctx, agentName)
 		if err != nil {
 			log.Error().Err(err).Msgf("Error checking if agent exists")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
 		}
 		if !exists {
-			log.Error().Str("agentName", req.Name).Msg("agent with that name does not exists")
+			log.Error().Str("agentName", agentName).Msg("agent with that name does not exists")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "agent with that name does not exists"})
 			return
 		}
 
 		// TODO: make sure that go routines connected to the agent is removed
-		d.agentPool.RemoveAgent(req.Name)
+		d.agentPool.RemoveAgent(agentName)
 
-		if err := d.db.DeleteAgentByName(ctx, req.Name); err != nil {
+		if err := d.db.DeleteAgentByName(ctx, agentName); err != nil {
 			log.Error().Err(err).Msgf("Error deleting agent")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
@@ -422,6 +416,54 @@ func (d *daemon) unlockAgentState(c *gin.Context) {
 
 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 		return
+	}
+	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
+}
+
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+	CheckOrigin:     func(r *http.Request) bool { return true },
+}
+
+// TODO Find a better way to authenticate users than sending jwt as get query parameter
+func (d *daemon) agentWebsocket(c *gin.Context) {
+	claims, err := d.jwtValidate(nil, c.Query("token"))
+	if err != nil {
+		log.Err(err).Msg("error validating token")
+		c.AbortWithStatusJSON(http.StatusUnauthorized, APIResponse{Status: "Invalid JWT"})
+		return
+	}
+
+	sub := string(claims["sub"].(string))
+	dom := string(claims["organization"].(string))
+	obj := "agents::Admins"
+	act := "read"
+	if authorized, err := d.enforcer.Enforce(sub, dom, obj, act); authorized || err != nil {
+		if err != nil {
+			log.Error().Err(err).Msgf("Encountered an error while authorizing agent deletion")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+		agentName := c.Param("agent")
+
+		ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		defer ws.Close()
+		mt := websocket.TextMessage
+		for {
+			agent, err := d.agentPool.GetAgent(agentName)
+			if err != nil {
+				return
+			}
+
+			agentJson, err := json.Marshal(agent.Resources)
+			err = ws.WriteMessage(mt, agentJson)
+			time.Sleep(2 * time.Second)
+		}
 	}
 	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 }

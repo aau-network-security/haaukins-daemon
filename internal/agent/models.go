@@ -14,8 +14,8 @@ type AgentPool struct {
 
 type Agent struct {
 	Name       string
-	Conn       *grpc.ClientConn
-	Close      context.CancelFunc
+	Conn       *grpc.ClientConn   `json:"-"`
+	Close      context.CancelFunc `json:"-"`
 	Resources  Resources
 	Heartbeat  string
 	StateLock  bool
@@ -24,8 +24,11 @@ type Agent struct {
 }
 
 type Resources struct {
-	Memory string
-	Cpu    string
+	Cpu            float64
+	Memory         float64
+	LabCount       uint32
+	VmCount        uint32
+	ContainerCount uint32
 }
 type Lab struct {
 	tag         string

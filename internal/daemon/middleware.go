@@ -75,8 +75,11 @@ func (d *daemon) jwtExtract(c *gin.Context) string {
 	return token
 }
 
-func (d *daemon) jwtVerify(c *gin.Context) (*jwt.Token, error) {
-	tokenString := d.jwtExtract(c)
+func (d *daemon) jwtVerify(c *gin.Context, tokenFromClient string) (*jwt.Token, error) {
+	tokenString := tokenFromClient
+	if c != nil {
+		tokenString = d.jwtExtract(c)
+	}
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
@@ -89,8 +92,8 @@ func (d *daemon) jwtVerify(c *gin.Context) (*jwt.Token, error) {
 	return token, nil
 }
 
-func (d *daemon) jwtValidate(c *gin.Context) (jwt.MapClaims, error) {
-	token, err := d.jwtVerify(c)
+func (d *daemon) jwtValidate(c *gin.Context, tokenFromClient string) (jwt.MapClaims, error) {
+	token, err := d.jwtVerify(c, tokenFromClient)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +108,7 @@ func (d *daemon) jwtValidate(c *gin.Context) (jwt.MapClaims, error) {
 
 func (d *daemon) adminAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		claims, err := d.jwtValidate(c)
+		claims, err := d.jwtValidate(c, "")
 		if err != nil || claims["participant"] == true {
 			if claims["participant"] == true {
 				d.auditLogger.Warn().

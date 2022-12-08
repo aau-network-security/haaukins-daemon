@@ -126,7 +126,7 @@ func New(conf *Config) (*daemon, error) {
 	log.Info().Msg("Creating daemon...")
 	// TODO rewrte init function if filtered adapter is used
 	//Setting up database connection
-	db, gormDb, err := conf.Database.InitConn()
+	dbConn, gormDb, err := conf.Database.InitConn()
 	if err != nil {
 		log.Fatal().Err(err).Msg("[Haaukins-daemon] Failed to connect to database")
 	}
@@ -142,38 +142,49 @@ func New(conf *Config) (*daemon, error) {
 	newLabs := make(chan aproto.Lab, 1000)
 	// Connecting to all haaukins agents
 	log.Info().Msg("Connecting to haaukins agents...")
-	agentsInDb, err := db.GetAgents(ctx)
+	agentsInDb, err := dbConn.GetAgents(ctx)
 	if err != nil {
 		log.Fatal().Err(err).Msg("could not get haaukins agents from database")
 	}
 	agents := make(map[string]*agent.Agent)
 	agentPool := agent.AgentPool{}
+	var wg sync.WaitGroup
+	var m sync.Mutex
 	for _, a := range agentsInDb {
-		agentConfig := ServiceConfig{
-			Grpc:       a.Url,
-			AuthKey:    a.AuthKey,
-			SignKey:    a.SignKey,
-			TLSEnabled: a.Tls,
-		}
-		conn, err := NewAgentConnection(agentConfig)
-		if err != nil {
-			log.Warn().Err(err).Msg("error connecting to agent at url: " + agentConfig.Grpc)
-		} else {
-			streamCtx, cancel := context.WithCancel(context.Background())
-			var agentToAdd = &agent.Agent{
-				Name:      a.Name,
-				Conn:      conn,
-				StateLock: a.Statelock,
-				Errors:    []error{},
-				Close:     cancel,
+		wg.Add(1)
+		go func(agents map[string]*agent.Agent, a db.Agent) {
+			agentConfig := ServiceConfig{
+				Grpc:       a.Url,
+				AuthKey:    a.AuthKey,
+				SignKey:    a.SignKey,
+				TLSEnabled: a.Tls,
 			}
-			if err := agentPool.ConnectToStreams(streamCtx, newLabs, agentToAdd); err != nil {
-				log.Error().Err(err).Msg("error connecting to agent streams")
-				continue
+			conn, err := NewAgentConnection(agentConfig)
+			if err != nil {
+				log.Warn().Err(err).Msg("error connecting to agent at url: " + agentConfig.Grpc)
+				wg.Done()
+			} else {
+				streamCtx, cancel := context.WithCancel(context.Background())
+				var agentToAdd = &agent.Agent{
+					Name:      a.Name,
+					Conn:      conn,
+					StateLock: a.Statelock,
+					Errors:    []error{},
+					Close:     cancel,
+				}
+				if err := agentPool.ConnectToStreams(streamCtx, newLabs, agentToAdd); err != nil {
+					log.Error().Err(err).Msg("error connecting to agent streams")
+					wg.Done()
+					return
+				}
+				m.Lock()
+				agents[a.Name] = agentToAdd
+				m.Unlock()
+				wg.Done()
 			}
-			agents[a.Name] = agentToAdd
-		}
+		}(agents, a)
 	}
+	wg.Wait()
 	agentPool.Agents = agents
 	// dataSource := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable", conf.Database.Host, conf.Database.Username, conf.Database.Password, conf.Database.DbName, conf.Database.Port)
 	// adapter, err := gormadapter.NewFilteredAdapter("postgres", dataSource, true)
@@ -227,7 +238,7 @@ func New(conf *Config) (*daemon, error) {
 
 	d := &daemon{
 		conf:        conf,
-		db:          db,
+		db:          dbConn,
 		exClient:    exClient,
 		agentPool:   &agentPool,
 		auditLogger: &auditLogger,
