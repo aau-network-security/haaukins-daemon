@@ -428,44 +428,62 @@ var upgrader = websocket.Upgrader{
 
 // TODO Find a better way to authenticate users than sending jwt as get query parameter
 func (d *daemon) agentWebsocket(c *gin.Context) {
-	claims, err := d.jwtValidate(nil, c.Query("token"))
+	agentName := c.Param("agent")
+
+	ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Err(err).Msg("error validating token")
-		c.AbortWithStatusJSON(http.StatusUnauthorized, APIResponse{Status: "Invalid JWT"})
+		fmt.Println(err)
+		return
+	}
+	defer ws.Close()
+
+	mt := websocket.TextMessage
+	// Construct a type to hold the token
+	type WsAuthRequest struct {
+		Token string `json:"token"`
+	}
+	for {
+		// read the on open message
+		req := WsAuthRequest{}
+		if err := ws.ReadJSON(&req); err != nil {
+			log.Error().Err(err).Msg("error reading json from websocket connection")
+			continue
+		}
+		// Validate the token
+		claims, err := d.jwtValidate(nil, req.Token)
+		if err != nil {
+			ws.WriteMessage(mt, []byte("invalid token"))
+			return
+		}
+
+		// Authorize the user
+		sub := string(claims["sub"].(string))
+		dom := string(claims["organization"].(string))
+		obj := "agents::Admins"
+		act := "read"
+		if authorized, err := d.enforcer.Enforce(sub, dom, obj, act); authorized || err != nil {
+			if err != nil {
+				log.Error().Err(err).Msgf("Encountered an error while authorizing agent deletion")
+				ws.WriteMessage(mt, []byte("internal server error"))
+				return
+			}
+			// Send agent metrics if authorized
+			for {
+				agent, err := d.agentPool.GetAgent(agentName)
+				if err != nil {
+					ws.WriteMessage(mt, []byte("agent not connected"))
+					return
+				}
+
+				agentJson, err := json.Marshal(agent.Resources)
+				err = ws.WriteMessage(mt, agentJson)
+				time.Sleep(2 * time.Second)
+			}
+		}
+		ws.WriteMessage(mt, []byte("unauthorized"))
 		return
 	}
 
-	sub := string(claims["sub"].(string))
-	dom := string(claims["organization"].(string))
-	obj := "agents::Admins"
-	act := "read"
-	if authorized, err := d.enforcer.Enforce(sub, dom, obj, act); authorized || err != nil {
-		if err != nil {
-			log.Error().Err(err).Msgf("Encountered an error while authorizing agent deletion")
-			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
-			return
-		}
-		agentName := c.Param("agent")
-
-		ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		defer ws.Close()
-		mt := websocket.TextMessage
-		for {
-			agent, err := d.agentPool.GetAgent(agentName)
-			if err != nil {
-				return
-			}
-
-			agentJson, err := json.Marshal(agent.Resources)
-			err = ws.WriteMessage(mt, agentJson)
-			time.Sleep(2 * time.Second)
-		}
-	}
-	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 }
 
 // Validates the agentRequest sent by the user
