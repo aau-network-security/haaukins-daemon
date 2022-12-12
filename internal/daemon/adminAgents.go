@@ -38,8 +38,8 @@ func (d *daemon) adminAgentsSubrouter(r *gin.RouterGroup) {
 type AgentRequest struct {
 	Name    string `json:"name"`
 	Url     string `json:"url,omitempty"`
-	SignKey string `json:"sign-key,omitempty"`
-	AuthKey string `json:"auth-key,omitempty"`
+	SignKey string `json:"signKey,omitempty"`
+	AuthKey string `json:"authKey,omitempty"`
 	Tls     bool   `json:"tls,omitempty"`
 }
 
@@ -57,7 +57,6 @@ type AgentResponse struct {
 // Creates a new agent connection and stores connection information in the database
 func (d *daemon) newAgent(c *gin.Context) {
 	ctx := context.Background()
-
 	var req AgentRequest
 	if err := c.BindJSON(&req); err != nil {
 		log.Error().Err(err).Msg("Error parsing request data: ")
@@ -193,8 +192,6 @@ func (d *daemon) getAgents(c *gin.Context) {
 					Name:      a.Name,
 					Connected: false,
 					Url:       a.Url,
-					SignKey:   a.SignKey,
-					AuthKey:   a.AuthKey,
 					Tls:       a.Tls,
 				}
 				resp = append(resp, aResp)
@@ -204,8 +201,6 @@ func (d *daemon) getAgents(c *gin.Context) {
 				Name:       a.Name,
 				Connected:  true,
 				Url:        a.Url,
-				SignKey:    a.SignKey,
-				AuthKey:    a.AuthKey,
 				Tls:        a.Tls,
 				StateLock:  aFromPool.StateLock,
 				ActiveLabs: aFromPool.ActiveLabs,
