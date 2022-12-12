@@ -11,7 +11,7 @@ DELETE FROM admin_users WHERE LOWER(username)=LOWER($1);
 SELECT username, full_name, email, role, organization FROM admin_users WHERE LOWER(username)=LOWER($1);
 
 -- name: GetAdminUsers :many
-SELECT username, full_name, email, role, organization FROM admin_users WHERE organization = CASE WHEN @organization='' THEN organization ELSE @organization END;
+SELECT username, full_name, email, role, organization FROM admin_users WHERE LOWER(organization) = CASE WHEN @organization='' THEN LOWER(organization) ELSE LOWER(@organization) END;
 
 -- name: UpdateAdminPassword :exec
 UPDATE admin_users SET password = @password WHERE username = @username;

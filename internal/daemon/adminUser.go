@@ -361,7 +361,7 @@ func (d *daemon) getAdminUsers(c *gin.Context) {
 		}
 		// Superuser
 		if authorized[0] {
-			users, err := d.db.GetAdminUsers(ctx, "")
+			users, err := d.db.GetAdminUsers(ctx, c.Query("organization"))
 			if err != nil {
 				log.Error().Err(err).Msg("Error getting admin users")
 				c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})

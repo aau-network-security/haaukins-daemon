@@ -328,7 +328,7 @@ func (q *Queries) GetAdminUserNoPwByUsername(ctx context.Context, lower string) 
 }
 
 const getAdminUsers = `-- name: GetAdminUsers :many
-SELECT username, full_name, email, role, organization FROM admin_users WHERE organization = CASE WHEN $1='' THEN organization ELSE $1 END
+SELECT username, full_name, email, role, organization FROM admin_users WHERE LOWER(organization) = CASE WHEN $1='' THEN LOWER(organization) ELSE LOWER($1) END
 `
 
 type GetAdminUsersRow struct {
