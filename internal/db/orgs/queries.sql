@@ -1,6 +1,9 @@
 -- name: CheckIfOrgExists :one
 SELECT EXISTS( SELECT 1 FROM organizations WHERE lower(name) = lower(@orgName) );
 
+-- name: CheckIfUserOwnsOrg :one
+SELECT EXISTS( SELECT 1 FROM organizations WHERE lower(owner_user) = lower(@ownerUsername));
+
 -- name: AddOrganization :exec
 INSERT INTO organizations (name, owner_user, owner_email) VALUES (@org, @ownerUsername, @ownerEmail);
 

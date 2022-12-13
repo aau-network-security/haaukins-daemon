@@ -156,6 +156,17 @@ func (q *Queries) CheckIfUserExistsInOrg(ctx context.Context, arg CheckIfUserExi
 	return exists, err
 }
 
+const checkIfUserOwnsOrg = `-- name: CheckIfUserOwnsOrg :one
+SELECT EXISTS( SELECT 1 FROM organizations WHERE lower(owner_user) = lower($1))
+`
+
+func (q *Queries) CheckIfUserOwnsOrg(ctx context.Context, ownerusername string) (bool, error) {
+	row := q.db.QueryRowContext(ctx, checkIfUserOwnsOrg, ownerusername)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const checkProfileExists = `-- name: CheckProfileExists :one
 SELECT EXISTS(SELECT 1 FROM profiles WHERE name = $1)
 `

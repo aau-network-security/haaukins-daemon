@@ -17,11 +17,11 @@ import (
 type adminUserRequest struct {
 	Username            string `json:"username,omitempty"`
 	Password            string `json:"password,omitempty"`
-	FullName            string `json:"full_name,omitempty"`
+	FullName            string `json:"fullName,omitempty"`
 	Email               string `json:"email,omitempty"`
 	Role                string `json:"role,omitempty"`
 	Organization        string `json:"organization,omitempty"`
-	VerifyAdminPassword string `json:"verify_admin_password,omitempty"`
+	VerifyAdminPassword string `json:"verifyAdminPassword,omitempty"`
 }
 
 type AdminUserReponse struct {
@@ -40,7 +40,7 @@ func (d *daemon) adminUserSubrouter(r *gin.RouterGroup) {
 	user.GET("/:username", d.getAdminUser)
 	user.GET("", d.getAdminUsers)
 	user.PUT("", d.updateAdminUser)
-	user.DELETE("", d.deleteAdminUser)
+	user.DELETE("/:username", d.deleteAdminUser)
 
 }
 
@@ -103,6 +103,7 @@ func (d *daemon) adminLogin(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Status: "OK", Token: token, UserInfo: userToReturn})
 }
 
+// TODO Add email func to send randomly generated password if password is set to blank for new user
 func (d *daemon) newAdminUser(c *gin.Context) {
 	ctx := context.Background()
 	// Unpack user request into go struct
@@ -122,11 +123,6 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 		Str("NewUser", req.Username).
 		Msg("AdminUser is trying to create a new user")
 	// Setting up casbin request
-	sub := admin.Username
-	dom := admin.Organization
-	obj := fmt.Sprintf("role::%s", req.Role)
-	act := "write"
-	log.Debug().Str("sub", sub).Str("dom", dom).Str("obj", obj).Msg("Admin")
 	// TODO Waiting on an answer from github, but would be nice only to load relevant policies
 	// TODO especially if we start getting alot of them
 	// if err := d.enforcer.LoadPolicy(); err != nil {
@@ -135,7 +131,12 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 	// 	return
 	// }
 	// Check if user has access
-	if authorized, err := d.enforcer.Enforce(sub, dom, obj, act); authorized || err != nil {
+	var requests = [][]interface{}{
+		{admin.Username, admin.Organization, "users::Admins", "write"},
+		{admin.Username, admin.Organization, fmt.Sprintf("role::%s", req.Role), "write"},
+		{admin.Username, admin.Organization, fmt.Sprintf("users::%s", admin.Organization), "write"},
+	}
+	if authorized, err := d.enforcer.BatchEnforce(requests); (authorized[1] && authorized[2]) || err != nil {
 		if err != nil {
 			log.Error().Err(err).Msgf("Encountered an error while authorizing user creation")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
@@ -147,7 +148,16 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 			return
 		}
 		// Create new user if it does not already exist
-		alreadyExists, err := d.createAdminUser(ctx, req, dom)
+		org := admin.Organization
+		if authorized[0] { // Superadmin
+			org = req.Organization
+			if req.Role == "superadmin" && org != "Admins" {
+				c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized... Superadmins can only be added to the Admins organization"})
+				return
+			
+			}
+		}
+		alreadyExists, err := d.createAdminUser(ctx, req, org)
 		if err != nil {
 			log.Error().Err(err).Msgf("Error creating admin user")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
@@ -167,13 +177,8 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 
 func (d *daemon) deleteAdminUser(c *gin.Context) {
 	ctx := context.Background()
-	// Unpack user request into go struct
-	var req adminUserRequest
-	if err := c.BindJSON(&req); err != nil {
-		log.Error().Err(err).Msg("Error parsing request data: ")
-		c.JSON(http.StatusBadRequest, APIResponse{Status: "Error"})
-		return
-	}
+	
+	username := c.Param("username")
 	// Unpack the jwt claims passed in the gin context to a struct
 	admin := unpackAdminClaims(c)
 	log.Debug().Msgf("admin claims: %v", admin)
@@ -181,11 +186,11 @@ func (d *daemon) deleteAdminUser(c *gin.Context) {
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
 		Str("AdminEmail", admin.Email).
-		Str("Username", req.Username).
+		Str("Username", username).
 		Msg("AdminUser is trying to delete user")
 
 	// Getting info for user to delete
-	userToDelete, err := d.db.GetAdminUserByUsername(ctx, req.Username)
+	userToDelete, err := d.db.GetAdminUserByUsername(ctx, username)
 	if err != nil {
 		log.Error().Err(err).Msg("Error getting admin user for deletion")
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "Could not find user to delete"})
@@ -203,8 +208,19 @@ func (d *daemon) deleteAdminUser(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
 		}
+		owner, err := d.db.CheckIfUserOwnsOrg(ctx, userToDelete.Username)
+		if err != nil {
+			log.Error().Err(err).Msg("Error deleting admin user")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+		if owner {
+			log.Warn().Msg("admin tried to delete owner of an organization")
+			c.JSON(http.StatusBadRequest, APIResponse{Status: "Cannot delete an owner of an organization"})
+			return
+		}
 		// Delete user info from database
-		if err := d.db.DeleteAdminUserByUsername(ctx, req.Username); err != nil {
+		if err := d.db.DeleteAdminUserByUsername(ctx, userToDelete.Username); err != nil {
 			log.Error().Err(err).Msg("Error deleting admin user")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
