@@ -20,13 +20,13 @@ func (d *daemon) adminOrgSubrouter(r *gin.RouterGroup) {
 	org.POST("", d.newOrganization)
 	org.GET("", d.listOrganizations)
 	org.PUT("", d.updateOrganization)
-	org.DELETE("", d.deleteOrganization)
+	org.DELETE("/:org", d.deleteOrganization)
 
 }
 
 type adminOrgRequest struct {
-	OrgName  string           `json:"org_name"`
-	OrgOwner adminUserRequest `json:"org_owner"`
+	OrgName  string           `json:"orgName"`
+	OrgOwner adminUserRequest `json:"orgOwner"`
 }
 
 var orgCreationPolicies = [][]string{
@@ -66,6 +66,7 @@ var orgCreationGroupPolicies = [][]string{
 // g3 policies
 var orgCreationDomainHirachyPolicy = []string{"Admins", ""}
 
+// TODO Add email func to send randomly generated password if password is set to blank for new user
 func (d *daemon) newOrganization(c *gin.Context) {
 	ctx := context.Background()
 	// Unpack user request into go struct
@@ -185,16 +186,10 @@ func (d *daemon) updateOrganization(c *gin.Context) {
 
 func (d *daemon) deleteOrganization(c *gin.Context) {
 	ctx := context.Background()
-	// Unpack user request into go struct
-	var req adminOrgRequest
-	if err := c.BindJSON(&req); err != nil {
-		log.Error().Err(err).Msg("Error parsing request data: ")
-		c.JSON(http.StatusBadRequest, APIResponse{Status: "Error"})
-		return
-	}
+	orgName := c.Param("org")
 
 	// Make sure they are not able to delete the root organization
-	if strings.ToLower(req.OrgName) == "admins" {
+	if strings.ToLower(orgName) == "admins" {
 		log.Warn().Msg("User tried to delete root organization")
 		c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 		return
@@ -205,7 +200,7 @@ func (d *daemon) deleteOrganization(c *gin.Context) {
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
 		Str("AdminEmail", admin.Email).
-		Str("NewOrg", req.OrgName).
+		Str("NewOrg", orgName).
 		Msg("Trying to create a new organization")
 
 	// Setup casbin request
@@ -220,7 +215,7 @@ func (d *daemon) deleteOrganization(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
 		}
-		if err := d.deleteOrgAndPolicies(ctx, req); err != nil {
+		if err := d.deleteOrgAndPolicies(ctx, orgName); err != nil {
 			log.Error().Err(err).Msgf("Encountered an error while deleting organizations")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: fmt.Sprintf("%s", err)})
 			return
@@ -231,8 +226,8 @@ func (d *daemon) deleteOrganization(c *gin.Context) {
 	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 }
 
-func (d *daemon) deleteOrgAndPolicies(ctx context.Context, org adminOrgRequest) error {
-	orgExists, err := d.db.CheckIfOrgExists(ctx, org.OrgName)
+func (d *daemon) deleteOrgAndPolicies(ctx context.Context, orgName string) error {
+	orgExists, err := d.db.CheckIfOrgExists(ctx, orgName)
 	if err != nil {
 		return err
 	}
@@ -240,12 +235,12 @@ func (d *daemon) deleteOrgAndPolicies(ctx context.Context, org adminOrgRequest) 
 		return errors.New("org you wish to delete does not exist")
 	}
 
-	orgToDelete, err := d.db.GetOrgByName(ctx, org.OrgName)
+	orgToDelete, err := d.db.GetOrgByName(ctx, orgName)
 	if err != nil {
 		return err
 	}
 	// First delete the organization from the database
-	if err := d.db.DeleteOrganization(ctx, org.OrgName); err != nil {
+	if err := d.db.DeleteOrganization(ctx, orgName); err != nil {
 		return err
 	}
 
