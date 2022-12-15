@@ -3,8 +3,8 @@ CREATE TABLE IF NOT EXISTS events (
         tag varchar (255) NOT NULL,
         organization varchar (255) NOT NULL,
         name varchar (255) NOT NULL, 
-        available integer NOT NULL, 
-        capacity integer NOT NULL, 
+        initial_labs integer NOT NULL,
+        max_labs integer NOT NULL, 
         status integer, 
         frontend text NOT NULL, 
         exercises text NOT NULL, 
@@ -12,20 +12,24 @@ CREATE TABLE IF NOT EXISTS events (
         finish_expected timestamp NOT NULL, 
         finished_at timestamp NOT NULL, 
         createdBy text NOT NULL,
-        secretKey text NOT NULL
+        secretKey text NOT NULL,
+        UNIQUE(tag)
 );
+CREATE UNIQUE INDEX event_lower_index ON events (LOWER(tag));
 
 CREATE TABLE IF NOT EXISTS teams (
         id serial primary key,
         tag varchar(255) NOT NULL,
-        event_id integer NOT NULL,
+        event_id integer NOT NULL REFERENCES events (id) ON DELETE CASCADE,
         email varchar (255) NOT NULL,
-        name varchar (255) NOT NULL, 
+        username varchar (255) NOT NULL, 
         password varchar (255) NOT NULL,
         created_at timestamp NOT NULL,
         last_access timestamp NOT NULL,
-        solved_challenges text NOT NULL
+        solved_challenges text NOT NULL,
+        UNIQUE(username)
 );
+CREATE UNIQUE INDEX teams_lower_index ON teams (LOWER(username));
 
 
 -- Admin related tables

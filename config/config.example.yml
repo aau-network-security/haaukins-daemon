@@ -14,6 +14,7 @@ db-config:
   db_name: haaukins
   username: haaukins
   password: haaukins
+  eventRetention: 30 #Amount of days before stopped events are removed including teams related to that event
 
 exercise-service:
   grpc: localhost

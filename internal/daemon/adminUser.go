@@ -131,12 +131,12 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 	// 	return
 	// }
 	// Check if user has access
-	var requests = [][]interface{}{
+	var casbinRequests = [][]interface{}{
 		{admin.Username, admin.Organization, "users::Admins", "write"},
 		{admin.Username, admin.Organization, fmt.Sprintf("role::%s", req.Role), "write"},
 		{admin.Username, admin.Organization, fmt.Sprintf("users::%s", admin.Organization), "write"},
 	}
-	if authorized, err := d.enforcer.BatchEnforce(requests); (authorized[1] && authorized[2]) || err != nil {
+	if authorized, err := d.enforcer.BatchEnforce(casbinRequests); (authorized[1] && authorized[2]) || err != nil {
 		if err != nil {
 			log.Error().Err(err).Msgf("Encountered an error while authorizing user creation")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
@@ -254,7 +254,7 @@ func (d *daemon) updateAdminUser(c *gin.Context) {
 		Str("AdminUser", admin.Username).
 		Str("AdminEmail", admin.Email).
 		Str("Username", req.Username).
-		Msg("AdminUser is updating user")
+		Msg("AdminUser is trying to update a user")
 
 	// Get current user info for comparison
 	currUser, err := d.db.GetAdminUserByUsername(ctx, req.Username)
@@ -310,7 +310,7 @@ func (d *daemon) getAdminUser(c *gin.Context) {
 		Str("AdminUser", admin.Username).
 		Str("AdminEmail", admin.Email).
 		Str("Username", username).
-		Msg("AdminUser is listing users")
+		Msg("AdminUser is trying to list a specific user")
 
 	// Get the dbUser to return without showing the pw hash
 	dbUser, err := d.db.GetAdminUserNoPwByUsername(ctx, username)

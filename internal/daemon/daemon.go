@@ -117,6 +117,9 @@ func NewConfigFromFile(path string) (*Config, error) {
 	if c.Database.Username == "" {
 		c.Database.Password = "haaukins"
 	}
+	if c.Database.EventRetention == 0 {
+		c.Database.EventRetention = 30 // Default to 30 days of retention
+	}
 
 	return &c, nil
 }

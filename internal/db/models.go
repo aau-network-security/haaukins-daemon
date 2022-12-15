@@ -34,8 +34,8 @@ type Event struct {
 	Tag            string
 	Organization   string
 	Name           string
-	Available      int32
-	Capacity       int32
+	InitialLabs    int32
+	MaxLabs        int32
 	Status         sql.NullInt32
 	Frontend       string
 	Exercises      string
@@ -73,7 +73,7 @@ type Team struct {
 	Tag              string
 	EventID          int32
 	Email            string
-	Name             string
+	Username         string
 	Password         string
 	CreatedAt        time.Time
 	LastAccess       time.Time

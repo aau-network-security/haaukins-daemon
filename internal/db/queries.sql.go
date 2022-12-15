@@ -12,14 +12,14 @@ import (
 )
 
 const addEvent = `-- name: AddEvent :exec
-INSERT INTO events (tag, name, available, capacity, frontend, status, exercises, started_at, finish_expected, finished_at, createdby, secretKey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,$11,$12)
+INSERT INTO events (tag, name, initial_labs, max_labs, frontend, status, exercises, started_at, finish_expected, finished_at, createdby, secretKey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,$11,$12)
 `
 
 type AddEventParams struct {
 	Tag            string
 	Name           string
-	Available      int32
-	Capacity       int32
+	InitialLabs    int32
+	MaxLabs        int32
 	Frontend       string
 	Status         sql.NullInt32
 	Exercises      string
@@ -34,8 +34,8 @@ func (q *Queries) AddEvent(ctx context.Context, arg AddEventParams) error {
 	_, err := q.db.ExecContext(ctx, addEvent,
 		arg.Tag,
 		arg.Name,
-		arg.Available,
-		arg.Capacity,
+		arg.InitialLabs,
+		arg.MaxLabs,
 		arg.Frontend,
 		arg.Status,
 		arg.Exercises,
@@ -79,14 +79,14 @@ func (q *Queries) AddProfile(ctx context.Context, arg AddProfileParams) error {
 }
 
 const addTeam = `-- name: AddTeam :exec
-INSERT INTO teams (tag, event_id, email, name, password, created_at, last_access, solved_challenges) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO teams (tag, event_id, email, username, password, created_at, last_access, solved_challenges) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 `
 
 type AddTeamParams struct {
 	Tag              string
 	EventID          int32
 	Email            string
-	Name             string
+	Username         string
 	Password         string
 	CreatedAt        time.Time
 	LastAccess       time.Time
@@ -98,7 +98,7 @@ func (q *Queries) AddTeam(ctx context.Context, arg AddTeamParams) error {
 		arg.Tag,
 		arg.EventID,
 		arg.Email,
-		arg.Name,
+		arg.Username,
 		arg.Password,
 		arg.CreatedAt,
 		arg.LastAccess,
@@ -221,6 +221,29 @@ func (q *Queries) DeleteAgentByName(ctx context.Context, name string) error {
 	return err
 }
 
+const deleteEventByTagAndStatus = `-- name: DeleteEventByTagAndStatus :exec
+DELETE FROM events WHERE tag=$1 and status=$2
+`
+
+type DeleteEventByTagAndStatusParams struct {
+	Tag    string
+	Status sql.NullInt32
+}
+
+func (q *Queries) DeleteEventByTagAndStatus(ctx context.Context, arg DeleteEventByTagAndStatusParams) error {
+	_, err := q.db.ExecContext(ctx, deleteEventByTagAndStatus, arg.Tag, arg.Status)
+	return err
+}
+
+const deleteEventOlderThan = `-- name: DeleteEventOlderThan :exec
+DELETE FROM events WHERE finished_at < GETDATE() - $1 and status = 2
+`
+
+func (q *Queries) DeleteEventOlderThan(ctx context.Context, numberofdays interface{}) error {
+	_, err := q.db.ExecContext(ctx, deleteEventOlderThan, numberofdays)
+	return err
+}
+
 const deleteOrganization = `-- name: DeleteOrganization :exec
 DELETE FROM organizations WHERE lower(name) = lower($1)
 `
@@ -254,44 +277,14 @@ func (q *Queries) DeleteTeam(ctx context.Context, arg DeleteTeamParams) error {
 }
 
 const doesEventExist = `-- name: DoesEventExist :one
-SELECT EXISTS (select tag from events where tag=$1 and status!=$2)
+SELECT EXISTS (select tag from events where tag=$1)
 `
 
-type DoesEventExistParams struct {
-	Tag    string
-	Status sql.NullInt32
-}
-
-func (q *Queries) DoesEventExist(ctx context.Context, arg DoesEventExistParams) (bool, error) {
-	row := q.db.QueryRowContext(ctx, doesEventExist, arg.Tag, arg.Status)
+func (q *Queries) DoesEventExist(ctx context.Context, tag string) (bool, error) {
+	row := q.db.QueryRowContext(ctx, doesEventExist, tag)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
-}
-
-const dropEvent = `-- name: DropEvent :exec
-DELETE FROM events WHERE tag=$1 and status=$2
-`
-
-type DropEventParams struct {
-	Tag    string
-	Status sql.NullInt32
-}
-
-func (q *Queries) DropEvent(ctx context.Context, arg DropEventParams) error {
-	_, err := q.db.ExecContext(ctx, dropEvent, arg.Tag, arg.Status)
-	return err
-}
-
-const earliestDate = `-- name: EarliestDate :one
-SELECT started_at FROM events WHERE started_at=(SELECT MIN(started_at) FROM events) and finished_at = date('0001-01-01 00:00:00')
-`
-
-func (q *Queries) EarliestDate(ctx context.Context) (time.Time, error) {
-	row := q.db.QueryRowContext(ctx, earliestDate)
-	var started_at time.Time
-	err := row.Scan(&started_at)
-	return started_at, err
 }
 
 const getAdminUserByUsername = `-- name: GetAdminUserByUsername :one
@@ -434,7 +427,7 @@ func (q *Queries) GetAgents(ctx context.Context) ([]Agent, error) {
 }
 
 const getAllEvents = `-- name: GetAllEvents :many
-SELECT id, tag, organization, name, available, capacity, status, frontend, exercises, started_at, finish_expected, finished_at, createdby, secretkey FROM events
+SELECT id, tag, organization, name, initial_labs, max_labs, status, frontend, exercises, started_at, finish_expected, finished_at, createdby, secretkey FROM events
 `
 
 func (q *Queries) GetAllEvents(ctx context.Context) ([]Event, error) {
@@ -451,8 +444,8 @@ func (q *Queries) GetAllEvents(ctx context.Context) ([]Event, error) {
 			&i.Tag,
 			&i.Organization,
 			&i.Name,
-			&i.Available,
-			&i.Capacity,
+			&i.InitialLabs,
+			&i.MaxLabs,
 			&i.Status,
 			&i.Frontend,
 			&i.Exercises,
@@ -465,33 +458,6 @@ func (q *Queries) GetAllEvents(ctx context.Context) ([]Event, error) {
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getAvailableEvents = `-- name: GetAvailableEvents :many
-SELECT id FROM events WHERE tag=$1 and finished_at = date('0001-01-01 00:00:00') and (status = 0 or status = 1 or status = 2)
-`
-
-func (q *Queries) GetAvailableEvents(ctx context.Context, tag string) ([]int32, error) {
-	rows, err := q.db.QueryContext(ctx, getAvailableEvents, tag)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []int32
-	for rows.Next() {
-		var id int32
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -530,7 +496,7 @@ func (q *Queries) GetEventStatus(ctx context.Context, tag string) ([]sql.NullInt
 }
 
 const getEventsByStatus = `-- name: GetEventsByStatus :many
-SELECT id, tag, organization, name, available, capacity, status, frontend, exercises, started_at, finish_expected, finished_at, createdby, secretkey FROM events WHERE status=$1
+SELECT id, tag, organization, name, initial_labs, max_labs, status, frontend, exercises, started_at, finish_expected, finished_at, createdby, secretkey FROM events WHERE status=$1
 `
 
 func (q *Queries) GetEventsByStatus(ctx context.Context, status sql.NullInt32) ([]Event, error) {
@@ -547,8 +513,8 @@ func (q *Queries) GetEventsByStatus(ctx context.Context, status sql.NullInt32) (
 			&i.Tag,
 			&i.Organization,
 			&i.Name,
-			&i.Available,
-			&i.Capacity,
+			&i.InitialLabs,
+			&i.MaxLabs,
 			&i.Status,
 			&i.Frontend,
 			&i.Exercises,
@@ -572,16 +538,11 @@ func (q *Queries) GetEventsByStatus(ctx context.Context, status sql.NullInt32) (
 }
 
 const getEventsByUser = `-- name: GetEventsByUser :many
-SELECT id, tag, organization, name, available, capacity, status, frontend, exercises, started_at, finish_expected, finished_at, createdby, secretkey FROM events WHERE status!=$1 and createdby=$2
+SELECT id, tag, organization, name, initial_labs, max_labs, status, frontend, exercises, started_at, finish_expected, finished_at, createdby, secretkey FROM events WHERE createdBy=$1
 `
 
-type GetEventsByUserParams struct {
-	Status    sql.NullInt32
-	Createdby string
-}
-
-func (q *Queries) GetEventsByUser(ctx context.Context, arg GetEventsByUserParams) ([]Event, error) {
-	rows, err := q.db.QueryContext(ctx, getEventsByUser, arg.Status, arg.Createdby)
+func (q *Queries) GetEventsByUser(ctx context.Context, createdby string) ([]Event, error) {
+	rows, err := q.db.QueryContext(ctx, getEventsByUser, createdby)
 	if err != nil {
 		return nil, err
 	}
@@ -594,8 +555,8 @@ func (q *Queries) GetEventsByUser(ctx context.Context, arg GetEventsByUserParams
 			&i.Tag,
 			&i.Organization,
 			&i.Name,
-			&i.Available,
-			&i.Capacity,
+			&i.InitialLabs,
+			&i.MaxLabs,
 			&i.Status,
 			&i.Frontend,
 			&i.Exercises,
@@ -619,7 +580,7 @@ func (q *Queries) GetEventsByUser(ctx context.Context, arg GetEventsByUserParams
 }
 
 const getEventsExeptClosed = `-- name: GetEventsExeptClosed :many
-SELECT id, tag, organization, name, available, capacity, status, frontend, exercises, started_at, finish_expected, finished_at, createdby, secretkey FROM events WHERE status!=3
+SELECT id, tag, organization, name, initial_labs, max_labs, status, frontend, exercises, started_at, finish_expected, finished_at, createdby, secretkey FROM events WHERE status!=2
 `
 
 func (q *Queries) GetEventsExeptClosed(ctx context.Context) ([]Event, error) {
@@ -636,8 +597,8 @@ func (q *Queries) GetEventsExeptClosed(ctx context.Context) ([]Event, error) {
 			&i.Tag,
 			&i.Organization,
 			&i.Name,
-			&i.Available,
-			&i.Capacity,
+			&i.InitialLabs,
+			&i.MaxLabs,
 			&i.Status,
 			&i.Frontend,
 			&i.Exercises,
@@ -658,6 +619,17 @@ func (q *Queries) GetEventsExeptClosed(ctx context.Context) ([]Event, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const getExpectedFinishDate = `-- name: GetExpectedFinishDate :one
+SELECT finish_expected FROM events WHERE tag=$1
+`
+
+func (q *Queries) GetExpectedFinishDate(ctx context.Context, tag string) (time.Time, error) {
+	row := q.db.QueryRowContext(ctx, getExpectedFinishDate, tag)
+	var finish_expected time.Time
+	err := row.Scan(&finish_expected)
+	return finish_expected, err
 }
 
 const getOrgByName = `-- name: GetOrgByName :one
@@ -769,7 +741,7 @@ func (q *Queries) GetTeamCount(ctx context.Context, eventID int32) ([]int64, err
 }
 
 const getTeamsForEvent = `-- name: GetTeamsForEvent :many
-SELECT id, tag, event_id, email, name, password, created_at, last_access, solved_challenges FROM teams WHERE event_id=$1
+SELECT id, tag, event_id, email, username, password, created_at, last_access, solved_challenges FROM teams WHERE event_id=$1
 `
 
 func (q *Queries) GetTeamsForEvent(ctx context.Context, eventID int32) ([]Team, error) {
@@ -786,7 +758,7 @@ func (q *Queries) GetTeamsForEvent(ctx context.Context, eventID int32) ([]Team, 
 			&i.Tag,
 			&i.EventID,
 			&i.Email,
-			&i.Name,
+			&i.Username,
 			&i.Password,
 			&i.CreatedAt,
 			&i.LastAccess,
@@ -826,17 +798,6 @@ func (q *Queries) InsertNewAgent(ctx context.Context, arg InsertNewAgentParams) 
 		arg.Tls,
 	)
 	return err
-}
-
-const latestDate = `-- name: LatestDate :one
-SELECT finish_expected FROM events WHERE finish_expected =(SELECT max(finish_expected) FROM events) and finished_at = date('0001-01-01 00:00:00')
-`
-
-func (q *Queries) LatestDate(ctx context.Context) (time.Time, error) {
-	row := q.db.QueryRowContext(ctx, latestDate)
-	var finish_expected time.Time
-	err := row.Scan(&finish_expected)
-	return finish_expected, err
 }
 
 const teamSolvedChls = `-- name: TeamSolvedChls :many

@@ -1,5 +1,5 @@
 -- name: AddEvent :exec
-INSERT INTO events (tag, name, available, capacity, frontend, status, exercises, started_at, finish_expected, finished_at, createdby, secretKey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,$11,$12);
+INSERT INTO events (tag, name, initial_labs, max_labs, frontend, status, exercises, started_at, finish_expected, finished_at, createdby, secretKey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,$11,$12);
 
 -- name: UpdateCloseEvent :exec
 UPDATE events SET tag = $2, finished_at = $3 WHERE tag = $1;
@@ -16,30 +16,26 @@ UPDATE teams SET last_access = $2 WHERE tag = $1;
 -- name: GetAllEvents :many
 SELECT * FROM events;
 
--- name: GetAvailableEvents :many
-SELECT id FROM events WHERE tag=$1 and finished_at = date('0001-01-01 00:00:00') and (status = 0 or status = 1 or status = 2);
-
+-- name: GetEventsExeptClosed :many
+SELECT * FROM events WHERE status!=2;
 
 -- name: GetEventStatus :many
 SELECT status FROM events WHERE tag=$1;
-
--- name: GetEventsExeptClosed :many
-SELECT * FROM events WHERE status!=3;
 
 -- name: GetEventsByStatus :many
 SELECT * FROM events WHERE status=$1;
 
 -- name: GetEventsByUser :many
-SELECT * FROM events WHERE status!=$1 and createdby=$2;
+SELECT * FROM events WHERE createdBy=$1;
 
 -- name: DoesEventExist :one
-SELECT EXISTS (select tag from events where tag=$1 and status!=$2);
+SELECT EXISTS (select tag from events where tag=$1);
 
--- name: EarliestDate :one
-SELECT started_at FROM events WHERE started_at=(SELECT MIN(started_at) FROM events) and finished_at = date('0001-01-01 00:00:00');
+-- name: GetExpectedFinishDate :one
+SELECT finish_expected FROM events WHERE tag=$1;
 
--- name: LatestDate :one
-SELECT finish_expected FROM events WHERE finish_expected =(SELECT max(finish_expected) FROM events) and finished_at = date('0001-01-01 00:00:00');
-
--- name: DropEvent :exec
+-- name: DeleteEventByTagAndStatus :exec
 DELETE FROM events WHERE tag=$1 and status=$2;
+
+-- name: DeleteEventOlderThan :exec
+DELETE FROM events WHERE finished_at < GETDATE() - @numberOfDays and status = 2;

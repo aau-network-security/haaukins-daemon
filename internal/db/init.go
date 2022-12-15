@@ -9,11 +9,12 @@ import (
 )
 
 type DbConfig struct {
-	Host     string `yaml:"host"`
-	Port     uint64 `yaml:"port"`
-	DbName   string `yaml:"db_name"`
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
+	Host           string `yaml:"host"`
+	Port           uint64 `yaml:"port"`
+	DbName         string `yaml:"dbName"`
+	Username       string `yaml:"username"`
+	Password       string `yaml:"password"`
+	EventRetention uint16 `yaml:"eventRetention"`
 }
 
 func (conf *DbConfig) InitConn() (*Queries, *gorm.DB, error) {

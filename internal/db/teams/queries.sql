@@ -1,5 +1,5 @@
 -- name: AddTeam :exec
-INSERT INTO teams (tag, event_id, email, name, password, created_at, last_access, solved_challenges) VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
+INSERT INTO teams (tag, event_id, email, username, password, created_at, last_access, solved_challenges) VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
 
 -- name: DeleteTeam :exec
 DELETE FROM teams WHERE tag=$1 and event_id = $2;

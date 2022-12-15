@@ -231,6 +231,7 @@ func (d *daemon) deleteAgent(c *gin.Context) {
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
 		Str("AdminEmail", admin.Email).
+		Str("Agent", agentName).
 		Msg("AdminUser is trying to delete an agent")
 
 	sub := admin.Username
@@ -281,7 +282,7 @@ func (d *daemon) reconnectAgent(c *gin.Context) {
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
 		Str("AdminEmail", admin.Email).
-		Msg("AdminUser is trying to delete an agent")
+		Msg("AdminUser is trying to reconnect to an agent")
 
 	sub := admin.Username
 	dom := admin.Organization
