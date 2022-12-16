@@ -32,7 +32,7 @@ type daemon struct {
 	enforcer    *casbin.Enforcer
 	cache       *redis.Client
 	newLabs     chan aproto.Lab
-	eventpool   *eventPool
+	eventpool   *EventPool
 	m           sync.RWMutex
 }
 

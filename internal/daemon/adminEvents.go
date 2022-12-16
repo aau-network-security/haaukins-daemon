@@ -4,24 +4,15 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
+	aproto "github.com/aau-network-security/haaukins-agent/pkg/proto"
+	"github.com/aau-network-security/haaukins-daemon/internal/agent"
 	eproto "github.com/aau-network-security/haaukins-exercises/proto"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
-
-type EventRequest struct {
-	Type               uint8     `json:"type" binding:"required"`
-	Name               string    `json:"name" binding:"required"`
-	Tag                string    `json:"tag" binding:"required"`
-	InitialLabs        uint      `json:"initialLabs,omitempty"`
-	MaxLabs            uint      `json:"maxLabs" binding:"required"`
-	Frontend           string    `json:"frontend" binding:"required"`
-	ExerciseTags       []string  `json:"exerciseTags" binding:"required"`
-	ExpectedFinishDate time.Time `json:"expectedFinishDate" binding:"required"`
-	SecretKey          string    `json:"secretKey,omitempty"`
-}
 
 func (d *daemon) eventSubrouter(r *gin.RouterGroup) {
 	events := r.Group("/events")
@@ -36,9 +27,10 @@ func (d *daemon) eventSubrouter(r *gin.RouterGroup) {
 	events.POST("/exercise/reset", d.resetExerciseInEvent)
 }
 
+// TODO validate config
 func (d *daemon) newEvent(c *gin.Context) {
 	ctx := context.Background()
-	var req EventRequest
+	var req EventConfig
 	if err := c.BindJSON(&req); err != nil {
 		log.Error().Err(err).Msg("Error parsing request data: ")
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "error parsing request"})
@@ -81,6 +73,58 @@ func (d *daemon) newEvent(c *gin.Context) {
 				c.JSON(http.StatusUnauthorized, APIResponse{Status: "unauthorized"})
 				return
 			}
+		}
+
+		exists, err := d.db.CheckIfEventExist(ctx, req.Tag)
+		if err != nil {
+			log.Error().Err(err).Msg("error checking if event exists")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
+			return
+		}
+		if exists {
+			log.Warn().Msg("admin user tried to create an event with tag that is already in the database")
+			c.JSON(http.StatusBadRequest, APIResponse{Status: fmt.Sprintf("Event with tag \"%s\" already exists", req.Tag)})
+		}
+
+		if len(d.agentPool.Agents) > 0 {
+			var m sync.Mutex
+			var wg sync.WaitGroup
+			var errors []error
+			for _, a := range d.agentPool.Agents {
+				wg.Add(1)
+				go func(conf *EventConfig, a *agent.Agent) {
+					defer wg.Done()
+					client := aproto.NewAgentClient(a.Conn)
+					envReq := aproto.CreatEnvRequest{
+						EventTag: req.Tag,
+						EnvType:  req.Type,
+						// Just temporarily using hardcoded vm config
+						Vm: &aproto.VmConfig{
+							Image:    req.VmName,
+							MemoryMB: 4096,
+							Cpu:      0,
+						},
+						InitialLabs: req.InitialLabs,
+						Exercises:   req.ExerciseTags,
+						TeamSize:    req.TeamSize,
+					}
+					if _, err := client.CreateEnvironment(ctx, &envReq); err != nil {
+						log.Warn().Str("agentName", a.Name).Msg("error creating environment for agent")
+						m.Lock()
+						errors = append(errors, err)
+					}
+				}(&req, a)
+			}
+			wg.Wait()
+			if len(errors) == len(d.agentPool.Agents) {
+				log.Error().Msg("all agents returned error on creating environment")
+				c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+				return
+			}
+		} else {
+			log.Warn().Msg("admin user tried to start an event without any agents connected")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "No agents to serve labs... Contact a platform administrator"})
+			return
 		}
 
 	}

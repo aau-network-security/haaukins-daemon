@@ -28,7 +28,7 @@ SELECT * FROM events WHERE status=$1;
 -- name: GetEventsByUser :many
 SELECT * FROM events WHERE createdBy=$1;
 
--- name: DoesEventExist :one
+-- name: CheckIfEventExist :one
 SELECT EXISTS (select tag from events where tag=$1);
 
 -- name: GetExpectedFinishDate :one

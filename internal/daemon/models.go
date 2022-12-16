@@ -2,10 +2,10 @@ package daemon
 
 import (
 	"sync"
+	"time"
 
 	"github.com/aau-network-security/haaukins-daemon/internal/agent"
 	"github.com/aau-network-security/haaukins-daemon/internal/db"
-	"github.com/gin-gonic/gin"
 )
 
 type AdminClaims struct {
@@ -26,21 +26,34 @@ type APIResponse struct {
 	Agents   []AgentResponse    `json:"agents,omitempty"`
 }
 
-type eventPool struct {
-	m               sync.RWMutex
-	host            string
-	notFoundHandler gin.HandlerFunc
-	events          map[string]event
+type EventPool struct {
+	m      sync.RWMutex
+	events map[string]Event
 }
 
-type event struct {
-	tag            string
-	teams          map[string]team
-	frontendPort   uint
-	labs           map[string]agent.Lab
-	exercises      []string
-	unassignedLabs <-chan agent.Lab
+type Event struct {
+	Config         EventConfig
+	Teams          map[string]*Team
+	Labs           map[string]*agent.Lab
+	UnassignedLabs <-chan agent.Lab
 }
 
-type team struct {
+type EventConfig struct {
+	Type               int32     `json:"type"`
+	Name               string    `json:"name" binding:"required"`
+	Tag                string    `json:"tag" binding:"required"`
+	TeamSize           int32     `json:"teamSize" binding:"required"`
+	InitialLabs        int32     `json:"initialLabs,omitempty"`
+	MaxLabs            int32     `json:"maxLabs" binding:"required"`
+	VmName             string    `json:"vmName,omitempty"`
+	ExerciseTags       []string  `json:"exerciseTags" binding:"required"`
+	ExpectedFinishDate time.Time `json:"expectedFinishDate" binding:"required"`
+	SecretKey          string    `json:"secretKey,omitempty"`
+}
+
+type Team struct {
+	Tag      string
+	Username string
+	Email    string
+	Lab      *agent.Lab
 }

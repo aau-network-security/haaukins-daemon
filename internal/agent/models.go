@@ -31,14 +31,13 @@ type Resources struct {
 	ContainerCount uint32
 }
 type Lab struct {
-	tag         string
-	guacPort    uint
-	parentAgent string
-	isVPN       bool
-	exercises   map[string]Exercise
+	Tag         string
+	ParentAgent string
+	IsVPN       bool
+	Exercises   map[string]Exercise
 }
 
 type Exercise struct {
-	tag             string
-	containerStatus map[string]uint
+	Tag             string
+	ContainerStatus map[string]uint
 }
