@@ -10,7 +10,6 @@ import (
 	"time"
 
 	aproto "github.com/aau-network-security/haaukins-agent/pkg/proto"
-	"github.com/aau-network-security/haaukins-daemon/internal/agent"
 	"github.com/aau-network-security/haaukins-daemon/internal/db"
 	eproto "github.com/aau-network-security/haaukins-exercises/proto"
 	"github.com/casbin/casbin/v2"
@@ -27,7 +26,7 @@ type daemon struct {
 	conf        *Config
 	db          *db.Queries
 	exClient    eproto.ExerciseStoreClient
-	agentPool   *agent.AgentPool
+	agentPool   *AgentPool
 	auditLogger *zerolog.Logger
 	enforcer    *casbin.Enforcer
 	cache       *redis.Client
@@ -149,13 +148,19 @@ func New(conf *Config) (*daemon, error) {
 	if err != nil {
 		log.Fatal().Err(err).Msg("could not get haaukins agents from database")
 	}
-	agents := make(map[string]*agent.Agent)
-	agentPool := agent.AgentPool{}
+	agents := make(map[string]*Agent)
+	agentPool := AgentPool{
+		M: sync.RWMutex{},
+	}
+	eventPool := &EventPool{
+		M:      sync.RWMutex{},
+		Events: make(map[string]*Event),
+	}
 	var wg sync.WaitGroup
 	var m sync.Mutex
 	for _, a := range agentsInDb {
 		wg.Add(1)
-		go func(agents map[string]*agent.Agent, a db.Agent) {
+		go func(agents map[string]*Agent, a db.Agent) {
 			agentConfig := ServiceConfig{
 				Grpc:       a.Url,
 				AuthKey:    a.AuthKey,
@@ -168,14 +173,14 @@ func New(conf *Config) (*daemon, error) {
 				wg.Done()
 			} else {
 				streamCtx, cancel := context.WithCancel(context.Background())
-				var agentToAdd = &agent.Agent{
+				var agentToAdd = &Agent{
 					Name:      a.Name,
 					Conn:      conn,
 					StateLock: a.Statelock,
 					Errors:    []error{},
 					Close:     cancel,
 				}
-				if err := agentPool.ConnectToStreams(streamCtx, newLabs, agentToAdd); err != nil {
+				if err := agentPool.connectToStreams(streamCtx, newLabs, agentToAdd, eventPool); err != nil {
 					log.Error().Err(err).Msg("error connecting to agent streams")
 					wg.Done()
 					return
@@ -247,6 +252,7 @@ func New(conf *Config) (*daemon, error) {
 		auditLogger: &auditLogger,
 		enforcer:    enforcer,
 		newLabs:     newLabs,
+		eventpool:   eventPool,
 	}
 	return d, nil
 }

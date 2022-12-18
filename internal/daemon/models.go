@@ -1,11 +1,12 @@
 package daemon
 
 import (
+	"context"
 	"sync"
 	"time"
 
-	"github.com/aau-network-security/haaukins-daemon/internal/agent"
 	"github.com/aau-network-security/haaukins-daemon/internal/db"
+	"google.golang.org/grpc"
 )
 
 type AdminClaims struct {
@@ -27,15 +28,16 @@ type APIResponse struct {
 }
 
 type EventPool struct {
-	m      sync.RWMutex
-	events map[string]Event
+	M      sync.RWMutex
+	Events map[string]*Event
 }
 
 type Event struct {
-	Config         EventConfig
-	Teams          map[string]*Team
-	Labs           map[string]*agent.Lab
-	UnassignedLabs <-chan agent.Lab
+	Config              EventConfig
+	Teams               map[string]*Team
+	Labs                map[string]*AgentLab
+	UnassignedLabs      chan AgentLab
+	TeamsWaitingForLabs chan Team
 }
 
 type EventConfig struct {
@@ -55,5 +57,42 @@ type Team struct {
 	Tag      string
 	Username string
 	Email    string
-	Lab      *agent.Lab
+	Lab      *AgentLab
+}
+
+// Agent related types
+
+type AgentPool struct {
+	M      sync.RWMutex
+	Agents map[string]*Agent
+}
+
+type Agent struct {
+	Name       string
+	Conn       *grpc.ClientConn   `json:"-"`
+	Close      context.CancelFunc `json:"-"`
+	Resources  AgentResources
+	Heartbeat  string
+	StateLock  bool
+	ActiveLabs uint64
+	Errors     []error
+}
+
+type AgentResources struct {
+	Cpu            float64
+	Memory         float64
+	LabCount       uint32
+	VmCount        uint32
+	ContainerCount uint32
+}
+type AgentLab struct {
+	Tag         string
+	ParentAgent string
+	IsVPN       bool
+	Exercises   map[string]ExerciseStatus
+}
+
+type ExerciseStatus struct {
+	Tag             string
+	ContainerStatus map[string]uint
 }

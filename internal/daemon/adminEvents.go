@@ -2,16 +2,24 @@ package daemon
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
-	"sync"
+	"strings"
 	"time"
 
 	aproto "github.com/aau-network-security/haaukins-agent/pkg/proto"
-	"github.com/aau-network-security/haaukins-daemon/internal/agent"
+	"github.com/aau-network-security/haaukins-daemon/internal/db"
 	eproto "github.com/aau-network-security/haaukins-exercises/proto"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
+)
+
+const (
+	displayTimeFormat       = "2006-01-02 15:04:05"
+	StatusRunning     int32 = iota
+	StatusSuspended
+	StatusStopped
 )
 
 func (d *daemon) eventSubrouter(r *gin.RouterGroup) {
@@ -83,50 +91,75 @@ func (d *daemon) newEvent(c *gin.Context) {
 		}
 		if exists {
 			log.Warn().Msg("admin user tried to create an event with tag that is already in the database")
-			c.JSON(http.StatusBadRequest, APIResponse{Status: fmt.Sprintf("Event with tag \"%s\" already exists", req.Tag)})
-		}
-
-		if len(d.agentPool.Agents) > 0 {
-			var m sync.Mutex
-			var wg sync.WaitGroup
-			var errors []error
-			for _, a := range d.agentPool.Agents {
-				wg.Add(1)
-				go func(conf *EventConfig, a *agent.Agent) {
-					defer wg.Done()
-					client := aproto.NewAgentClient(a.Conn)
-					envReq := aproto.CreatEnvRequest{
-						EventTag: req.Tag,
-						EnvType:  req.Type,
-						// Just temporarily using hardcoded vm config
-						Vm: &aproto.VmConfig{
-							Image:    req.VmName,
-							MemoryMB: 4096,
-							Cpu:      0,
-						},
-						InitialLabs: req.InitialLabs,
-						Exercises:   req.ExerciseTags,
-						TeamSize:    req.TeamSize,
-					}
-					if _, err := client.CreateEnvironment(ctx, &envReq); err != nil {
-						log.Warn().Str("agentName", a.Name).Msg("error creating environment for agent")
-						m.Lock()
-						errors = append(errors, err)
-					}
-				}(&req, a)
-			}
-			wg.Wait()
-			if len(errors) == len(d.agentPool.Agents) {
-				log.Error().Msg("all agents returned error on creating environment")
-				c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
-				return
-			}
-		} else {
-			log.Warn().Msg("admin user tried to start an event without any agents connected")
-			c.JSON(http.StatusInternalServerError, APIResponse{Status: "No agents to serve labs... Contact a platform administrator"})
+			c.JSON(http.StatusBadRequest, APIResponse{Status: fmt.Sprintf("Event with tag '%s' already exists", req.Tag)})
 			return
 		}
 
+		envReq := aproto.CreatEnvRequest{
+			EventTag: req.Tag,
+			EnvType:  req.Type,
+			// Just temporarily using hardcoded vm config
+			Vm: &aproto.VmConfig{
+				Image:    req.VmName,
+				MemoryMB: 4096,
+				Cpu:      0,
+			},
+			InitialLabs: req.InitialLabs,
+			Exercises:   req.ExerciseTags,
+			TeamSize:    req.TeamSize,
+		}
+		if err := d.agentPool.createNewEnvOnAvailableAgents(ctx, envReq); err != nil {
+			if err == AllAgentsReturnedErr {
+				log.Error().Err(AllAgentsReturnedErr).Msg("error creating environments on all agents")
+				c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
+				return
+			} else if err == NoAgentsConnected {
+				log.Error().Err(NoAgentsConnected).Msg("error creating environments on all agents")
+				c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error: no agents connected... contact superadmin"})
+				return
+			}
+		}
+
+		eventToAdd := db.AddEventParams{
+			Tag:          req.Tag,
+			Name:         req.Name,
+			Organization: admin.Organization,
+			InitialLabs:  req.InitialLabs,
+			MaxLabs:      req.MaxLabs,
+			Frontend:     req.VmName,
+			Status: sql.NullInt32{
+				Int32: StatusRunning,
+				Valid: true,
+			},
+			Exercises:      strings.Join(req.ExerciseTags, ","),
+			StartedAt:      time.Now(),
+			FinishExpected: req.ExpectedFinishDate,
+			Createdby:      admin.Username,
+			Secretkey:      req.SecretKey,
+		}
+
+		// TODO Make sure to close agent environments if db fails
+		if err := d.db.AddEvent(ctx, eventToAdd); err != nil {
+			log.Error().Err(err).Msg("error adding event to database")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
+			if err := d.agentPool.closeEnvironmentOnAllAgents(ctx, req.Tag); err != nil {
+				log.Error().Err(err).Msg("error closing environment on all agents")
+			}
+			return
+		}
+
+		// TODO Start goroutine to handle lab assignments
+		event := &Event{
+			Config:              req,
+			Teams:               make(map[string]*Team),
+			Labs:                make(map[string]*AgentLab),
+			UnassignedLabs:      make(chan AgentLab, req.MaxLabs),
+			TeamsWaitingForLabs: make(chan Team),
+		}
+		d.eventpool.AddEvent(event)
+		// Since environment successfully
+		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+		return
 	}
 	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 }

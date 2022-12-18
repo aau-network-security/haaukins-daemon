@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/aau-network-security/haaukins-daemon/internal/agent"
 	"github.com/aau-network-security/haaukins-daemon/internal/db"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -117,7 +116,7 @@ func (d *daemon) newAgent(c *gin.Context) {
 		}
 
 		streamCtx, cancel := context.WithCancel(context.Background())
-		agentForPool := &agent.Agent{
+		agentForPool := &Agent{
 			Name:      req.Name,
 			Conn:      conn,
 			StateLock: false,
@@ -125,13 +124,13 @@ func (d *daemon) newAgent(c *gin.Context) {
 			Close:     cancel,
 		}
 
-		if err := d.agentPool.ConnectToStreams(streamCtx, d.newLabs, agentForPool); err != nil {
+		if err := d.agentPool.connectToStreams(streamCtx, d.newLabs, agentForPool, d.eventpool); err != nil {
 			log.Error().Err(err).Msg("error connecting to agent streams")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: fmt.Sprintf("error connecting to agent streams: %v", err)})
 			return
 		}
 
-		d.agentPool.AddAgent(agentForPool)
+		d.agentPool.addAgent(agentForPool)
 
 		// Inserting the new agent into the database
 		newAgentParams := db.InsertNewAgentParams{
@@ -184,7 +183,7 @@ func (d *daemon) getAgents(c *gin.Context) {
 		}
 		var resp []AgentResponse
 		for _, a := range agents {
-			aFromPool, err := d.agentPool.GetAgent(a.Name)
+			aFromPool, err := d.agentPool.getAgent(a.Name)
 			var aResp AgentResponse
 			if err != nil {
 				log.Error().Err(err).Msg("error getting agent from pool")
@@ -258,7 +257,7 @@ func (d *daemon) deleteAgent(c *gin.Context) {
 		}
 
 		// TODO: make sure that go routines connected to the agent is removed
-		d.agentPool.RemoveAgent(agentName)
+		d.agentPool.removeAgent(agentName)
 
 		if err := d.db.DeleteAgentByName(ctx, agentName); err != nil {
 			log.Error().Err(err).Msgf("Error deleting agent")
@@ -295,7 +294,7 @@ func (d *daemon) reconnectAgent(c *gin.Context) {
 			return
 		}
 		agentName := c.Param("agent")
-		d.agentPool.RemoveAgent(agentName)
+		d.agentPool.removeAgent(agentName)
 
 		exists, err := d.db.CheckIfAgentExists(ctx, agentName)
 		if err != nil {
@@ -329,7 +328,7 @@ func (d *daemon) reconnectAgent(c *gin.Context) {
 		}
 
 		streamCtx, cancel := context.WithCancel(context.Background())
-		agentForPool := &agent.Agent{
+		agentForPool := &Agent{
 			Name:      dbAgent.Name,
 			Conn:      conn,
 			StateLock: false,
@@ -337,13 +336,13 @@ func (d *daemon) reconnectAgent(c *gin.Context) {
 			Close:     cancel,
 		}
 
-		if err := d.agentPool.ConnectToStreams(streamCtx, d.newLabs, agentForPool); err != nil {
+		if err := d.agentPool.connectToStreams(streamCtx, d.newLabs, agentForPool, d.eventpool); err != nil {
 			log.Error().Err(err).Msg("error connecting to agent streams")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: fmt.Sprintf("error connecting to agent streams: %v", err)})
 			return
 		}
 
-		d.agentPool.AddAgent(agentForPool)
+		d.agentPool.addAgent(agentForPool)
 
 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 		return
@@ -372,7 +371,7 @@ func (d *daemon) lockAgentState(c *gin.Context) {
 		}
 
 		agentName := c.Param("agent")
-		if err := d.agentPool.UpdateAgentState(agentName, true); err != nil {
+		if err := d.agentPool.updateAgentState(agentName, true); err != nil {
 			log.Error().Err(err).Msg("error updating agent state")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "agent does not exist"})
 			return
@@ -404,7 +403,7 @@ func (d *daemon) unlockAgentState(c *gin.Context) {
 		}
 
 		agentName := c.Param("agent")
-		if err := d.agentPool.UpdateAgentState(agentName, false); err != nil {
+		if err := d.agentPool.updateAgentState(agentName, false); err != nil {
 			log.Error().Err(err).Msg("error updating agent state")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "agent does not exist in agent pool"})
 			return
@@ -465,7 +464,7 @@ func (d *daemon) agentWebsocket(c *gin.Context) {
 			}
 			// Send agent metrics if authorized
 			for {
-				agent, err := d.agentPool.GetAgent(agentName)
+				agent, err := d.agentPool.getAgent(agentName)
 				if err != nil {
 					ws.WriteMessage(mt, []byte("agent not connected"))
 					return
