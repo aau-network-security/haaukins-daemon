@@ -10,10 +10,9 @@ CREATE TABLE IF NOT EXISTS events (
         exercises text NOT NULL, 
         started_at timestamp NOT NULL,
         finish_expected timestamp NOT NULL, 
-        finished_at timestamp NOT NULL, 
+        finished_at timestamp, 
         createdBy text NOT NULL,
-        secretKey text NOT NULL,
-        UNIQUE(tag)
+        secretKey text NOT NULL
 );
 CREATE UNIQUE INDEX event_lower_index ON events (LOWER(tag));
 
@@ -25,11 +24,10 @@ CREATE TABLE IF NOT EXISTS teams (
         username varchar (255) NOT NULL, 
         password varchar (255) NOT NULL,
         created_at timestamp NOT NULL,
-        last_access timestamp NOT NULL,
-        solved_challenges text NOT NULL,
-        UNIQUE(username)
+        last_access timestamp,
+        solved_challenges text
 );
-CREATE UNIQUE INDEX teams_lower_index ON teams (LOWER(username));
+CREATE UNIQUE INDEX teams_lower_index ON teams (LOWER(username), event_id);
 
 
 -- Admin related tables

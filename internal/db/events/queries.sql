@@ -1,5 +1,5 @@
 -- name: AddEvent :exec
-INSERT INTO events (tag, name, initial_labs, max_labs, frontend, status, exercises, started_at, finish_expected, finished_at, createdby, secretKey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,$11,$12);
+INSERT INTO events (tag, name, organization, initial_labs, max_labs, frontend, status, exercises, started_at, finish_expected, finished_at, createdby, secretKey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
 
 -- name: UpdateCloseEvent :exec
 UPDATE events SET tag = $2, finished_at = $3 WHERE tag = $1;

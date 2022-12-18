@@ -12,12 +12,13 @@ import (
 )
 
 const addEvent = `-- name: AddEvent :exec
-INSERT INTO events (tag, name, initial_labs, max_labs, frontend, status, exercises, started_at, finish_expected, finished_at, createdby, secretKey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,$11,$12)
+INSERT INTO events (tag, name, organization, initial_labs, max_labs, frontend, status, exercises, started_at, finish_expected, finished_at, createdby, secretKey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 `
 
 type AddEventParams struct {
 	Tag            string
 	Name           string
+	Organization   string
 	InitialLabs    int32
 	MaxLabs        int32
 	Frontend       string
@@ -25,7 +26,7 @@ type AddEventParams struct {
 	Exercises      string
 	StartedAt      time.Time
 	FinishExpected time.Time
-	FinishedAt     time.Time
+	FinishedAt     sql.NullTime
 	Createdby      string
 	Secretkey      string
 }
@@ -34,6 +35,7 @@ func (q *Queries) AddEvent(ctx context.Context, arg AddEventParams) error {
 	_, err := q.db.ExecContext(ctx, addEvent,
 		arg.Tag,
 		arg.Name,
+		arg.Organization,
 		arg.InitialLabs,
 		arg.MaxLabs,
 		arg.Frontend,
@@ -862,7 +864,7 @@ UPDATE events SET tag = $2, finished_at = $3 WHERE tag = $1
 type UpdateCloseEventParams struct {
 	Tag        string
 	Tag_2      string
-	FinishedAt time.Time
+	FinishedAt sql.NullTime
 }
 
 func (q *Queries) UpdateCloseEvent(ctx context.Context, arg UpdateCloseEventParams) error {

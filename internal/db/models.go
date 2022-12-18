@@ -41,7 +41,7 @@ type Event struct {
 	Exercises      string
 	StartedAt      time.Time
 	FinishExpected time.Time
-	FinishedAt     time.Time
+	FinishedAt     sql.NullTime
 	Createdby      string
 	Secretkey      string
 }
