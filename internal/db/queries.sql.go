@@ -91,8 +91,8 @@ type AddTeamParams struct {
 	Username         string
 	Password         string
 	CreatedAt        time.Time
-	LastAccess       time.Time
-	SolvedChallenges string
+	LastAccess       sql.NullTime
+	SolvedChallenges sql.NullString
 }
 
 func (q *Queries) AddTeam(ctx context.Context, arg AddTeamParams) error {
@@ -806,15 +806,15 @@ const teamSolvedChls = `-- name: TeamSolvedChls :many
 SELECT solved_challenges FROM teams WHERE tag=$1
 `
 
-func (q *Queries) TeamSolvedChls(ctx context.Context, tag string) ([]string, error) {
+func (q *Queries) TeamSolvedChls(ctx context.Context, tag string) ([]sql.NullString, error) {
 	rows, err := q.db.QueryContext(ctx, teamSolvedChls, tag)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []sql.NullString
 	for rows.Next() {
-		var solved_challenges string
+		var solved_challenges sql.NullString
 		if err := rows.Scan(&solved_challenges); err != nil {
 			return nil, err
 		}
@@ -893,7 +893,7 @@ UPDATE teams SET last_access = $2 WHERE tag = $1
 
 type UpdateExercisesParams struct {
 	Tag        string
-	LastAccess time.Time
+	LastAccess sql.NullTime
 }
 
 // UPDATE event SET exercises = (SELECT (SELECT exercises FROM event WHERE id = $1) || $2) WHERE id=$1;
@@ -953,7 +953,7 @@ UPDATE teams SET solved_challenges = $2 WHERE tag = $1
 
 type UpdateTeamSolvedChlParams struct {
 	Tag              string
-	SolvedChallenges string
+	SolvedChallenges sql.NullString
 }
 
 func (q *Queries) UpdateTeamSolvedChl(ctx context.Context, arg UpdateTeamSolvedChlParams) error {

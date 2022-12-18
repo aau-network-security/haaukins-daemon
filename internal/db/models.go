@@ -76,6 +76,6 @@ type Team struct {
 	Username         string
 	Password         string
 	CreatedAt        time.Time
-	LastAccess       time.Time
-	SolvedChallenges string
+	LastAccess       sql.NullTime
+	SolvedChallenges sql.NullString
 }
