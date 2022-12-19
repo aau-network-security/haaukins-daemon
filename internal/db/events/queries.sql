@@ -1,8 +1,8 @@
 -- name: AddEvent :exec
 INSERT INTO events (tag, name, organization, initial_labs, max_labs, frontend, status, exercises, started_at, finish_expected, finished_at, createdby, secretKey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
 
--- name: UpdateCloseEvent :exec
-UPDATE events SET tag = $2, finished_at = $3 WHERE tag = $1;
+-- name: CloseEvent :exec
+UPDATE events SET tag = @newTag, finished_at = @finishedAt, status = @newStatus WHERE tag = @oldTag;
 
 -- name: UpdateEventStatus :exec
 UPDATE events SET status = $2 WHERE tag = $1;
@@ -16,10 +16,25 @@ UPDATE teams SET last_access = $2 WHERE tag = $1;
 -- name: GetAllEvents :many
 SELECT * FROM events;
 
+-- name: GetOrgEvents :many
+SELECT * FROM events WHERE organization = $1;
+
+-- name: GetOrgEventsByCreatedBy :many
+SELECT * FROM events WHERE organization = $1 AND createdBy = $2;
+
+-- name: GetOrgEventsByStatus :many
+SELECT * FROM events WHERE organization = $1 AND status = $2;
+
+-- name: GetOrgEventsByStatusAndCreatedBy :many
+SELECT * FROM events WHERE organization = $1 AND status = $2 AND createdBy = $3;
+
+-- name: GetEventByTag :one
+SELECT * FROM events WHERE tag = $1;
+
 -- name: GetEventsExeptClosed :many
 SELECT * FROM events WHERE status!=2;
 
--- name: GetEventStatus :many
+-- name: GetEventStatusByTag :many
 SELECT status FROM events WHERE tag=$1;
 
 -- name: GetEventsByStatus :many
@@ -34,8 +49,8 @@ SELECT EXISTS (select tag from events where tag=$1);
 -- name: GetExpectedFinishDate :one
 SELECT finish_expected FROM events WHERE tag=$1;
 
--- name: DeleteEventByTagAndStatus :exec
-DELETE FROM events WHERE tag=$1 and status=$2;
+-- name: DeleteEventByTag :exec
+DELETE FROM events WHERE tag=$1;
 
 -- name: DeleteEventOlderThan :exec
-DELETE FROM events WHERE finished_at < GETDATE() - @numberOfDays and status = 2;
+DELETE FROM events WHERE finished_at < GETDATE() - @numberOfDays and status = @closedStatus;
