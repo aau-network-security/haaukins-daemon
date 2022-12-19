@@ -30,7 +30,7 @@ type daemon struct {
 	auditLogger *zerolog.Logger
 	enforcer    *casbin.Enforcer
 	cache       *redis.Client
-	newLabs     chan aproto.Lab
+	newLabs     chan aproto.Lab //TODO Might actually not be used, removal is pending
 	eventpool   *EventPool
 	m           sync.RWMutex
 }
@@ -142,6 +142,7 @@ func New(conf *Config) (*daemon, error) {
 	}
 
 	newLabs := make(chan aproto.Lab, 1000)
+
 	// Connecting to all haaukins agents
 	log.Info().Msg("Connecting to haaukins agents...")
 	agentsInDb, err := dbConn.GetAgents(ctx)
@@ -150,7 +151,8 @@ func New(conf *Config) (*daemon, error) {
 	}
 	agents := make(map[string]*Agent)
 	agentPool := AgentPool{
-		M: sync.RWMutex{},
+		M:            sync.RWMutex{},
+		AgentWeights: make(map[string]float64),
 	}
 	eventPool := &EventPool{
 		M:      sync.RWMutex{},

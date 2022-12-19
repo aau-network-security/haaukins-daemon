@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"sync"
 	"time"
 
@@ -18,7 +19,7 @@ var (
 )
 
 // Send a heartbeat to all agents in the database, remove/add agent if connection status changes
-func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, newLabs chan aproto.Lab, a *Agent) error {
+func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, newLabs chan aproto.Lab, a *Agent, eventPool *EventPool) error {
 	client := aproto.NewAgentClient(a.Conn)
 	stream, err := client.MonitorStream(routineCtx)
 	if err != nil {
@@ -56,7 +57,7 @@ func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, newLa
 				for _, l := range msg.NewLabs {
 					log.Debug().Str("lab-tag", l.Tag).Msg("recieved lab from agent")
 				}
-				ap.updateAgentMetrics(a.Name, msg.Resources.Cpu, msg.Resources.Mem, msg.Resources.LabCount, msg.Resources.VmCount, msg.Resources.ContainerCount)
+				ap.updateAgentMetrics(a.Name, msg.Resources.Cpu, msg.Resources.Mem, msg.Resources.LabCount, msg.Resources.VmCount, msg.Resources.ContainerCount, msg.Resources.MemAvailable)
 				log.Debug().Str("hb", msg.Hb).Float64("cpu", msg.Resources.Cpu).Float64("mem", msg.Resources.Mem).Uint64("memAvailable", msg.Resources.MemAvailable).Msg("monitoring parameters ")
 			}
 			time.Sleep(1 * time.Second)
@@ -65,13 +66,15 @@ func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, newLa
 	return nil
 }
 
+// Connects the daemon to an agent's streams (monitoring etc.)
 func (ap *AgentPool) connectToStreams(ctx context.Context, newLabs chan aproto.Lab, a *Agent, eventPool *EventPool) error {
-	if err := ap.connectToMonitoringStream(ctx, newLabs, a); err != nil {
+	if err := ap.connectToMonitoringStream(ctx, newLabs, a, eventPool); err != nil {
 		return err
 	}
 	return nil
 }
 
+// Adds an successfully connected agent to the agent pool
 func (ap *AgentPool) addAgent(agent *Agent) {
 	ap.M.Lock()
 	defer ap.M.Unlock()
@@ -79,6 +82,7 @@ func (ap *AgentPool) addAgent(agent *Agent) {
 	ap.Agents[agent.Name] = agent
 }
 
+// Removes an agent from the agent pool when it is no longer connected
 func (ap *AgentPool) removeAgent(name string) error {
 	ap.M.Lock()
 	defer ap.M.Unlock()
@@ -94,7 +98,7 @@ func (ap *AgentPool) removeAgent(name string) error {
 	return nil
 }
 
-// TODO updates cpu and mem usage
+// Sets the statelock value of an agent
 func (ap *AgentPool) updateAgentState(name string, lock bool) error {
 	ap.M.Lock()
 	defer ap.M.Unlock()
@@ -108,9 +112,9 @@ func (ap *AgentPool) updateAgentState(name string, lock bool) error {
 	return nil
 }
 
-func (ap *AgentPool) updateAgentMetrics(name string, cpu, memory float64, labCount, vmCount, containerCount uint32) (*Agent, error) {
+// Updates all agent metrics and recalculates the weights based on the new values supplied
+func (ap *AgentPool) updateAgentMetrics(name string, cpu, memory float64, labCount, vmCount, containerCount uint32, memoryAvailable uint64) (*Agent, error) {
 	ap.M.Lock()
-	defer ap.M.Unlock()
 
 	_, ok := ap.Agents[name]
 	if !ok {
@@ -119,13 +123,18 @@ func (ap *AgentPool) updateAgentMetrics(name string, cpu, memory float64, labCou
 
 	ap.Agents[name].Resources.Cpu = cpu
 	ap.Agents[name].Resources.Memory = memory
+	ap.Agents[name].Resources.MemoryAvailable = memoryAvailable
 	ap.Agents[name].Resources.ContainerCount = containerCount
 	ap.Agents[name].Resources.VmCount = vmCount
 	ap.Agents[name].Resources.LabCount = labCount
+	ap.M.Unlock()
+	log.Debug().Msg("calculating weights")
+	ap.calculateWeights()
 
 	return ap.Agents[name], nil
 }
 
+// Returns an agent from the agent pool
 func (ap *AgentPool) getAgent(name string) (*Agent, error) {
 	ap.M.RLock()
 	defer ap.M.RUnlock()
@@ -138,13 +147,31 @@ func (ap *AgentPool) getAgent(name string) (*Agent, error) {
 	return agent, nil
 }
 
-func (ap *AgentPool) createNewEnvOnAvailableAgents(ctx context.Context, config aproto.CreatEnvRequest) error {
-	// Concurrently start environments on all available agents
+// Creates a new environment on all available connected agents
+func (ap *AgentPool) createNewEnvOnAvailableAgents(ctx context.Context, config EventConfig) error {
+	// Concurrently start environments for event on all available agents
 	if len(ap.Agents) > 0 {
 		var m sync.Mutex
 		var wg sync.WaitGroup
 		var errs []error
-		for _, a := range ap.Agents {
+		for agentName, a := range ap.Agents {
+			// The initial amount of labs for a specific agent is determined based on the total initial labs needed
+			// And the weight calculated for that specific agent
+			initialLabs := int32(math.Round(float64(config.InitialLabs) * ap.AgentWeights[agentName]))
+			log.Debug().Int32("labs", initialLabs).Str("agent", agentName).Msg("starting env with labs on agent")
+			envConfig := aproto.CreatEnvRequest{
+				EventTag: config.Tag,
+				EnvType:  config.Type,
+				// Just temporarily using hardcoded vm config
+				Vm: &aproto.VmConfig{
+					Image:    config.VmName,
+					MemoryMB: 4096,
+					Cpu:      0,
+				},
+				InitialLabs: initialLabs,
+				Exercises:   config.ExerciseTags,
+				TeamSize:    config.TeamSize,
+			}
 			wg.Add(1)
 			go func(conf *aproto.CreatEnvRequest, a *Agent) {
 				defer wg.Done()
@@ -163,7 +190,7 @@ func (ap *AgentPool) createNewEnvOnAvailableAgents(ctx context.Context, config a
 					errs = append(errs, err)
 					m.Unlock()
 				}
-			}(&config, a)
+			}(&envConfig, a)
 		}
 		wg.Wait()
 
@@ -176,6 +203,7 @@ func (ap *AgentPool) createNewEnvOnAvailableAgents(ctx context.Context, config a
 	return nil
 }
 
+// Closes a specific environment on all agents
 func (ap *AgentPool) closeEnvironmentOnAllAgents(ctx context.Context, eventTag string) error {
 	if len(ap.Agents) > 0 {
 		var m sync.Mutex
@@ -211,4 +239,25 @@ func (ap *AgentPool) closeEnvironmentOnAllAgents(ctx context.Context, eventTag s
 		return NoAgentsConnected
 	}
 	return nil
+}
+
+// Calculates initial lab weights based on remaining memory available on each agent
+// (Only relevant for beginner type events)
+func (ap *AgentPool) calculateWeights() {
+	ap.M.Lock()
+	defer ap.M.Unlock()
+	var totalMemoryAvailable uint64
+	for _, agent := range ap.Agents {
+		if agent.StateLock {
+			continue
+		}
+		totalMemoryAvailable += agent.Resources.MemoryAvailable
+	}
+	for agentName, agent := range ap.Agents {
+		if agent.StateLock {
+			continue
+		}
+		ap.AgentWeights[agentName] = float64(agent.Resources.MemoryAvailable) / float64(totalMemoryAvailable)
+		log.Debug().Float64("calculated weight", ap.AgentWeights[agentName]).Msgf("weight for agent: %s", agentName)
+	}
 }

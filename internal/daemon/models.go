@@ -25,6 +25,7 @@ type APIResponse struct {
 	Users    []AdminUserReponse `json:"users,omitempty"`
 	Orgs     []db.Organization  `json:"orgs,omitempty"`
 	Agents   []AgentResponse    `json:"agents,omitempty"`
+	Events   []db.Event         `json:"events,omitempty"`
 }
 
 type EventPool struct {
@@ -63,8 +64,9 @@ type Team struct {
 // Agent related types
 
 type AgentPool struct {
-	M      sync.RWMutex
-	Agents map[string]*Agent
+	M            sync.RWMutex
+	Agents       map[string]*Agent
+	AgentWeights map[string]float64
 }
 
 type Agent struct {
@@ -79,11 +81,12 @@ type Agent struct {
 }
 
 type AgentResources struct {
-	Cpu            float64
-	Memory         float64
-	LabCount       uint32
-	VmCount        uint32
-	ContainerCount uint32
+	Cpu             float64
+	Memory          float64
+	MemoryAvailable uint64
+	LabCount        uint32
+	VmCount         uint32
+	ContainerCount  uint32
 }
 type AgentLab struct {
 	Tag         string
