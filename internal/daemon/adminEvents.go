@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
-	aproto "github.com/aau-network-security/haaukins-agent/pkg/proto"
 	"github.com/aau-network-security/haaukins-daemon/internal/db"
 	eproto "github.com/aau-network-security/haaukins-exercises/proto"
 	"github.com/gin-gonic/gin"
@@ -16,10 +16,13 @@ import (
 )
 
 const (
-	displayTimeFormat       = "2006-01-02 15:04:05"
-	StatusRunning     int32 = iota
+	StatusRunning int32 = iota
 	StatusSuspended
-	StatusStopped
+	StatusClosed
+)
+
+const (
+	displayTimeFormat = "2006-01-02 15:04:05"
 )
 
 func (d *daemon) eventSubrouter(r *gin.RouterGroup) {
@@ -29,12 +32,16 @@ func (d *daemon) eventSubrouter(r *gin.RouterGroup) {
 	// CRUD
 	events.POST("/", d.newEvent)
 	events.GET("/", d.getEvents)
+	events.GET("/bystatus/:status", d.getEvents)
+	events.DELETE("/:eventTag", d.deleteEvent)
 
 	// Additional routes
+	events.PUT("/close/:eventTag", d.closeEvent)
 	events.POST("/exercise/add", d.addExerciseToEvent)
 	events.POST("/exercise/reset", d.resetExerciseInEvent)
 }
 
+// Creates a new event, including environments on all available connected agents
 // TODO validate config
 func (d *daemon) newEvent(c *gin.Context) {
 	ctx := context.Background()
@@ -95,20 +102,9 @@ func (d *daemon) newEvent(c *gin.Context) {
 			return
 		}
 
-		envReq := aproto.CreatEnvRequest{
-			EventTag: req.Tag,
-			EnvType:  req.Type,
-			// Just temporarily using hardcoded vm config
-			Vm: &aproto.VmConfig{
-				Image:    req.VmName,
-				MemoryMB: 4096,
-				Cpu:      0,
-			},
-			InitialLabs: req.InitialLabs,
-			Exercises:   req.ExerciseTags,
-			TeamSize:    req.TeamSize,
-		}
-		if err := d.agentPool.createNewEnvOnAvailableAgents(ctx, envReq); err != nil {
+		// TODO Find out how to destribute initiallabs between all agents
+
+		if err := d.agentPool.createNewEnvOnAvailableAgents(ctx, req); err != nil {
 			if err == AllAgentsReturnedErr {
 				log.Error().Err(AllAgentsReturnedErr).Msg("error creating environments on all agents")
 				c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
@@ -121,16 +117,13 @@ func (d *daemon) newEvent(c *gin.Context) {
 		}
 
 		eventToAdd := db.AddEventParams{
-			Tag:          req.Tag,
-			Name:         req.Name,
-			Organization: admin.Organization,
-			InitialLabs:  req.InitialLabs,
-			MaxLabs:      req.MaxLabs,
-			Frontend:     req.VmName,
-			Status: sql.NullInt32{
-				Int32: StatusRunning,
-				Valid: true,
-			},
+			Tag:            req.Tag,
+			Name:           req.Name,
+			Organization:   admin.Organization,
+			InitialLabs:    req.InitialLabs,
+			MaxLabs:        req.MaxLabs,
+			Frontend:       req.VmName,
+			Status:         StatusRunning,
 			Exercises:      strings.Join(req.ExerciseTags, ","),
 			StartedAt:      time.Now(),
 			FinishExpected: req.ExpectedFinishDate,
@@ -138,7 +131,6 @@ func (d *daemon) newEvent(c *gin.Context) {
 			Secretkey:      req.SecretKey,
 		}
 
-		// TODO Make sure to close agent environments if db fails
 		if err := d.db.AddEvent(ctx, eventToAdd); err != nil {
 			log.Error().Err(err).Msg("error adding event to database")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
@@ -164,14 +156,255 @@ func (d *daemon) newEvent(c *gin.Context) {
 	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 }
 
+// Lists all events based on permissions from Casbin.
+// If bystatus route is used, it will only return events with a specific status
 func (d *daemon) getEvents(c *gin.Context) {
+	ctx := context.Background()
 
+	statusParam := c.Param("status")
+	var status int64
+	var err error
+	if statusParam != "" {
+		status, err = strconv.ParseInt(statusParam, 10, 32)
+		if err != nil {
+			log.Error().Err(err).Msg("error parsing url parameter for get events")
+			c.JSON(http.StatusBadRequest, APIResponse{Status: "Bad Request"})
+			return
+		}
+	}
+
+	admin := unpackAdminClaims(c)
+	d.auditLogger.Info().
+		Time("UTC", time.Now().UTC()).
+		Str("AdminUser", admin.Username).
+		Str("AdminEmail", admin.Email).
+		Int32("Status", int32(status)).
+		Msg("AdminUser is trying to list events")
+
+	var casbinRequests = [][]interface{}{
+		{admin.Username, admin.Organization, "events::Admins", "read"},
+		{admin.Username, admin.Organization, fmt.Sprintf("events::%s", admin.Organization), "read"},
+		{admin.Username, admin.Organization, fmt.Sprintf("notOwnedEvents::%s", admin.Organization), "read"},
+	}
+	if authorized, err := d.enforcer.BatchEnforce(casbinRequests); authorized[1] || err != nil {
+		if err != nil {
+			log.Error().Err(err).Msgf("Encountered an error while authorizing user creation")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+
+		if statusParam != "" {
+			if authorized[0] {
+				events, err := d.db.GetEventsByStatus(ctx, int32(status))
+				if err != nil {
+					log.Error().Err(err).Msg("error getting events from database")
+					c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+					return
+				}
+				c.JSON(http.StatusOK, APIResponse{Status: "OK", Events: events})
+				return
+			} else if authorized[2] {
+				getEventsParam := db.GetOrgEventsByStatusParams{
+					Organization: admin.Organization,
+					Status:       int32(status),
+				}
+				events, err := d.db.GetOrgEventsByStatus(ctx, getEventsParam)
+				if err != nil {
+					log.Error().Err(err).Msg("error getting events from database")
+					c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+					return
+				}
+				c.JSON(http.StatusOK, APIResponse{Status: "OK", Events: events})
+				return
+			}
+			getOrgParams := db.GetOrgEventsByStatusAndCreatedByParams{
+				Organization: admin.Organization,
+				Createdby:    admin.Username,
+				Status:       int32(status),
+			}
+			events, err := d.db.GetOrgEventsByStatusAndCreatedBy(ctx, getOrgParams)
+			if err != nil {
+				log.Error().Err(err).Msg("error getting events from database")
+				c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+				return
+			}
+			c.JSON(http.StatusOK, APIResponse{Status: "OK", Events: events})
+			return
+		}
+		if authorized[0] {
+			events, err := d.db.GetAllEvents(ctx)
+			if err != nil {
+				log.Error().Err(err).Msg("error getting events from database")
+				c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+				return
+			}
+			c.JSON(http.StatusOK, APIResponse{Status: "OK", Events: events})
+			return
+		} else if authorized[2] {
+			events, err := d.db.GetOrgEvents(ctx, admin.Organization)
+			if err != nil {
+				log.Error().Err(err).Msg("error getting events from database")
+				c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+				return
+			}
+			c.JSON(http.StatusOK, APIResponse{Status: "OK", Events: events})
+			return
+		}
+		getOrgParams := db.GetOrgEventsByCreatedByParams{
+			Organization: admin.Organization,
+			Createdby:    admin.Username,
+		}
+		events, err := d.db.GetOrgEventsByCreatedBy(ctx, getOrgParams)
+		if err != nil {
+			log.Error().Err(err).Msg("error getting events from database")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+		c.JSON(http.StatusOK, APIResponse{Status: "OK", Events: events})
+		return
+	}
+	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 }
 
+// Deletes an event including its related teams from the database
+// Teams are referenced to the event_id by cascade delete in postgres
+func (d *daemon) deleteEvent(c *gin.Context) {
+	ctx := context.Background()
+
+	eventTag := c.Param("eventTag")
+	admin := unpackAdminClaims(c)
+	d.auditLogger.Info().
+		Time("UTC", time.Now().UTC()).
+		Str("AdminUser", admin.Username).
+		Str("AdminEmail", admin.Email).
+		Str("EventTag", eventTag).
+		Msg("AdminUser is trying to stop an event")
+	event, err := d.db.GetEventByTag(ctx, eventTag)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, APIResponse{Status: "event not found in the database"})
+			return
+		}
+		log.Error().Err(err).Msg("error getting event from db")
+	}
+	if event.Status != StatusClosed {
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "close event before deleting it"})
+		return
+	}
+
+	var casbinRequests = [][]interface{}{
+		{admin.Username, admin.Organization, fmt.Sprintf("events::%s", event.Organization), "write"},
+		{admin.Username, admin.Organization, fmt.Sprintf("notOwnedEvents::%s", event.Organization), "write"},
+	}
+	if authorized, err := d.enforcer.BatchEnforce(casbinRequests); authorized[0] || err != nil {
+		if err != nil {
+			log.Error().Err(err).Msgf("Encountered an error while authorizing user creation")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+		if !authorized[1] && admin.Username != event.Createdby {
+			log.Warn().Str("username", admin.Username).Msg("admin tried to delete an event not created by themselves")
+			c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
+			return
+		}
+
+		if err := d.db.DeleteEventByTag(ctx, event.Tag); err != nil {
+			log.Error().Err(err).Msg("error deleting event from database")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+			return
+		}
+
+		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+		return
+	}
+	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
+}
+
+// Changes the event status to closed in the database, and assigns a new tag which includes
+// the unix timestamp for when the event was closed
+// It also closes all releated environments on all agents
+func (d *daemon) closeEvent(c *gin.Context) {
+	ctx := context.Background()
+
+	eventTag := c.Param("eventTag")
+	admin := unpackAdminClaims(c)
+	d.auditLogger.Info().
+		Time("UTC", time.Now().UTC()).
+		Str("AdminUser", admin.Username).
+		Str("AdminEmail", admin.Email).
+		Str("EventTag", eventTag).
+		Msg("AdminUser is trying to stop an event")
+	event, err := d.db.GetEventByTag(ctx, eventTag)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting event from db")
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, APIResponse{Status: "event not found in the database"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
+
+	if event.Status == StatusClosed {
+		log.Warn().Msg("admin user tried to close already closed event")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "event already closed"})
+		return
+	}
+
+	var casbinRequests = [][]interface{}{
+		{admin.Username, admin.Organization, fmt.Sprintf("events::%s", event.Organization), "write"},
+		{admin.Username, admin.Organization, fmt.Sprintf("notOwnedEvents::%s", event.Organization), "write"},
+	}
+	if authorized, err := d.enforcer.BatchEnforce(casbinRequests); authorized[0] || err != nil {
+		if err != nil {
+			log.Error().Err(err).Msgf("Encountered an error while authorizing user creation")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+		if !authorized[1] && admin.Username != event.Createdby {
+			log.Warn().Str("username", admin.Username).Msg("admin tried to stop an event not created by themselves")
+			c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
+			return
+		}
+
+		if err := d.agentPool.closeEnvironmentOnAllAgents(ctx, event.Tag); err != nil {
+			log.Error().Err(err).Msg("error closing environments on agents")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+			return
+		}
+
+		newEventTag := event.Tag + "-" + strconv.Itoa(int(time.Now().Unix()))
+		closeEventParams := db.CloseEventParams{
+			Newtag: newEventTag,
+			Oldtag: event.Tag,
+			Finishedat: sql.NullTime{
+				Time:  time.Now(),
+				Valid: true,
+			},
+			Newstatus: StatusClosed,
+		}
+
+		if err := d.db.CloseEvent(ctx, closeEventParams); err != nil {
+			log.Error().Err(err).Msg("error updating event db status to closed")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+			return
+		}
+
+		if err := d.eventpool.RemoveEvent(event.Tag); err != nil {
+			log.Warn().Msg("event not found in event pool, something else has removed")
+		}
+		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+		return
+	}
+	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
+}
+
+// Is used to add exercises to events on the fly while the event is running
 func (d *daemon) addExerciseToEvent(c *gin.Context) {
 
 }
 
+// Resets an exercise for a user in a specific event
 func (d *daemon) resetExerciseInEvent(c *gin.Context) {
 
 }
