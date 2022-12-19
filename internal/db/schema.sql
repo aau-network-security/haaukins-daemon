@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS events (
         name varchar (255) NOT NULL, 
         initial_labs integer NOT NULL,
         max_labs integer NOT NULL, 
-        status integer, 
+        status integer NOT NULL, 
         frontend text NOT NULL, 
         exercises text NOT NULL, 
         started_at timestamp NOT NULL,

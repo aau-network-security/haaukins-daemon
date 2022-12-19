@@ -14,29 +14,31 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
                 tag varchar (255) NOT NULL,
                 organization varchar (255) NOT NULL,
                 name varchar (255) NOT NULL, 
-                available integer NOT NULL, 
-                capacity integer NOT NULL, 
-                status integer, 
+                initial_labs integer NOT NULL,
+                max_labs integer NOT NULL, 
+                status integer NOT NULL, 
                 frontend text NOT NULL, 
                 exercises text NOT NULL, 
                 started_at timestamp NOT NULL,
                 finish_expected timestamp NOT NULL, 
-                finished_at timestamp NOT NULL, 
+                finished_at timestamp, 
                 createdBy text NOT NULL,
                 secretKey text NOT NULL
         );
+        CREATE UNIQUE INDEX event_lower_index ON events (LOWER(tag));
 
         CREATE TABLE IF NOT EXISTS teams (
                 id serial primary key,
                 tag varchar(255) NOT NULL,
-                event_id integer NOT NULL,
+                event_id integer NOT NULL REFERENCES events (id) ON DELETE CASCADE,
                 email varchar (255) NOT NULL,
-                name varchar (255) NOT NULL, 
+                username varchar (255) NOT NULL, 
                 password varchar (255) NOT NULL,
                 created_at timestamp NOT NULL,
-                last_access timestamp NOT NULL,
-                solved_challenges text NOT NULL
+                last_access timestamp,
+                solved_challenges text
         );
+        CREATE UNIQUE INDEX teams_lower_index ON teams (LOWER(username), event_id);
 
 
         -- Admin related tables
@@ -69,6 +71,7 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
         );
         CREATE UNIQUE INDEX username_lower_index ON Admin_users (LOWER(username));
 
+        -- TODO remove statelock from db
         CREATE TABLE IF NOT EXISTS agents (
                 id serial primary key,
                 name varchar (255) NOT NULL,
