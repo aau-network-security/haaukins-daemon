@@ -52,6 +52,7 @@ var orgCreationPolicies = [][]string{
 // g2 policies
 var orgCreationGroupPolicies = [][]string{
 	{"events::", "objects::"},
+	{"notOwnedEvents::", "objects::"},
 	{"roles::", "objects::"},
 	{"users::", "objects::"},
 	{"secretchals::", "objects::"},
