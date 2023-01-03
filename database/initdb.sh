@@ -18,7 +18,11 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
                 max_labs integer NOT NULL, 
                 status integer NOT NULL, 
                 frontend text NOT NULL, 
-                exercises text NOT NULL, 
+                exercises text NOT NULL,
+                dynamic_scoring boolean NOT NULL,
+                dynamic_max integer NOT NULL,
+                dynamic_min integer NOT NULL,
+                dynamic_solve_threshold integer NOT NULL,
                 started_at timestamp NOT NULL,
                 finish_expected timestamp NOT NULL, 
                 finished_at timestamp, 
@@ -35,11 +39,18 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
                 username varchar (255) NOT NULL, 
                 password varchar (255) NOT NULL,
                 created_at timestamp NOT NULL,
-                last_access timestamp,
-                solved_challenges text
+                last_access timestamp
         );
         CREATE UNIQUE INDEX teams_lower_index ON teams (LOWER(username), event_id);
 
+        CREATE TABLE IF NOT EXISTS solves (
+                id serial primary key,
+                tag varchar(255) NOT NULL,
+                event_id integer NOT NULL REFERENCES events (id) ON DELETE CASCADE,
+                team_id integer NOT NULL REFERENCES teams (id) ON DELETE CASCADE,
+                solved_at timestamp NOT NULL
+        );
+        CREATE UNIQUE INDEX solves_duplicate_index ON solves (tag, team_id);
 
         -- Admin related tables
         CREATE TABLE IF NOT EXISTS organizations (
@@ -55,10 +66,17 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
                 id serial primary key, 
                 name varchar (255) NOT NULL, 
                 secret boolean NOT NULL, 
-                organization varchar(255) NOT NULL REFERENCES organizations (name) ON DELETE CASCADE,
-                challenges text NOT NULL
+                organization varchar(255) NOT NULL REFERENCES organizations (name) ON DELETE CASCADE
         );        
         CREATE UNIQUE INDEX profilename_lower_index ON profiles (LOWER(name));
+
+        CREATE TABLE IF NOT EXISTS profile_challenges (
+                id serial primary key,
+                tag text NOT NULL,
+                name text NOT NULL,
+                profile_id integer NOT NULL REFERENCES profiles(id) ON DELETE CASCADE
+        );
+        CREATE UNIQUE INDEX profile_challenges_duplicate_index ON profile_challenges (tag, profile_id);
 
         CREATE TABLE IF NOT EXISTS admin_users (
                 id serial primary key, 
@@ -90,7 +108,6 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
                 memoryMB integer
         );
         CREATE UNIQUE INDEX frontendname_lower_index ON frontends (LOWER(name));
-
 
 
         -- Setting up an administrative account with password admin
