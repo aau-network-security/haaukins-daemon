@@ -278,8 +278,8 @@ func (d *daemon) Run() error {
 
 func (d *daemon) setupRouters(r *gin.Engine) {
 	admin := r.Group("/v1/admin")
-	event := r.Group("/v1/event")
+	// event := r.Group("/v1/event")
 
 	d.adminSubrouter(admin)
-	d.eventSubrouter(event)
+	// d.eventSubrouter(event)
 }
