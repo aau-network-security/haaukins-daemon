@@ -117,18 +117,22 @@ func (d *daemon) newEvent(c *gin.Context) {
 		}
 
 		eventToAdd := db.AddEventParams{
-			Tag:            req.Tag,
-			Name:           req.Name,
-			Organization:   admin.Organization,
-			InitialLabs:    req.InitialLabs,
-			MaxLabs:        req.MaxLabs,
-			Frontend:       req.VmName,
-			Status:         StatusRunning,
-			Exercises:      strings.Join(req.ExerciseTags, ","),
-			StartedAt:      time.Now(),
-			FinishExpected: req.ExpectedFinishDate,
-			Createdby:      admin.Username,
-			Secretkey:      req.SecretKey,
+			Tag:                   req.Tag,
+			Name:                  req.Name,
+			Organization:          admin.Organization,
+			InitialLabs:           req.InitialLabs,
+			MaxLabs:               req.MaxLabs,
+			Frontend:              req.VmName,
+			Status:                StatusRunning,
+			Exercises:             strings.Join(req.ExerciseTags, ","),
+			DynamicScoring:        req.DynamicScoring,
+			DynamicMax:            req.DynamicMax,
+			DynamicMin:            req.DynamicMin,
+			DynamicSolveThreshold: req.DynamicSolveThreshold,
+			StartedAt:             time.Now(),
+			FinishExpected:        req.ExpectedFinishDate,
+			Createdby:             admin.Username,
+			Secretkey:             req.SecretKey,
 		}
 
 		if err := d.db.AddEvent(ctx, eventToAdd); err != nil {
@@ -203,7 +207,7 @@ func (d *daemon) getEvents(c *gin.Context) {
 				}
 				c.JSON(http.StatusOK, APIResponse{Status: "OK", Events: events})
 				return
-			} else if authorized[2] {
+			} else if authorized[2] { // Admin is allowed to list events not created by themselves
 				getEventsParam := db.GetOrgEventsByStatusParams{
 					Organization: admin.Organization,
 					Status:       int32(status),
@@ -240,7 +244,7 @@ func (d *daemon) getEvents(c *gin.Context) {
 			}
 			c.JSON(http.StatusOK, APIResponse{Status: "OK", Events: events})
 			return
-		} else if authorized[2] {
+		} else if authorized[2] { // Admin is allowed to list events not created by themselves
 			events, err := d.db.GetOrgEvents(ctx, admin.Organization)
 			if err != nil {
 				log.Error().Err(err).Msg("error getting events from database")
@@ -404,7 +408,6 @@ func (d *daemon) closeEvent(c *gin.Context) {
 func (d *daemon) addExerciseToEvent(c *gin.Context) {
 
 }
-
 
 // TODO resetExerciseInEvent
 // Resets an exercise for a user in a specific event

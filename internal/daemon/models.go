@@ -42,16 +42,20 @@ type Event struct {
 }
 
 type EventConfig struct {
-	Type               int32     `json:"type"`
-	Name               string    `json:"name" binding:"required"`
-	Tag                string    `json:"tag" binding:"required"`
-	TeamSize           int32     `json:"teamSize" binding:"required"`
-	InitialLabs        int32     `json:"initialLabs,omitempty"`
-	MaxLabs            int32     `json:"maxLabs" binding:"required"`
-	VmName             string    `json:"vmName,omitempty"`
-	ExerciseTags       []string  `json:"exerciseTags" binding:"required"`
-	ExpectedFinishDate time.Time `json:"expectedFinishDate" binding:"required"`
-	SecretKey          string    `json:"secretKey,omitempty"`
+	Type                  int32     `json:"type"`
+	Name                  string    `json:"name" binding:"required"`
+	Tag                   string    `json:"tag" binding:"required"`
+	TeamSize              int32     `json:"teamSize" binding:"required"`
+	InitialLabs           int32     `json:"initialLabs,omitempty"`
+	MaxLabs               int32     `json:"maxLabs" binding:"required"`
+	VmName                string    `json:"vmName,omitempty"`
+	ExerciseTags          []string  `json:"exerciseTags" binding:"required"`
+	ExpectedFinishDate    time.Time `json:"expectedFinishDate" binding:"required"`
+	SecretKey             string    `json:"secretKey,omitempty"`
+	DynamicScoring        bool      `json:"dynamicScoring,omitempty"`
+	DynamicMax            int32       `json:"dynamicMax,omitempty"`
+	DynamicMin            int32       `json:"dynamicMin,omitempty"`
+	DynamicSolveThreshold int32       `json:"dynamicSolveThreshold,omitempty"`
 }
 
 type Team struct {

@@ -30,20 +30,24 @@ type Agent struct {
 }
 
 type Event struct {
-	ID             int32
-	Tag            string
-	Organization   string
-	Name           string
-	InitialLabs    int32
-	MaxLabs        int32
-	Status         int32
-	Frontend       string
-	Exercises      string
-	StartedAt      time.Time
-	FinishExpected time.Time
-	FinishedAt     sql.NullTime
-	Createdby      string
-	Secretkey      string
+	ID                    int32
+	Tag                   string
+	Organization          string
+	Name                  string
+	InitialLabs           int32
+	MaxLabs               int32
+	Status                int32
+	Frontend              string
+	Exercises             string
+	DynamicScoring        bool
+	DynamicMax            int32
+	DynamicMin            int32
+	DynamicSolveThreshold int32
+	StartedAt             time.Time
+	FinishExpected        time.Time
+	FinishedAt            sql.NullTime
+	Createdby             string
+	Secretkey             string
 }
 
 type Frontend struct {
