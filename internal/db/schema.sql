@@ -24,11 +24,18 @@ CREATE TABLE IF NOT EXISTS teams (
         username varchar (255) NOT NULL, 
         password varchar (255) NOT NULL,
         created_at timestamp NOT NULL,
-        last_access timestamp,
-        solved_challenges text
+        last_access timestamp
 );
 CREATE UNIQUE INDEX teams_lower_index ON teams (LOWER(username), event_id);
 
+CREATE TABLE IF NOT EXISTS solves (
+        id serial primary key,
+        tag varchar(255) NOT NULL,
+        event_id integer NOT NULL REFERENCES events (id) ON DELETE CASCADE,
+        team_id integer NOT NULL REFERENCES teams (id) ON DELETE CASCADE,
+        solved_at timestamp NOT NULL
+);
+CREATE UNIQUE INDEX solves_duplicate_index ON solves (tag, team_id);
 
 -- Admin related tables
 CREATE TABLE IF NOT EXISTS organizations (
@@ -44,10 +51,17 @@ CREATE TABLE IF NOT EXISTS profiles (
         id serial primary key, 
         name varchar (255) NOT NULL, 
         secret boolean NOT NULL, 
-        organization varchar(255) NOT NULL REFERENCES organizations (name) ON DELETE CASCADE,
-        challenges text NOT NULL
+        organization varchar(255) NOT NULL REFERENCES organizations (name) ON DELETE CASCADE
 );        
 CREATE UNIQUE INDEX profilename_lower_index ON profiles (LOWER(name));
+
+CREATE TABLE IF NOT EXISTS profile_challenges (
+        id serial primary key,
+        tag text NOT NULL,
+        name text NOT NULL,
+        profile_id integer NOT NULL REFERENCES profiles(id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX profile_challenges_duplicate_index ON profile_challenges (tag, profile_id);
 
 CREATE TABLE IF NOT EXISTS admin_users (
         id serial primary key, 

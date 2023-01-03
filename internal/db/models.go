@@ -65,17 +65,30 @@ type Profile struct {
 	Name         string
 	Secret       bool
 	Organization string
-	Challenges   string
+}
+
+type ProfileChallenge struct {
+	ID        int32
+	Tag       string
+	Name      string
+	ProfileID int32
+}
+
+type Solf struct {
+	ID       int32
+	Tag      string
+	EventID  int32
+	TeamID   int32
+	SolvedAt time.Time
 }
 
 type Team struct {
-	ID               int32
-	Tag              string
-	EventID          int32
-	Email            string
-	Username         string
-	Password         string
-	CreatedAt        time.Time
-	LastAccess       sql.NullTime
-	SolvedChallenges sql.NullString
+	ID         int32
+	Tag        string
+	EventID    int32
+	Email      string
+	Username   string
+	Password   string
+	CreatedAt  time.Time
+	LastAccess sql.NullTime
 }

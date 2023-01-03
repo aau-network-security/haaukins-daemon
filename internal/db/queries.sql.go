@@ -66,33 +66,31 @@ func (q *Queries) AddOrganization(ctx context.Context, arg AddOrganizationParams
 }
 
 const addProfile = `-- name: AddProfile :exec
-INSERT INTO profiles (name, secret, challenges) VALUES ($1, $2, $3)
+INSERT INTO profiles (name, secret) VALUES ($1, $2)
 `
 
 type AddProfileParams struct {
-	Name       string
-	Secret     bool
-	Challenges string
+	Name   string
+	Secret bool
 }
 
 func (q *Queries) AddProfile(ctx context.Context, arg AddProfileParams) error {
-	_, err := q.db.ExecContext(ctx, addProfile, arg.Name, arg.Secret, arg.Challenges)
+	_, err := q.db.ExecContext(ctx, addProfile, arg.Name, arg.Secret)
 	return err
 }
 
 const addTeam = `-- name: AddTeam :exec
-INSERT INTO teams (tag, event_id, email, username, password, created_at, last_access, solved_challenges) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO teams (tag, event_id, email, username, password, created_at, last_access) VALUES ($1, $2, $3, $4, $5, $6, $7)
 `
 
 type AddTeamParams struct {
-	Tag              string
-	EventID          int32
-	Email            string
-	Username         string
-	Password         string
-	CreatedAt        time.Time
-	LastAccess       sql.NullTime
-	SolvedChallenges sql.NullString
+	Tag        string
+	EventID    int32
+	Email      string
+	Username   string
+	Password   string
+	CreatedAt  time.Time
+	LastAccess sql.NullTime
 }
 
 func (q *Queries) AddTeam(ctx context.Context, arg AddTeamParams) error {
@@ -104,7 +102,6 @@ func (q *Queries) AddTeam(ctx context.Context, arg AddTeamParams) error {
 		arg.Password,
 		arg.CreatedAt,
 		arg.LastAccess,
-		arg.SolvedChallenges,
 	)
 	return err
 }
@@ -284,15 +281,6 @@ DELETE FROM organizations WHERE lower(name) = lower($1)
 
 func (q *Queries) DeleteOrganization(ctx context.Context, orgname string) error {
 	_, err := q.db.ExecContext(ctx, deleteOrganization, orgname)
-	return err
-}
-
-const deleteProfile = `-- name: DeleteProfile :exec
-DELETE FROM profiles WHERE name = $1
-`
-
-func (q *Queries) DeleteProfile(ctx context.Context, name string) error {
-	_, err := q.db.ExecContext(ctx, deleteProfile, name)
 	return err
 }
 
@@ -914,7 +902,7 @@ func (q *Queries) GetOrganizations(ctx context.Context) ([]Organization, error) 
 }
 
 const getProfiles = `-- name: GetProfiles :many
-SELECT id, name, secret, organization, challenges FROM profiles ORDER BY id asc
+SELECT id, name, secret, organization FROM profiles ORDER BY id asc
 `
 
 func (q *Queries) GetProfiles(ctx context.Context) ([]Profile, error) {
@@ -931,7 +919,6 @@ func (q *Queries) GetProfiles(ctx context.Context) ([]Profile, error) {
 			&i.Name,
 			&i.Secret,
 			&i.Organization,
-			&i.Challenges,
 		); err != nil {
 			return nil, err
 		}
@@ -973,43 +960,6 @@ func (q *Queries) GetTeamCount(ctx context.Context, eventID int32) ([]int64, err
 	return items, nil
 }
 
-const getTeamsForEvent = `-- name: GetTeamsForEvent :many
-SELECT id, tag, event_id, email, username, password, created_at, last_access, solved_challenges FROM teams WHERE event_id=$1
-`
-
-func (q *Queries) GetTeamsForEvent(ctx context.Context, eventID int32) ([]Team, error) {
-	rows, err := q.db.QueryContext(ctx, getTeamsForEvent, eventID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Team
-	for rows.Next() {
-		var i Team
-		if err := rows.Scan(
-			&i.ID,
-			&i.Tag,
-			&i.EventID,
-			&i.Email,
-			&i.Username,
-			&i.Password,
-			&i.CreatedAt,
-			&i.LastAccess,
-			&i.SolvedChallenges,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const insertNewAgent = `-- name: InsertNewAgent :exec
 INSERT INTO agents (name, url, sign_key, auth_key, tls, statelock) VALUES ($1, $2, $3, $4, $5, false)
 `
@@ -1034,22 +984,33 @@ func (q *Queries) InsertNewAgent(ctx context.Context, arg InsertNewAgentParams) 
 }
 
 const teamSolvedChls = `-- name: TeamSolvedChls :many
-SELECT solved_challenges FROM teams WHERE tag=$1
+
+SELECT id, tag, event_id, email, username, password, created_at, last_access FROM teams WHERE event_id=$1
 `
 
-func (q *Queries) TeamSolvedChls(ctx context.Context, tag string) ([]sql.NullString, error) {
-	rows, err := q.db.QueryContext(ctx, teamSolvedChls, tag)
+// SELECT solved_challenges FROM teams WHERE tag=$1;
+func (q *Queries) TeamSolvedChls(ctx context.Context, eventID int32) ([]Team, error) {
+	rows, err := q.db.QueryContext(ctx, teamSolvedChls, eventID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []sql.NullString
+	var items []Team
 	for rows.Next() {
-		var solved_challenges sql.NullString
-		if err := rows.Scan(&solved_challenges); err != nil {
+		var i Team
+		if err := rows.Scan(
+			&i.ID,
+			&i.Tag,
+			&i.EventID,
+			&i.Email,
+			&i.Username,
+			&i.Password,
+			&i.CreatedAt,
+			&i.LastAccess,
+		); err != nil {
 			return nil, err
 		}
-		items = append(items, solved_challenges)
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -1134,45 +1095,29 @@ func (q *Queries) UpdateOrganization(ctx context.Context, arg UpdateOrganization
 }
 
 const updateProfile = `-- name: UpdateProfile :exec
-UPDATE profiles SET secret = $1, challenges = $2 WHERE name = $3
+
+DELETE FROM profiles WHERE name = $1
 `
 
-type UpdateProfileParams struct {
-	Secret     bool
-	Challenges string
-	Name       string
-}
-
-func (q *Queries) UpdateProfile(ctx context.Context, arg UpdateProfileParams) error {
-	_, err := q.db.ExecContext(ctx, updateProfile, arg.Secret, arg.Challenges, arg.Name)
+// UPDATE profiles SET secret = $1 WHERE name = $3;
+func (q *Queries) UpdateProfile(ctx context.Context, name string) error {
+	_, err := q.db.ExecContext(ctx, updateProfile, name)
 	return err
 }
 
-const updateTeamPassword = `-- name: UpdateTeamPassword :exec
+const updateTeamSolvedChl = `-- name: UpdateTeamSolvedChl :exec
+
 UPDATE teams SET password = $1 WHERE tag = $2 and event_id = $3
 `
 
-type UpdateTeamPasswordParams struct {
+type UpdateTeamSolvedChlParams struct {
 	Password string
 	Tag      string
 	EventID  int32
 }
 
-func (q *Queries) UpdateTeamPassword(ctx context.Context, arg UpdateTeamPasswordParams) error {
-	_, err := q.db.ExecContext(ctx, updateTeamPassword, arg.Password, arg.Tag, arg.EventID)
-	return err
-}
-
-const updateTeamSolvedChl = `-- name: UpdateTeamSolvedChl :exec
-UPDATE teams SET solved_challenges = $2 WHERE tag = $1
-`
-
-type UpdateTeamSolvedChlParams struct {
-	Tag              string
-	SolvedChallenges sql.NullString
-}
-
+//UPDATE teams SET solved_challenges = $2 WHERE tag = $1;
 func (q *Queries) UpdateTeamSolvedChl(ctx context.Context, arg UpdateTeamSolvedChlParams) error {
-	_, err := q.db.ExecContext(ctx, updateTeamSolvedChl, arg.Tag, arg.SolvedChallenges)
+	_, err := q.db.ExecContext(ctx, updateTeamSolvedChl, arg.Password, arg.Tag, arg.EventID)
 	return err
 }
