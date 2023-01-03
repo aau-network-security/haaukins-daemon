@@ -399,11 +399,14 @@ func (d *daemon) closeEvent(c *gin.Context) {
 	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 }
 
+// TODO addExerciseToEvent
 // Is used to add exercises to events on the fly while the event is running
 func (d *daemon) addExerciseToEvent(c *gin.Context) {
 
 }
 
+
+// TODO resetExerciseInEvent
 // Resets an exercise for a user in a specific event
 func (d *daemon) resetExerciseInEvent(c *gin.Context) {
 
