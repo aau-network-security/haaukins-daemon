@@ -25,7 +25,7 @@ const (
 	displayTimeFormat = "2006-01-02 15:04:05"
 )
 
-func (d *daemon) eventSubrouter(r *gin.RouterGroup) {
+func (d *daemon) adminEventSubrouter(r *gin.RouterGroup) {
 	events := r.Group("/events")
 
 	events.Use(d.adminAuthMiddleware())
