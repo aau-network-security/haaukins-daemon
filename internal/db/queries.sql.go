@@ -147,6 +147,22 @@ func (q *Queries) CheckIfOrgExists(ctx context.Context, orgname string) (bool, e
 	return exists, err
 }
 
+const checkIfTeamExistsForEvent = `-- name: CheckIfTeamExistsForEvent :one
+SELECT EXISTS( SELECT 1 FROM teams WHERE lower(username) = lower($1) AND event_id = $2)
+`
+
+type CheckIfTeamExistsForEventParams struct {
+	Username string
+	Eventid  int32
+}
+
+func (q *Queries) CheckIfTeamExistsForEvent(ctx context.Context, arg CheckIfTeamExistsForEventParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, checkIfTeamExistsForEvent, arg.Username, arg.Eventid)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const checkIfUserExists = `-- name: CheckIfUserExists :one
 SELECT EXISTS( SELECT 1 FROM admin_users WHERE lower(username) = lower($1) )
 `
@@ -1002,6 +1018,47 @@ func (q *Queries) GetTeamCount(ctx context.Context, eventID int32) ([]int64, err
 		return nil, err
 	}
 	return items, nil
+}
+
+const getTeamFromEventByUsername = `-- name: GetTeamFromEventByUsername :one
+SELECT id, tag, event_id, email, username, password, created_at, last_access FROM teams WHERE lower(username) = lower($1) AND event_id = $2
+`
+
+type GetTeamFromEventByUsernameParams struct {
+	Username string
+	Eventid  int32
+}
+
+func (q *Queries) GetTeamFromEventByUsername(ctx context.Context, arg GetTeamFromEventByUsernameParams) (Team, error) {
+	row := q.db.QueryRowContext(ctx, getTeamFromEventByUsername, arg.Username, arg.Eventid)
+	var i Team
+	err := row.Scan(
+		&i.ID,
+		&i.Tag,
+		&i.EventID,
+		&i.Email,
+		&i.Username,
+		&i.Password,
+		&i.CreatedAt,
+		&i.LastAccess,
+	)
+	return i, err
+}
+
+const getTeamFromEventByUsernameNoPw = `-- name: GetTeamFromEventByUsernameNoPw :one
+SELECT (username, email) FROM teams WHERE lower(username) = lower($1) AND event_id = $2
+`
+
+type GetTeamFromEventByUsernameNoPwParams struct {
+	Username string
+	Eventid  int32
+}
+
+func (q *Queries) GetTeamFromEventByUsernameNoPw(ctx context.Context, arg GetTeamFromEventByUsernameNoPwParams) (interface{}, error) {
+	row := q.db.QueryRowContext(ctx, getTeamFromEventByUsernameNoPw, arg.Username, arg.Eventid)
+	var column_1 interface{}
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const insertNewAgent = `-- name: InsertNewAgent :exec

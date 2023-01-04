@@ -9,6 +9,7 @@ sql:
   - "profiles/queries.sql"
   - "teams/queries.sql"
   - "events/queries.sql"
+  - "solves/queries.sql"
   engine: "postgresql"
   gen:
     go: 

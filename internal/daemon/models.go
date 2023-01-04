@@ -18,6 +18,14 @@ type AdminClaims struct {
 	Exp          int64  `json:"exp"`
 }
 
+type TeamClaims struct {
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	Jti      string `json:"jti"`
+	Exp      int64  `json:"exp"`
+	EventTag string `json:"eventTag"`
+}
+
 type APIResponse struct {
 	Status   string             `json:"status,omitempty"`
 	Token    string             `json:"token,omitempty"`
@@ -26,6 +34,7 @@ type APIResponse struct {
 	Orgs     []db.Organization  `json:"orgs,omitempty"`
 	Agents   []AgentResponse    `json:"agents,omitempty"`
 	Events   []db.Event         `json:"events,omitempty"`
+	TeamInfo *TeamResponse      `json:"teaminfo,omitempty"`
 }
 
 type EventPool struct {
@@ -53,9 +62,9 @@ type EventConfig struct {
 	ExpectedFinishDate    time.Time `json:"expectedFinishDate" binding:"required"`
 	SecretKey             string    `json:"secretKey,omitempty"`
 	DynamicScoring        bool      `json:"dynamicScoring,omitempty"`
-	DynamicMax            int32       `json:"dynamicMax,omitempty"`
-	DynamicMin            int32       `json:"dynamicMin,omitempty"`
-	DynamicSolveThreshold int32       `json:"dynamicSolveThreshold,omitempty"`
+	DynamicMax            int32     `json:"dynamicMax,omitempty"`
+	DynamicMin            int32     `json:"dynamicMin,omitempty"`
+	DynamicSolveThreshold int32     `json:"dynamicSolveThreshold,omitempty"`
 }
 
 type Team struct {

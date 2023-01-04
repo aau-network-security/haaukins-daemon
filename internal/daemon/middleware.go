@@ -52,21 +52,22 @@ func (d *daemon) createAdminToken(ctx context.Context, user db.AdminUser) (strin
 	return token, nil
 }
 
-func createParticipantToken() (string, error) {
-	// var err error
-	// atClaims := jwt.MapClaims{}
-	// atClaims["authorized"] = true
-	// atClaims["username"] = user.Username
-	// atClaims["role"] = user.Role
-	// atClaims["exp"] = time.Now().Add(time.Hour * 24).Unix()
-	// atClaims["email"] = user.Email
-	// at := jwt.NewWithClaims(jwt.SigningMethodHS256, atClaims)
-	// token, err := at.SignedString([]byte(SECRET_KEY))
-	// if err != nil {
-	// 	return "", err
-	// }
-	// return token, nil
-	return "token", nil
+func (d *daemon) createParticipantToken(ctx context.Context, team db.Team, eventTag string) (string, error) {
+	var err error
+	atClaims := jwt.MapClaims{}
+	atClaims["exp"] = time.Now().Add(time.Hour * 24).Unix()
+	atClaims["jti"] = uuid.New()
+	atClaims["sub"] = team.Username
+	atClaims["participant"] = true
+	atClaims["email"] = team.Email
+	atClaims["eventTag"] = eventTag
+
+	at := jwt.NewWithClaims(jwt.SigningMethodHS256, atClaims)
+	token, err := at.SignedString([]byte(d.conf.JwtSecret))
+	if err != nil {
+		return "", err
+	}
+	return token, nil
 }
 
 func (d *daemon) jwtExtract(c *gin.Context) string {
@@ -129,6 +130,22 @@ func (d *daemon) adminAuthMiddleware() gin.HandlerFunc {
 		c.Set("email", claims["email"])
 		c.Set("organization", claims["organization"])
 		c.Set("role", claims["role"])
+		c.Next()
+	}
+}
+
+func (d *daemon) eventAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		claims, err := d.jwtValidate(c, "")
+		if err != nil || claims["participant"] == false {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, APIResponse{Status: "Invalid JWT"})
+			return
+		}
+		c.Set("jti", claims["jti"])
+		c.Set("exp", claims["exp"])
+		c.Set("sub", claims["sub"])
+		c.Set("email", claims["email"])
+		c.Set("eventTag", claims["eventTag"])
 		c.Next()
 	}
 }
