@@ -118,6 +118,7 @@ func (d *daemon) newEvent(c *gin.Context) {
 
 		eventToAdd := db.AddEventParams{
 			Tag:                   req.Tag,
+			Type:                  req.Type,
 			Name:                  req.Name,
 			Organization:          admin.Organization,
 			InitialLabs:           req.InitialLabs,
@@ -146,13 +147,18 @@ func (d *daemon) newEvent(c *gin.Context) {
 
 		// TODO Start goroutine to handle lab assignments
 		event := &Event{
-			Config:              req,
-			Teams:               make(map[string]*Team),
-			Labs:                make(map[string]*AgentLab),
-			UnassignedLabs:      make(chan AgentLab, req.MaxLabs),
-			TeamsWaitingForLabs: make(chan Team),
+			Config:                     req,
+			Teams:                      make(map[string]*Team),
+			Labs:                       make(map[string]*AgentLab),
+			UnassignedBrowserLabs:      make(chan AgentLab, req.MaxLabs),
+			TeamsWaitingForBrowserLabs: make(chan *Team),
+			UnassignedVpnLabs:          make(chan AgentLab, req.MaxLabs),
+			TeamsWaitingForVpnLabs:     make(chan *Team),
 		}
 		d.eventpool.AddEvent(event)
+
+		event.startQueueHandlers()
+		
 		// Since environment successfully
 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 		return
