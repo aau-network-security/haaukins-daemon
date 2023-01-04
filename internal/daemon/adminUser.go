@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -59,10 +60,14 @@ func (d *daemon) adminLogin(c *gin.Context) {
 	if err != nil {
 		log.Error().Err(err).Msgf("Error in admin login. Could not find user with username: %s", req.Username)
 		// Run hashing algorithm to prevent timed enumeration attacks on usernames
-		dummyHash := "$2a$10$s8RIrctKwSA/jib7jSaGE.Z4TdukcRP/Irkxse5dotyYT0uHb3b.2"
-		fakePassword := "fakepassword"
-		_ = verifyPassword(dummyHash, fakePassword)
-		c.JSON(http.StatusUnauthorized, APIResponse{Status: incorrectUsernameOrPasswordError})
+		if err == sql.ErrNoRows {
+			dummyHash := "$2a$10$s8RIrctKwSA/jib7jSaGE.Z4TdukcRP/Irkxse5dotyYT0uHb3b.2"
+			fakePassword := "fakepassword"
+			_ = verifyPassword(dummyHash, fakePassword)
+			c.JSON(http.StatusUnauthorized, APIResponse{Status: incorrectUsernameOrPasswordError})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 		return
 	}
 
@@ -81,14 +86,14 @@ func (d *daemon) adminLogin(c *gin.Context) {
 		return
 	}
 
-	dbUser, err := d.db.GetAdminUserNoPwByUsername(ctx, req.Username)
+	userNoPw, err := d.db.GetAdminUserNoPwByUsername(ctx, req.Username)
 	if err != nil {
 		log.Error().Err(err).Msg("error getting admin user from database")
 		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 		return
 	}
 
-	perms, err := d.getDetailedUserPerms(dbUser.Username, dbUser.Organization)
+	perms, err := d.getDetailedUserPerms(userNoPw.Username, userNoPw.Organization)
 	if err != nil {
 		log.Error().Err(err).Msg("error getting implicit permissions for user")
 		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
@@ -96,7 +101,7 @@ func (d *daemon) adminLogin(c *gin.Context) {
 	}
 
 	userToReturn := &AdminUserReponse{
-		User:  &dbUser,
+		User:  &userNoPw,
 		Perms: perms,
 	}
 
