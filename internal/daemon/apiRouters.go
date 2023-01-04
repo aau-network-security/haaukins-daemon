@@ -11,3 +11,8 @@ func (d *daemon) adminSubrouter(r *gin.RouterGroup) {
 	d.adminEventSubrouter(r)
 	d.adminExerciseSubrouter(r)
 }
+
+
+func (d *daemon) eventSubrouter(r *gin.RouterGroup) {
+	d.eventTeamSubrouter(r)
+}
