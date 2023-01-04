@@ -12,6 +12,12 @@ import (
 	aproto "github.com/aau-network-security/haaukins-agent/pkg/proto"
 	"github.com/rs/zerolog/log"
 )
+type EventType uint8
+const (
+	// LabType
+	TypeBeginner EventType = iota
+	TypeAdvanced
+)
 
 var (
 	AllAgentsReturnedErr = errors.New("all agents returned error on creating environment")
@@ -58,7 +64,7 @@ func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, newLa
 					log.Debug().Str("lab-tag", l.Tag).Msg("recieved lab from agent")
 				}
 				ap.updateAgentMetrics(a.Name, msg.Resources.Cpu, msg.Resources.Mem, msg.Resources.LabCount, msg.Resources.VmCount, msg.Resources.ContainerCount, msg.Resources.MemAvailable)
-				log.Debug().Str("hb", msg.Hb).Float64("cpu", msg.Resources.Cpu).Float64("mem", msg.Resources.Mem).Uint64("memAvailable", msg.Resources.MemAvailable).Msg("monitoring parameters ")
+				//log.Debug().Str("hb", msg.Hb).Float64("cpu", msg.Resources.Cpu).Float64("mem", msg.Resources.Mem).Uint64("memAvailable", msg.Resources.MemAvailable).Msg("monitoring parameters ")
 			}
 			time.Sleep(1 * time.Second)
 		}
@@ -128,7 +134,7 @@ func (ap *AgentPool) updateAgentMetrics(name string, cpu, memory float64, labCou
 	ap.Agents[name].Resources.VmCount = vmCount
 	ap.Agents[name].Resources.LabCount = labCount
 	ap.M.Unlock()
-	log.Debug().Msg("calculating weights")
+	//log.Debug().Msg("calculating weights")
 	ap.calculateWeights()
 
 	return ap.Agents[name], nil
@@ -258,6 +264,6 @@ func (ap *AgentPool) calculateWeights() {
 			continue
 		}
 		ap.AgentWeights[agentName] = float64(agent.Resources.MemoryAvailable) / float64(totalMemoryAvailable)
-		log.Debug().Float64("calculated weight", ap.AgentWeights[agentName]).Msgf("weight for agent: %s", agentName)
+		//log.Debug().Float64("calculated weight", ap.AgentWeights[agentName]).Msgf("weight for agent: %s", agentName)
 	}
 }
