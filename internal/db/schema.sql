@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS events ( 
         id serial primary key, 
         tag varchar (255) NOT NULL,
+        type integer NOT NULL,
         organization varchar (255) NOT NULL,
         name varchar (255) NOT NULL, 
         initial_labs integer NOT NULL,

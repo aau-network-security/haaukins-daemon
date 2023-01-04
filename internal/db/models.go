@@ -32,6 +32,7 @@ type Agent struct {
 type Event struct {
 	ID                    int32
 	Tag                   string
+	Type                  int32
 	Organization          string
 	Name                  string
 	InitialLabs           int32
