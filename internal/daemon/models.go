@@ -43,11 +43,14 @@ type EventPool struct {
 }
 
 type Event struct {
-	Config              EventConfig
-	Teams               map[string]*Team
-	Labs                map[string]*AgentLab
-	UnassignedLabs      chan AgentLab
-	TeamsWaitingForLabs chan Team
+	M                          sync.RWMutex
+	Config                     EventConfig
+	Teams                      map[string]*Team
+	Labs                       map[string]*AgentLab
+	UnassignedBrowserLabs      chan AgentLab
+	UnassignedVpnLabs          chan AgentLab
+	TeamsWaitingForBrowserLabs chan *Team
+	TeamsWaitingForVpnLabs     chan *Team
 }
 
 type EventConfig struct {
@@ -68,7 +71,7 @@ type EventConfig struct {
 }
 
 type Team struct {
-	Tag      string
+	M        sync.RWMutex
 	Username string
 	Email    string
 	Lab      *AgentLab
