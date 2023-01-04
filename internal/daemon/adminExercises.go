@@ -1,9 +1,11 @@
 package daemon
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 )
 
 func (d *daemon) adminExerciseSubrouter(r *gin.RouterGroup) {
@@ -25,12 +27,18 @@ func (d *daemon) adminExerciseSubrouter(r *gin.RouterGroup) {
 
 // TODO remember exercise profiles here
 func (d *daemon) getExercises(c *gin.Context) {
+	ctx := context.Background()
 	eventConf := EventConfig{
 		DynamicMax:            2000,
 		DynamicMin:            50,
 		DynamicSolveThreshold: 200,
 	}
 	c.JSON(http.StatusOK, getScore(eventConf, 50))
+	res, err := d.db.GetEventSolvesMap(ctx, 4)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting solves for event")
+	}
+	c.JSON(http.StatusOK, res)
 }
 
 func (d *daemon) getExerciseCategories(c *gin.Context) {
