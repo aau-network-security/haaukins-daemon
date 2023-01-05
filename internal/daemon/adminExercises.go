@@ -33,7 +33,7 @@ func (d *daemon) getExercises(c *gin.Context) {
 		DynamicMin:            50,
 		DynamicSolveThreshold: 200,
 	}
-	c.JSON(http.StatusOK, getScore(eventConf, 50))
+	c.JSON(http.StatusOK, calculateScore(eventConf, 50))
 	res, err := d.db.GetEventSolvesMap(ctx, 4)
 	if err != nil {
 		log.Error().Err(err).Msg("error getting solves for event")
