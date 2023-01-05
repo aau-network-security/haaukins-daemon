@@ -91,6 +91,7 @@ func (d *daemon) teamLogin(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Status: "OK", Token: token, TeamInfo: teamInfo})
 }
 
+// TODO Add measures to verify email address
 func (d *daemon) teamSignup(c *gin.Context) {
 	ctx := context.Background()
 
@@ -202,5 +203,12 @@ func (d *daemon) teamSignup(c *gin.Context) {
 			log.Info().Str("username", team.Username).Msg("team got taken out of queue, exiting go routine")
 		}()
 	}
+
+	// For debugging purposes
+	for _, lab := range d.eventpool.Events[event.Config.Tag].Labs {
+		log.Debug().Str("labTag", lab.LabInfo.Tag).Str("labParentAgent", lab.ParentAgent).Msg("lab in event")
+	}
 	c.JSON(http.StatusOK, APIResponse{Status: "OK", Token: token})
 }
+
+// TODO When email functionality has been implemented, make reset password function

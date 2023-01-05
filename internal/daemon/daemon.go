@@ -150,7 +150,7 @@ func New(conf *Config) (*daemon, error) {
 		log.Fatal().Err(err).Msg("could not get haaukins agents from database")
 	}
 	agents := make(map[string]*Agent)
-	agentPool := AgentPool{
+	agentPool := &AgentPool{
 		M:            sync.RWMutex{},
 		AgentWeights: make(map[string]float64),
 	}
@@ -196,6 +196,7 @@ func New(conf *Config) (*daemon, error) {
 	}
 	wg.Wait()
 	agentPool.Agents = agents
+	log.Debug().Msg("added agents to agent pool")
 	// dataSource := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable", conf.Database.Host, conf.Database.Username, conf.Database.Password, conf.Database.DbName, conf.Database.Port)
 	// adapter, err := gormadapter.NewFilteredAdapter("postgres", dataSource, true)
 	// if err != nil {
@@ -250,7 +251,7 @@ func New(conf *Config) (*daemon, error) {
 		conf:        conf,
 		db:          dbConn,
 		exClient:    exClient,
-		agentPool:   &agentPool,
+		agentPool:   agentPool,
 		auditLogger: &auditLogger,
 		enforcer:    enforcer,
 		newLabs:     newLabs,

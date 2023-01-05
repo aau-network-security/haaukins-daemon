@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -12,22 +13,45 @@ import (
 	aproto "github.com/aau-network-security/haaukins-agent/pkg/proto"
 	"github.com/rs/zerolog/log"
 )
-type EventType uint8
+
+type EventType uint32
+
 const (
 	// LabType
 	TypeBeginner EventType = iota
 	TypeAdvanced
 )
 
+func (eventType EventType) String() string {
+	switch eventType {
+	case TypeBeginner:
+		return "beginner"
+	case TypeAdvanced:
+		return "advanced"
+	}
+
+	log.Error().Msg("type did not match any existing labType")
+	return ""
+}
+
 var (
 	AllAgentsReturnedErr = errors.New("all agents returned error on creating environment")
 	NoAgentsConnected    = errors.New("no agents connected")
 )
 
+// Connects the daemon to an agent's streams (monitoring etc.)
+func (ap *AgentPool) connectToStreams(ctx context.Context, newLabs chan aproto.Lab, a *Agent, eventPool *EventPool) error {
+	if err := ap.connectToMonitoringStream(ctx, newLabs, a, eventPool); err != nil {
+		return err
+	}
+	return nil
+}
+
 // Send a heartbeat to all agents in the database, remove/add agent if connection status changes
 func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, newLabs chan aproto.Lab, a *Agent, eventPool *EventPool) error {
 	client := aproto.NewAgentClient(a.Conn)
 	stream, err := client.MonitorStream(routineCtx)
+	log.Debug().Msg("connecting to monitor stream")
 	if err != nil {
 		return fmt.Errorf("error connecting to labStream: %v", err)
 	}
@@ -59,9 +83,33 @@ func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, newLa
 					}
 					continue
 				}
-				// TODO: Do something with the new labs, hmm how do i access eventpool without import cycle errors
+
 				for _, l := range msg.NewLabs {
-					log.Debug().Str("lab-tag", l.Tag).Msg("recieved lab from agent")
+					labJson, _ := json.Marshal(l) // Debugging purposes
+					log.Debug().Str("lab-tag", l.Tag).Msgf("recieved lab from agent: %s", labJson)
+
+					event, err := eventPool.GetEvent(l.EventTag)
+					if err != nil {
+						log.Error().Err(err).Msg("error getting event")
+						continue
+					}
+
+					if l.IsVPN {
+						agentLab := &AgentLab{
+							ParentAgent: a.Name,
+							LabInfo:         l,
+						}
+						event.UnassignedVpnLabs <- agentLab
+						event.Labs[l.Tag] = agentLab
+						continue
+					}
+					agentLab := &AgentLab{
+						ParentAgent: a.Name,
+						LabInfo:         l,
+					}
+					event.UnassignedBrowserLabs <- agentLab
+					event.Labs[l.Tag] = agentLab
+					continue
 				}
 				ap.updateAgentMetrics(a.Name, msg.Resources.Cpu, msg.Resources.Mem, msg.Resources.LabCount, msg.Resources.VmCount, msg.Resources.ContainerCount, msg.Resources.MemAvailable)
 				//log.Debug().Str("hb", msg.Hb).Float64("cpu", msg.Resources.Cpu).Float64("mem", msg.Resources.Mem).Uint64("memAvailable", msg.Resources.MemAvailable).Msg("monitoring parameters ")
@@ -69,14 +117,6 @@ func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, newLa
 			time.Sleep(1 * time.Second)
 		}
 	}(routineCtx, stream, newLabs)
-	return nil
-}
-
-// Connects the daemon to an agent's streams (monitoring etc.)
-func (ap *AgentPool) connectToStreams(ctx context.Context, newLabs chan aproto.Lab, a *Agent, eventPool *EventPool) error {
-	if err := ap.connectToMonitoringStream(ctx, newLabs, a, eventPool); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -121,9 +161,9 @@ func (ap *AgentPool) updateAgentState(name string, lock bool) error {
 // Updates all agent metrics and recalculates the weights based on the new values supplied
 func (ap *AgentPool) updateAgentMetrics(name string, cpu, memory float64, labCount, vmCount, containerCount uint32, memoryAvailable uint64) (*Agent, error) {
 	ap.M.Lock()
-
 	_, ok := ap.Agents[name]
 	if !ok {
+		ap.M.Unlock()
 		return nil, fmt.Errorf("no agent found with name: \"%s\" in agentpool", name)
 	}
 

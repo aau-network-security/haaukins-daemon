@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	aproto "github.com/aau-network-security/haaukins-agent/pkg/proto"
 	"github.com/aau-network-security/haaukins-daemon/internal/db"
 	"google.golang.org/grpc"
 )
@@ -47,8 +48,8 @@ type Event struct {
 	Config                     EventConfig
 	Teams                      map[string]*Team
 	Labs                       map[string]*AgentLab
-	UnassignedBrowserLabs      chan AgentLab
-	UnassignedVpnLabs          chan AgentLab
+	UnassignedBrowserLabs      chan *AgentLab
+	UnassignedVpnLabs          chan *AgentLab
 	TeamsWaitingForBrowserLabs chan *Team
 	TeamsWaitingForVpnLabs     chan *Team
 }
@@ -105,10 +106,8 @@ type AgentResources struct {
 	ContainerCount  uint32
 }
 type AgentLab struct {
-	Tag         string
 	ParentAgent string
-	IsVPN       bool
-	Exercises   map[string]ExerciseStatus
+	LabInfo         *aproto.Lab
 }
 
 type ExerciseStatus struct {

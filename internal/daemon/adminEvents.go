@@ -21,6 +21,19 @@ const (
 	StatusClosed
 )
 
+// func (status int32) String() string {
+// 	switch status {
+//     case StatusRunning:
+//         return "running"
+//     case StatusSuspended:
+//         return "suspended"
+//     case StatusClosed:
+//         return "closed"
+//     default:
+//         return "unknown"
+//     }
+// }
+
 const (
 	displayTimeFormat = "2006-01-02 15:04:05"
 )
@@ -150,15 +163,15 @@ func (d *daemon) newEvent(c *gin.Context) {
 			Config:                     req,
 			Teams:                      make(map[string]*Team),
 			Labs:                       make(map[string]*AgentLab),
-			UnassignedBrowserLabs:      make(chan AgentLab, req.MaxLabs),
+			UnassignedBrowserLabs:      make(chan *AgentLab, req.MaxLabs),
 			TeamsWaitingForBrowserLabs: make(chan *Team),
-			UnassignedVpnLabs:          make(chan AgentLab, req.MaxLabs),
+			UnassignedVpnLabs:          make(chan *AgentLab, req.MaxLabs),
 			TeamsWaitingForVpnLabs:     make(chan *Team),
 		}
 		d.eventpool.AddEvent(event)
 
 		event.startQueueHandlers()
-		
+
 		// Since environment successfully
 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 		return
