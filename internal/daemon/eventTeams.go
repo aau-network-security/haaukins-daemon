@@ -43,7 +43,7 @@ func (d *daemon) teamLogin(c *gin.Context) {
 		return
 	}
 
-	event, err := d.db.GetEventByTag(ctx, req.EventTag)
+	dbEvent, err := d.db.GetEventByTag(ctx, req.EventTag)
 	if err != nil {
 		log.Error().Err(err).Msg("Error getting event by tag")
 		if err == sql.ErrNoRows {
@@ -56,9 +56,9 @@ func (d *daemon) teamLogin(c *gin.Context) {
 
 	arg := db.GetTeamFromEventByUsernameParams{
 		Username: req.Username,
-		Eventid:  event.ID,
+		Eventid:  dbEvent.ID,
 	}
-	team, err := d.db.GetTeamFromEventByUsername(ctx, arg)
+	dbTeam, err := d.db.GetTeamFromEventByUsername(ctx, arg)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			dummyHash := "$2a$10$s8RIrctKwSA/jib7jSaGE.Z4TdukcRP/Irkxse5dotyYT0uHb3b.2"
@@ -71,13 +71,13 @@ func (d *daemon) teamLogin(c *gin.Context) {
 		return
 	}
 
-	match := verifyPassword(team.Password, req.Password)
+	match := verifyPassword(dbTeam.Password, req.Password)
 	if !match {
 		c.JSON(http.StatusUnauthorized, APIResponse{Status: incorrectUsernameOrPasswordError})
 		return
 	}
 
-	token, err := d.createParticipantToken(ctx, team, req.EventTag)
+	token, err := d.createParticipantToken(ctx, dbTeam, req.EventTag)
 	if err != nil {
 		log.Error().Err(err).Msg("Error creating token")
 		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
@@ -85,9 +85,15 @@ func (d *daemon) teamLogin(c *gin.Context) {
 	}
 
 	teamInfo := &TeamResponse{
-		Username: team.Username,
-		Email:    team.Email,
+		Username: dbTeam.Username,
+		Email:    dbTeam.Email,
 	}
+
+	event, _ := d.eventpool.GetEvent(req.EventTag)
+
+	// Debugging purposes only
+	team, _ := event.GetTeam(dbTeam.Username)
+	log.Debug().Msgf("team: %v", team.Lab)
 	c.JSON(http.StatusOK, APIResponse{Status: "OK", Token: token, TeamInfo: teamInfo})
 }
 
@@ -142,7 +148,8 @@ func (d *daemon) teamSignup(c *gin.Context) {
 		EventID:   dbEvent.ID,
 		CreatedAt: time.Now(),
 		LastAccess: sql.NullTime{
-			Valid: false,
+			Time:  time.Now(),
+			Valid: true,
 		},
 	}
 

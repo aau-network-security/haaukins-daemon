@@ -91,6 +91,9 @@ func (event *Event) startQueueHandlers() {
 				return
 			}
 
+			team.M.Lock()
+			team.Lab = lab
+			team.M.Unlock()
 			// TODO Assign labs but first implement correct object to be sent between agent and daemon
 		}
 	}
@@ -115,6 +118,9 @@ func (event *Event) startQueueHandlers() {
 				return
 			}
 
+			team.M.Lock()
+			team.Lab = lab
+			team.M.Unlock()
 			// TODO Assign labs but first implement correct object to be sent between agent and daemon
 
 		}
