@@ -76,7 +76,7 @@ type Team struct {
 	Username string
 	Email    string
 	Lab      *AgentLab
-	RunningExercises map[string]struct
+	RunningExercises map[string]struct{}
 }
 
 // Agent related types
