@@ -12,7 +12,7 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
         CREATE TABLE IF NOT EXISTS events ( 
                 id serial primary key, 
                 tag varchar (255) NOT NULL,
-                type inteter NOT NULL,
+                type integer NOT NULL,
                 organization varchar (255) NOT NULL,
                 name varchar (255) NOT NULL, 
                 initial_labs integer NOT NULL,
