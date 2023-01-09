@@ -58,13 +58,11 @@ func (event *Event) GetTeam(username string) (*Team, error) {
 	return team, nil
 }
 
-func (event *Event) AddTeam(team *Team) error {
+func (event *Event) AddTeam(team *Team) {
 	event.M.Lock()
 	defer event.M.Unlock()
 
 	event.Teams[team.Username] = team
-
-	return nil
 }
 
 // The queue handlers are pulling out teams waiting for labs from one channel
@@ -82,7 +80,12 @@ func (event *Event) startQueueHandlers() {
 				log.Debug().Msg("channel closed closing browserQueueHandler")
 				return
 			}
+			team.M.Lock()
+			team.Status = WaitingForLab
+			team.M.Unlock()
 
+			// TODO Make agent send return even if it fails to create the lab
+			// TODO Make unblocking and implement cancel
 			lab, ok := <-event.UnassignedBrowserLabs
 			if ok {
 				log.Debug().Msgf("pulled lab from browser queue: %v", lab)
@@ -93,6 +96,7 @@ func (event *Event) startQueueHandlers() {
 
 			team.M.Lock()
 			team.Lab = lab
+			team.Status = Idle
 			team.M.Unlock()
 			// TODO Assign labs but first implement correct object to be sent between agent and daemon
 		}
@@ -109,6 +113,9 @@ func (event *Event) startQueueHandlers() {
 				log.Debug().Msg("channel closed closing vpnQueueHandler")
 				return
 			}
+			team.M.Lock()
+			team.Status = WaitingForLab
+			team.M.Unlock()
 
 			lab, ok := <-event.UnassignedVpnLabs
 			if ok {
@@ -120,6 +127,7 @@ func (event *Event) startQueueHandlers() {
 
 			team.M.Lock()
 			team.Lab = lab
+			team.Status = Idle
 			team.M.Unlock()
 			// TODO Assign labs but first implement correct object to be sent between agent and daemon
 
