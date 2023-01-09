@@ -37,6 +37,7 @@ func (eventType EventType) String() string {
 var (
 	AllAgentsReturnedErr = errors.New("all agents returned error on creating environment")
 	NoAgentsConnected    = errors.New("no agents connected")
+	NoResourcesError     = errors.New("estimated memory usage of event is larger than what is available")
 )
 
 // Connects the daemon to an agent's streams (monitoring etc.)
@@ -195,9 +196,18 @@ func (ap *AgentPool) getAgent(name string) (*Agent, error) {
 }
 
 // Creates a new environment on all available connected agents
-func (ap *AgentPool) createNewEnvOnAvailableAgents(ctx context.Context, config EventConfig) error {
+func (ap *AgentPool) createNewEnvOnAvailableAgents(ctx context.Context, config EventConfig, estimatedMemUsage uint64) error {
 	// Concurrently start environments for event on all available agents
 	ap.M.RLock()
+
+	// Check if potential event memory usage will be larger than the total memory available
+	if estimatedMemUsage > 0 {
+		if float64(estimatedMemUsage) > float64(ap.TotalMemAvailable)*float64(0.9) {
+			log.Debug().Msg("to many resources requested from event")
+			ap.M.RUnlock()
+			return NoResourcesError
+		}
+	}
 
 	if len(ap.Agents) > 0 {
 		var m sync.Mutex
@@ -206,6 +216,11 @@ func (ap *AgentPool) createNewEnvOnAvailableAgents(ctx context.Context, config E
 		for agentName, a := range ap.Agents {
 			// The initial amount of labs for a specific agent is determined based on the total initial labs needed
 			// And the weight calculated for that specific agent
+			if _, ok := ap.AgentWeights[agentName]; !ok {
+				log.Warn().Str("agent", agentName).Msg("no agent weight calculated for agent")
+				errs = append(errs, errors.New("no agent weight calculated for agent"))
+				continue
+			}
 			initialLabs := int32(math.Round(float64(config.InitialLabs) * ap.AgentWeights[agentName]))
 			log.Debug().Int32("labs", initialLabs).Str("agent", agentName).Msg("starting env with labs on agent")
 			envConfig := aproto.CreatEnvRequest{
@@ -384,17 +399,28 @@ func (ap *AgentPool) calculateWeights() {
 	ap.M.Lock()
 	defer ap.M.Unlock()
 	var totalMemoryAvailable uint64
+	var availableAgents []*Agent
 	for _, agent := range ap.Agents {
-		if agent.StateLock {
+		// Exclude ag
+		if agent.StateLock || agent.Resources.Memory > 90 {
+			ap.AgentWeights[agent.Name] = 0
 			continue
 		}
 		totalMemoryAvailable += agent.Resources.MemoryAvailable
+		availableAgents = append(availableAgents, agent)
 	}
-	for agentName, agent := range ap.Agents {
+	ap.TotalMemAvailable = totalMemoryAvailable
+	log.Debug().Uint64("total memory available", ap.TotalMemAvailable).Msg("total memory available")
+
+	for _, agent := range availableAgents {
 		if agent.StateLock {
 			continue
 		}
-		ap.AgentWeights[agentName] = float64(agent.Resources.MemoryAvailable) / float64(totalMemoryAvailable)
-		//log.Debug().Float64("calculated weight", ap.AgentWeights[agentName]).Msgf("weight for agent: %s", agentName)
+		weight := float64(agent.Resources.MemoryAvailable) / float64(totalMemoryAvailable)
+		if math.IsNaN(weight) || weight <= 0 {
+			weight = 0
+		}
+		ap.AgentWeights[agent.Name] = weight
+		log.Debug().Float64("calculated weight", ap.AgentWeights[agent.Name]).Msgf("weight for agent: %s", agent.Name)
 	}
 }

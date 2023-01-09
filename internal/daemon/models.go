@@ -83,9 +83,10 @@ type Team struct {
 // Agent related types
 
 type AgentPool struct {
-	M            sync.RWMutex
-	Agents       map[string]*Agent
-	AgentWeights map[string]float64
+	M                 sync.RWMutex
+	Agents            map[string]*Agent
+	AgentWeights      map[string]float64
+	TotalMemAvailable uint64
 }
 
 type Agent struct {
@@ -96,7 +97,6 @@ type Agent struct {
 	QueuedTasks uint32
 	Heartbeat   string
 	StateLock   bool
-	ActiveLabs  uint64
 	Errors      []error
 }
 
