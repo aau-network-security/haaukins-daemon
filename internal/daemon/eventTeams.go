@@ -191,11 +191,10 @@ func (d *daemon) teamSignup(c *gin.Context) {
 	team := &Team{
 		Username: req.Username,
 		Email:    req.Email,
+		Status:   Idle,
 		Lab:      nil,
 	}
-	if err := event.AddTeam(team); err != nil {
-		log.Error().Err(err).Msg("error adding team to eventpool")
-	}
+	event.AddTeam(team)
 
 	if EventType(dbEvent.Type) == TypeBeginner {
 		// Put team into waitingForLabs Queue if beginner type event
@@ -207,7 +206,7 @@ func (d *daemon) teamSignup(c *gin.Context) {
 			}()
 			log.Info().Str("username", team.Username).Msg("putting team into queue for beginner lab")
 			event.TeamsWaitingForBrowserLabs <- team
-			log.Info().Str("username", team.Username).Msg("team got taken out of queue, exiting go routine")
+			log.Info().Str("username", team.Username).Msg("team got taken out of beginner queue, exiting go routine")
 		}()
 	}
 
