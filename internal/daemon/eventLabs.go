@@ -24,13 +24,14 @@ func (d *daemon) eventLabsSubrouter(r *gin.RouterGroup) {
 	labs := r.Group("/labs")
 
 	labs.Use(d.eventAuthMiddleware())
-	labs.POST("/", d.configureLab)
-	labs.GET("/", d.getLab)
+	labs.POST("", d.configureLab)
+	labs.GET("", d.getLab)
 	labs.GET("/resetlab", d.resetLab)
 	labs.GET("/resetvm", d.resetVm)
 }
 
 // Used by teams who have not yet configured their lab lab (advanced events only)
+// TODO Check if event has reached maximum number of labs for event
 func (d *daemon) configureLab(c *gin.Context) {
 	ctx := context.Background()
 	var req LabRequest

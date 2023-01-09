@@ -7,7 +7,7 @@ func (d *daemon) eventExercisesSubrouter(r *gin.RouterGroup) {
 
 	exercises.Use(d.eventAuthMiddleware())
 	
-	exercises.GET("/", d.getEventExercises)
+	exercises.GET("", d.getEventExercises)
 	exercises.GET("/:status", d.getExercisesByStatus)
 	
 	exercises.POST("/solve", d.solveExercise)

@@ -273,6 +273,7 @@ func (d *daemon) Run() error {
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
+	r.Use(gin.Recovery())
 	d.setupRouters(r)
 	return r.Run(":8080")
 }
