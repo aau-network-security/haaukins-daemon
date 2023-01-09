@@ -72,10 +72,11 @@ type EventConfig struct {
 }
 
 type Team struct {
-	M        sync.RWMutex
-	Username string
-	Email    string
-	Lab      *AgentLab
+	M                sync.RWMutex
+	Username         string
+	Email            string
+	Status           TeamStatus
+	Lab              *AgentLab
 	RunningExercises map[string]struct{}
 }
 
@@ -88,14 +89,15 @@ type AgentPool struct {
 }
 
 type Agent struct {
-	Name       string
-	Conn       *grpc.ClientConn   `json:"-"`
-	Close      context.CancelFunc `json:"-"`
-	Resources  AgentResources
-	Heartbeat  string
-	StateLock  bool
-	ActiveLabs uint64
-	Errors     []error
+	Name        string
+	Conn        *grpc.ClientConn   `json:"-"`
+	Close       context.CancelFunc `json:"-"`
+	Resources   AgentResources
+	QueuedTasks uint32
+	Heartbeat   string
+	StateLock   bool
+	ActiveLabs  uint64
+	Errors      []error
 }
 
 type AgentResources struct {
@@ -108,7 +110,7 @@ type AgentResources struct {
 }
 type AgentLab struct {
 	ParentAgent string
-	LabInfo         *aproto.Lab
+	LabInfo     *aproto.Lab
 }
 
 type ExerciseStatus struct {
