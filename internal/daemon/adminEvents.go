@@ -35,7 +35,9 @@ const (
 // }
 
 const (
-	displayTimeFormat = "2006-01-02 15:04:05"
+	displayTimeFormat        = "2006-01-02 15:04:05"
+	averageContainerMemUsage = 50 // MB found from running a lab with alot of containers and taking the average mem usage
+	labBaseMemoryUsage       = 100
 )
 
 func (d *daemon) adminEventSubrouter(r *gin.RouterGroup) {
@@ -43,8 +45,8 @@ func (d *daemon) adminEventSubrouter(r *gin.RouterGroup) {
 
 	events.Use(d.adminAuthMiddleware())
 	// CRUD
-	events.POST("/", d.newEvent)
-	events.GET("/", d.getEvents)
+	events.POST("", d.newEvent)
+	events.GET("", d.getEvents)
 	events.GET("/bystatus/:status", d.getEvents)
 	events.DELETE("/:eventTag", d.deleteEvent)
 
@@ -85,6 +87,7 @@ func (d *daemon) newEvent(c *gin.Context) {
 			return
 		}
 		// TODO Check user quota
+		// TODO Check if initial labs is less or equal than maxlabs
 
 		uniqueExercisesList := removeDuplicates(req.ExerciseTags)
 
@@ -103,6 +106,11 @@ func (d *daemon) newEvent(c *gin.Context) {
 			}
 		}
 
+		estimatedMemUsage := uint64(0)
+		if EventType(req.Type) == TypeBeginner {
+			estimatedMemUsage = calculateEstimatedMemUsage(exClientResp.Exercises, req.TeamSize, req.InitialLabs)
+		}
+
 		exists, err := d.db.CheckIfEventExist(ctx, req.Tag)
 		if err != nil {
 			log.Error().Err(err).Msg("error checking if event exists")
@@ -115,16 +123,18 @@ func (d *daemon) newEvent(c *gin.Context) {
 			return
 		}
 
-		// TODO Find out how to destribute initiallabs between all agents
-
-		if err := d.agentPool.createNewEnvOnAvailableAgents(ctx, req); err != nil {
+		if err := d.agentPool.createNewEnvOnAvailableAgents(ctx, req, estimatedMemUsage); err != nil {
 			if err == AllAgentsReturnedErr {
 				log.Error().Err(AllAgentsReturnedErr).Msg("error creating environments on all agents")
-				c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
+				c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error... Agents may be out of resources"})
 				return
 			} else if err == NoAgentsConnected {
 				log.Error().Err(NoAgentsConnected).Msg("error creating environments on all agents")
 				c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error: no agents connected... contact superadmin"})
+				return
+			} else if err == NoResourcesError {
+				log.Error().Err(NoResourcesError).Msg("error creating environments on all agents")
+				c.JSON(http.StatusBadRequest, APIResponse{Status: "not enough resources available for desired event"})
 				return
 			}
 		}
@@ -158,7 +168,6 @@ func (d *daemon) newEvent(c *gin.Context) {
 			return
 		}
 
-		// TODO Start goroutine to handle lab assignments
 		event := &Event{
 			Config:                     req,
 			Teams:                      make(map[string]*Team),
@@ -447,4 +456,25 @@ func removeDuplicates(exercises []string) []string {
 		}
 	}
 	return uniqueExercises
+}
+
+func calculateEstimatedMemUsage(exercises []*eproto.Exercise, teamSize, initialLabs int32) uint64 {
+	vmCount := 0
+	vmCount = int(teamSize) * int(initialLabs)
+
+	containerCount := 0
+	for _, exercise := range exercises {
+		for _ = range exercise.Instance {
+			containerCount += 1
+		}
+
+	}
+	containerCount = containerCount*int(initialLabs) + 2*int(initialLabs)
+
+	log.Debug().Int("vmCoint", vmCount).Int("containerCount", containerCount).Msg("Calculated amount of virtual instances for beginner type event")
+	baseUsage := labBaseMemoryUsage * initialLabs * 1000000
+	estimatedMemUsage := uint64(vmCount)*(4096*1000000) + uint64(containerCount)*(averageContainerMemUsage*1000000) + uint64(baseUsage)
+	log.Debug().Uint64("estimatedMemUsage", estimatedMemUsage).Msg("estimated memory usage for event")
+
+	return estimatedMemUsage
 }
