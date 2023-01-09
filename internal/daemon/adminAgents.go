@@ -50,7 +50,6 @@ type AgentResponse struct {
 	AuthKey    string `json:"authKey"`
 	Tls        bool   `json:"tls"`
 	StateLock  bool   `json:"stateLock"`
-	ActiveLabs uint64 `json:"activeLabs"`
 }
 
 // Creates a new agent connection and stores connection information in the database
@@ -202,7 +201,6 @@ func (d *daemon) getAgents(c *gin.Context) {
 				Url:        a.Url,
 				Tls:        a.Tls,
 				StateLock:  aFromPool.StateLock,
-				ActiveLabs: aFromPool.ActiveLabs,
 			}
 			resp = append(resp, aResp)
 		}
