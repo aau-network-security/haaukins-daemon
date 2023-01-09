@@ -86,7 +86,7 @@ func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, newLa
 
 				for _, l := range msg.NewLabs {
 					labJson, _ := json.Marshal(l) // Debugging purposes
-					log.Debug().Str("lab-tag", l.Tag).Msgf("recieved lab from agent: %s", labJson)
+					log.Debug().Str("agent", a.Name).Str("lab-tag", l.Tag).Msgf("recieved lab from agent: %s", labJson)
 
 					event, err := eventPool.GetEvent(l.EventTag)
 					if err != nil {
@@ -97,7 +97,7 @@ func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, newLa
 					if l.IsVPN {
 						agentLab := &AgentLab{
 							ParentAgent: a.Name,
-							LabInfo:         l,
+							LabInfo:     l,
 						}
 						event.UnassignedVpnLabs <- agentLab
 						event.Labs[l.Tag] = agentLab
@@ -105,13 +105,13 @@ func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, newLa
 					}
 					agentLab := &AgentLab{
 						ParentAgent: a.Name,
-						LabInfo:         l,
+						LabInfo:     l,
 					}
 					event.UnassignedBrowserLabs <- agentLab
 					event.Labs[l.Tag] = agentLab
 					continue
 				}
-				ap.updateAgentMetrics(a.Name, msg.Resources.Cpu, msg.Resources.Mem, msg.Resources.LabCount, msg.Resources.VmCount, msg.Resources.ContainerCount, msg.Resources.MemAvailable)
+				ap.updateAgentMetrics(a.Name, msg)
 				//log.Debug().Str("hb", msg.Hb).Float64("cpu", msg.Resources.Cpu).Float64("mem", msg.Resources.Mem).Uint64("memAvailable", msg.Resources.MemAvailable).Msg("monitoring parameters ")
 			}
 			time.Sleep(1 * time.Second)
@@ -159,7 +159,7 @@ func (ap *AgentPool) updateAgentState(name string, lock bool) error {
 }
 
 // Updates all agent metrics and recalculates the weights based on the new values supplied
-func (ap *AgentPool) updateAgentMetrics(name string, cpu, memory float64, labCount, vmCount, containerCount uint32, memoryAvailable uint64) (*Agent, error) {
+func (ap *AgentPool) updateAgentMetrics(name string, msg *aproto.MonitorResponse) (*Agent, error) {
 	ap.M.Lock()
 	_, ok := ap.Agents[name]
 	if !ok {
@@ -167,12 +167,13 @@ func (ap *AgentPool) updateAgentMetrics(name string, cpu, memory float64, labCou
 		return nil, fmt.Errorf("no agent found with name: \"%s\" in agentpool", name)
 	}
 
-	ap.Agents[name].Resources.Cpu = cpu
-	ap.Agents[name].Resources.Memory = memory
-	ap.Agents[name].Resources.MemoryAvailable = memoryAvailable
-	ap.Agents[name].Resources.ContainerCount = containerCount
-	ap.Agents[name].Resources.VmCount = vmCount
-	ap.Agents[name].Resources.LabCount = labCount
+	ap.Agents[name].Resources.Cpu = msg.Resources.Cpu
+	ap.Agents[name].Resources.Memory = msg.Resources.Mem
+	ap.Agents[name].Resources.MemoryAvailable = msg.Resources.MemAvailable
+	ap.Agents[name].Resources.ContainerCount = msg.Resources.ContainerCount
+	ap.Agents[name].Resources.VmCount = msg.Resources.VmCount
+	ap.Agents[name].Resources.LabCount = msg.Resources.LabCount
+	ap.Agents[name].QueuedTasks = msg.QueuedTasks
 	ap.M.Unlock()
 	//log.Debug().Msg("calculating weights")
 	ap.calculateWeights()
@@ -196,6 +197,8 @@ func (ap *AgentPool) getAgent(name string) (*Agent, error) {
 // Creates a new environment on all available connected agents
 func (ap *AgentPool) createNewEnvOnAvailableAgents(ctx context.Context, config EventConfig) error {
 	// Concurrently start environments for event on all available agents
+	ap.M.RLock()
+
 	if len(ap.Agents) > 0 {
 		var m sync.Mutex
 		var wg sync.WaitGroup
@@ -238,6 +241,7 @@ func (ap *AgentPool) createNewEnvOnAvailableAgents(ctx context.Context, config E
 				}
 			}(&envConfig, a)
 		}
+		ap.M.RUnlock()
 		wg.Wait()
 
 		if len(errs) == len(ap.Agents) {
@@ -251,6 +255,8 @@ func (ap *AgentPool) createNewEnvOnAvailableAgents(ctx context.Context, config E
 
 // Closes a specific environment on all agents
 func (ap *AgentPool) closeEnvironmentOnAllAgents(ctx context.Context, eventTag string) error {
+	ap.M.RLock()
+
 	if len(ap.Agents) > 0 {
 		var m sync.Mutex
 		var wg sync.WaitGroup
@@ -276,6 +282,7 @@ func (ap *AgentPool) closeEnvironmentOnAllAgents(ctx context.Context, eventTag s
 				}
 			}(eventTag, a)
 		}
+		ap.M.RUnlock()
 		wg.Wait()
 
 		if len(errs) == len(ap.Agents) {
@@ -285,6 +292,90 @@ func (ap *AgentPool) closeEnvironmentOnAllAgents(ctx context.Context, eventTag s
 		return NoAgentsConnected
 	}
 	return nil
+}
+
+// Creates a lab for a specified event with a specified type
+func (ap *AgentPool) createLabForEvent(ctx context.Context, isVpn bool, eventTag string) error {
+	agentForLab, err := ap.selectAgentForLab()
+	if err != nil {
+		return errors.New("no suitable agent found")
+	}
+
+	client := aproto.NewAgentClient(agentForLab.Conn)
+
+	req := &aproto.CreateLabRequest{
+		EventTag: eventTag,
+		IsVPN:    isVpn,
+	}
+	if _, err := client.CreateLabForEnv(ctx, req); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Selects the most suitable agent for a lab to be created
+// It chooses an agent either based on weight if all agents are idle or depending on the agent which has the least jobs waiting in queue
+func (ap *AgentPool) selectAgentForLab() (*Agent, error) {
+	ap.M.RLock()
+	defer ap.M.RUnlock()
+
+	var weightCandidates []*Agent
+	for _, agent := range ap.Agents {
+		if agent.QueuedTasks > 0 || agent.StateLock {
+			continue
+		}
+		weightCandidates = append(weightCandidates, agent)
+	}
+
+	// If all agents currently have queued tasks
+	if len(weightCandidates) == 0 {
+		log.Debug().Msg("choosing agent based on amount queued tasks")
+		var agentWithLeastTasks *Agent
+		first := true
+		for _, agent := range ap.Agents {
+			if agent.StateLock {
+				continue
+			}
+			if first {
+				agentWithLeastTasks = agent
+				first = false
+				continue
+			}
+			if agent.QueuedTasks < agentWithLeastTasks.QueuedTasks {
+				agentWithLeastTasks = agent
+			}
+		}
+		if agentWithLeastTasks == nil {
+			return nil, errors.New("no suitable agent found")
+		}
+		return agentWithLeastTasks, nil
+	}
+
+	// If one or all agents have 0 queued tasks
+	// TODO If using weights, CPU should probably also play a role
+	log.Debug().Msg("choosing agent based on amount weights")
+	var agentWithHigestWeight *Agent
+	first := true
+	for _, agent := range weightCandidates {
+		if agent.StateLock {
+			continue
+		}
+		if first {
+			agentWithHigestWeight = agent
+			first = false
+			continue
+		}
+		if ap.AgentWeights[agent.Name] > ap.AgentWeights[agentWithHigestWeight.Name] {
+			agentWithHigestWeight = agent
+		}
+	}
+	if agentWithHigestWeight == nil {
+		return nil, errors.New("no suitable agent found")
+	}
+
+	log.Debug().Str("agent", agentWithHigestWeight.Name).Msg("agent with highest weight")
+	return agentWithHigestWeight, nil
 }
 
 // Calculates initial lab weights based on remaining memory available on each agent
