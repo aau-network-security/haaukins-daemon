@@ -12,7 +12,7 @@ func (d *daemon) adminSubrouter(r *gin.RouterGroup) {
 	d.adminExerciseSubrouter(r)
 }
 
-
 func (d *daemon) eventSubrouter(r *gin.RouterGroup) {
 	d.eventTeamSubrouter(r)
+	d.eventLabsSubrouter(r)
 }
