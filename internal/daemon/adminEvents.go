@@ -107,8 +107,9 @@ func (d *daemon) newEvent(c *gin.Context) {
 		}
 
 		estimatedMemUsage := uint64(0)
+		// only calculate if beginner event, as the resources are spun up from the beginning
 		if EventType(req.Type) == TypeBeginner {
-			estimatedMemUsage = calculateEstimatedMemUsage(exClientResp.Exercises, req.TeamSize, req.InitialLabs)
+			estimatedMemUsage = calculateEstimatedEventMemUsage(exClientResp.Exercises, req.TeamSize, req.MaxLabs)
 		}
 
 		exists, err := d.db.CheckIfEventExist(ctx, req.Tag)
@@ -458,9 +459,9 @@ func removeDuplicates(exercises []string) []string {
 	return uniqueExercises
 }
 
-func calculateEstimatedMemUsage(exercises []*eproto.Exercise, teamSize, initialLabs int32) uint64 {
+func calculateEstimatedEventMemUsage(exercises []*eproto.Exercise, teamSize, maxLabs int32) uint64 {
 	vmCount := 0
-	vmCount = int(teamSize) * int(initialLabs)
+	vmCount = int(teamSize) * int(maxLabs)
 
 	containerCount := 0
 	for _, exercise := range exercises {
@@ -469,11 +470,13 @@ func calculateEstimatedMemUsage(exercises []*eproto.Exercise, teamSize, initialL
 		}
 
 	}
-	containerCount = containerCount*int(initialLabs) + 2*int(initialLabs)
+	containerCount = containerCount*int(maxLabs) + 2*int(maxLabs)
 
 	log.Debug().Int("vmCoint", vmCount).Int("containerCount", containerCount).Msg("Calculated amount of virtual instances for beginner type event")
-	baseUsage := labBaseMemoryUsage * initialLabs * 1000000
-	estimatedMemUsage := uint64(vmCount)*(4096*1000000) + uint64(containerCount)*(averageContainerMemUsage*1000000) + uint64(baseUsage)
+	baseUsage := labBaseMemoryUsage * maxLabs * 1000000
+	// VMs idle at little over 2 gigs of ram and maximum 4 gigs of usage
+	// So assuming average consumption will be somewhere in the middle
+	estimatedMemUsage := uint64(vmCount)*(3074*1000000) + uint64(containerCount)*(averageContainerMemUsage*1000000) + uint64(baseUsage)
 	log.Debug().Uint64("estimatedMemUsage", estimatedMemUsage).Msg("estimated memory usage for event")
 
 	return estimatedMemUsage
