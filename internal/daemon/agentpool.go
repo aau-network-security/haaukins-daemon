@@ -202,10 +202,18 @@ func (ap *AgentPool) createNewEnvOnAvailableAgents(ctx context.Context, config E
 
 	// Check if potential event memory usage will be larger than the total memory available
 	if estimatedMemUsage > 0 {
-		if float64(estimatedMemUsage) > float64(ap.TotalMemAvailable)*float64(0.9) {
+		if estimatedMemUsage > ap.TotalMemAvailable { // Prevent integer overflow
 			log.Debug().Msg("to many resources requested from event")
 			ap.M.RUnlock()
 			return NoResourcesError
+		} else {
+			memoryLeft := ap.TotalMemAvailable - estimatedMemUsage
+			log.Debug().Uint64("memAfterEvent", memoryLeft).Msg("Total memory left when event is started")
+			if memoryLeft < uint64(5000000000*len(ap.Agents)) { // Corresponding to having 5 gigs of ram left on each connected agent
+				log.Debug().Msg("to many resources requested from event")
+				ap.M.RUnlock()
+				return NoResourcesError
+			}
 		}
 	}
 
@@ -329,6 +337,7 @@ func (ap *AgentPool) createLabForEvent(ctx context.Context, isVpn bool, eventTag
 	return nil
 }
 
+// TODO: Use minRamLeft threshhold when selecting agent to make sure you dont overuse available resources
 // Selects the most suitable agent for a lab to be created
 // It chooses an agent either based on weight if all agents are idle or depending on the agent which has the least jobs waiting in queue
 func (ap *AgentPool) selectAgentForLab() (*Agent, error) {
@@ -402,6 +411,7 @@ func (ap *AgentPool) calculateWeights() {
 	var availableAgents []*Agent
 	for _, agent := range ap.Agents {
 		// Exclude ag
+		// TODO Use a memory threshold instead of percentage
 		if agent.StateLock || agent.Resources.Memory > 90 {
 			ap.AgentWeights[agent.Name] = 0
 			continue
