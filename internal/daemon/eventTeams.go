@@ -204,6 +204,7 @@ func (d *daemon) teamSignup(c *gin.Context) {
 					log.Debug().Msg("channel closed while sending team to queue")
 				}
 			}()
+			team.Status = InQueue
 			log.Info().Str("username", team.Username).Msg("putting team into queue for beginner lab")
 			event.TeamsWaitingForBrowserLabs <- team
 			log.Info().Str("username", team.Username).Msg("team got taken out of beginner queue, exiting go routine")

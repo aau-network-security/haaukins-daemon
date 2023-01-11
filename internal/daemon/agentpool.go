@@ -169,15 +169,16 @@ func (ap *AgentPool) updateAgentMetrics(name string, msg *aproto.MonitorResponse
 	}
 
 	ap.Agents[name].Resources.Cpu = msg.Resources.Cpu
-	ap.Agents[name].Resources.Memory = msg.Resources.Mem
+	ap.Agents[name].Resources.Memory = msg.Resources.MemPercentUsed
 	ap.Agents[name].Resources.MemoryAvailable = msg.Resources.MemAvailable
 	ap.Agents[name].Resources.ContainerCount = msg.Resources.ContainerCount
 	ap.Agents[name].Resources.VmCount = msg.Resources.VmCount
 	ap.Agents[name].Resources.LabCount = msg.Resources.LabCount
+	ap.Agents[name].Resources.MemoryInstalled = msg.Resources.MemInstalled
 	ap.Agents[name].QueuedTasks = msg.QueuedTasks
 	ap.M.Unlock()
 	//log.Debug().Msg("calculating weights")
-	ap.calculateWeights()
+	ap.calculateWeightsAndTotalMemoryInstalled()
 
 	return ap.Agents[name], nil
 }
@@ -196,24 +197,22 @@ func (ap *AgentPool) getAgent(name string) (*Agent, error) {
 }
 
 // Creates a new environment on all available connected agents
-func (ap *AgentPool) createNewEnvOnAvailableAgents(ctx context.Context, config EventConfig, estimatedMemUsage uint64) error {
+func (ap *AgentPool) createNewEnvOnAvailableAgents(ctx context.Context, config EventConfig, resourceEstimates ResourceEstimates) error {
 	// Concurrently start environments for event on all available agents
 	ap.M.RLock()
-
-	// Check if potential event memory usage will be larger than the total memory available
-	if estimatedMemUsage > 0 {
-		if estimatedMemUsage > ap.TotalMemAvailable { // Prevent integer overflow
+	estimatedMemLeft := ap.TotalMemInstalled - resourceEstimates.EstimatedMemorySpent
+	// Check if potential event memory usage will be larger than the total memory installed (To prevent int from overflowing)
+	if resourceEstimates.EstimatedMemUsage > estimatedMemLeft { // Prevent integer overflow
+		log.Debug().Msg("to many resources requested from event")
+		ap.M.RUnlock()
+		return NoResourcesError
+	} else {
+		estimatedMemLeftAfterNewEvent := estimatedMemLeft - resourceEstimates.EstimatedMemUsage
+		log.Debug().Uint64("memAfterEvent", estimatedMemLeftAfterNewEvent).Msg("Total memory left when event is started")
+		if estimatedMemLeftAfterNewEvent < uint64(5000000000*len(ap.Agents)) { // Corresponding to having 5 gigs of ram left on each connected agent
 			log.Debug().Msg("to many resources requested from event")
 			ap.M.RUnlock()
 			return NoResourcesError
-		} else {
-			memoryLeft := ap.TotalMemAvailable - estimatedMemUsage
-			log.Debug().Uint64("memAfterEvent", memoryLeft).Msg("Total memory left when event is started")
-			if memoryLeft < uint64(5000000000*len(ap.Agents)) { // Corresponding to having 5 gigs of ram left on each connected agent
-				log.Debug().Msg("to many resources requested from event")
-				ap.M.RUnlock()
-				return NoResourcesError
-			}
 		}
 	}
 
@@ -404,23 +403,27 @@ func (ap *AgentPool) selectAgentForLab() (*Agent, error) {
 
 // Calculates initial lab weights based on remaining memory available on each agent
 // (Only relevant for beginner type events)
-func (ap *AgentPool) calculateWeights() {
+func (ap *AgentPool) calculateWeightsAndTotalMemoryInstalled() {
 	ap.M.Lock()
 	defer ap.M.Unlock()
-	var totalMemoryAvailable uint64
+	var totalMemoryAvailable uint64 //
+	var totalMemoryInstalled uint64
 	var availableAgents []*Agent
 	for _, agent := range ap.Agents {
 		// Exclude ag
 		// TODO Use a memory threshold instead of percentage
-		if agent.StateLock || agent.Resources.Memory > 90 {
+		log.Debug().Str("agent", agent.Name).Uint64("memInstalled", agent.Resources.MemoryInstalled).Msg("memory installed on agent")
+		if agent.StateLock {
 			ap.AgentWeights[agent.Name] = 0
 			continue
 		}
 		totalMemoryAvailable += agent.Resources.MemoryAvailable
+		totalMemoryInstalled += agent.Resources.MemoryInstalled
 		availableAgents = append(availableAgents, agent)
 	}
-	ap.TotalMemAvailable = totalMemoryAvailable
-	log.Debug().Uint64("total memory available", ap.TotalMemAvailable).Msg("total memory available")
+	ap.TotalMemInstalled = totalMemoryInstalled
+	log.Debug().Uint64("TotalMemInstalled", ap.TotalMemInstalled).Msg("total memory installed")
+	log.Debug().Uint64("totalMemoryAvailable", totalMemoryAvailable).Msg("total memory available")
 
 	for _, agent := range availableAgents {
 		if agent.StateLock {

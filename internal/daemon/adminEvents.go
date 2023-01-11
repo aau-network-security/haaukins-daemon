@@ -36,8 +36,8 @@ const (
 
 const (
 	displayTimeFormat        = "2006-01-02 15:04:05"
-	averageContainerMemUsage = 50 // MB found from running a lab with alot of containers and taking the average mem usage
-	labBaseMemoryUsage       = 100
+	averageContainerMemUsage = 50  // MB found from running a lab with alot of containers and taking the average mem usage
+	labBaseMemoryUsage       = 100 // In MB all labs have a DHCP and DNS container running
 )
 
 func (d *daemon) adminEventSubrouter(r *gin.RouterGroup) {
@@ -106,11 +106,8 @@ func (d *daemon) newEvent(c *gin.Context) {
 			}
 		}
 
-		estimatedMemUsage := uint64(0)
 		// only calculate if beginner event, as the resources are spun up from the beginning
-		if EventType(req.Type) == TypeBeginner {
-			estimatedMemUsage = calculateEstimatedEventMemUsage(exClientResp.Exercises, req.TeamSize, req.MaxLabs)
-		}
+		estimatedMemUsage, estimatedMemUsagePerLab := calculateEstimatedEventMemUsage(exClientResp.Exercises, req.TeamSize, req.MaxLabs, EventType(req.Type))
 
 		exists, err := d.db.CheckIfEventExist(ctx, req.Tag)
 		if err != nil {
@@ -124,7 +121,18 @@ func (d *daemon) newEvent(c *gin.Context) {
 			return
 		}
 
-		if err := d.agentPool.createNewEnvOnAvailableAgents(ctx, req, estimatedMemUsage); err != nil {
+		var estimatedMemSpent uint64 // Current resources spent on running labs
+		for _, event := range d.eventpool.Events {
+			estimatedMemSpent += event.EstimatedMemoryUsage
+		}
+
+		resourceEstimates := ResourceEstimates{
+			EstimatedMemUsage:       estimatedMemUsage,
+			EstimatedMemUsagePerLab: estimatedMemUsagePerLab,
+			EstimatedMemorySpent:    estimatedMemSpent,
+		}
+
+		if err := d.agentPool.createNewEnvOnAvailableAgents(ctx, req, resourceEstimates); err != nil {
 			if err == AllAgentsReturnedErr {
 				log.Error().Err(AllAgentsReturnedErr).Msg("error creating environments on all agents")
 				c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error... Agents may be out of resources"})
@@ -177,6 +185,8 @@ func (d *daemon) newEvent(c *gin.Context) {
 			TeamsWaitingForBrowserLabs: make(chan *Team),
 			UnassignedVpnLabs:          make(chan *AgentLab, req.MaxLabs),
 			TeamsWaitingForVpnLabs:     make(chan *Team),
+			EstimatedMemoryUsage:       estimatedMemUsage,
+			EstimatedMemoryUsagePerLab: estimatedMemUsagePerLab,
 		}
 		d.eventpool.AddEvent(event)
 
@@ -459,25 +469,28 @@ func removeDuplicates(exercises []string) []string {
 	return uniqueExercises
 }
 
-func calculateEstimatedEventMemUsage(exercises []*eproto.Exercise, teamSize, maxLabs int32) uint64 {
-	vmCount := 0
-	vmCount = int(teamSize) * int(maxLabs)
+// TODO add calculation for advanced events as well
+func calculateEstimatedEventMemUsage(exercises []*eproto.Exercise, teamSize, maxLabs int32, eventType EventType) (uint64, uint64) {
+	vmCountPerLab := int(teamSize)
 
-	containerCount := 0
-	for _, exercise := range exercises {
-		for _ = range exercise.Instance {
-			containerCount += 1
+	containerCountPerLab := 0
+	if eventType == TypeBeginner {
+		for _, exercise := range exercises {
+			for _ = range exercise.Instance {
+				containerCountPerLab += 1
+			}
 		}
-
+	} else {
+		containerCountPerLab = 5 // Advanced labs can have max 5 exercises running at a time
 	}
-	containerCount = containerCount*int(maxLabs) + 2*int(maxLabs)
 
-	log.Debug().Int("vmCoint", vmCount).Int("containerCount", containerCount).Msg("Calculated amount of virtual instances for beginner type event")
-	baseUsage := labBaseMemoryUsage * maxLabs * 1000000
+	estimatedMemUsagePerLab := uint64(vmCountPerLab)*(3074*1000000) + uint64(containerCountPerLab)*averageContainerMemUsage*1000000 + uint64(labBaseMemoryUsage)*1000000
+
+	log.Debug().Uint64("estimatedMemUsagePerLab", estimatedMemUsagePerLab).Int("vmCountPerLab", vmCountPerLab).Int("containerCountPerLab", containerCountPerLab).Msg("Calculated amount of virtual instances per lab")
 	// VMs idle at little over 2 gigs of ram and maximum 4 gigs of usage
 	// So assuming average consumption will be somewhere in the middle
-	estimatedMemUsage := uint64(vmCount)*(3074*1000000) + uint64(containerCount)*(averageContainerMemUsage*1000000) + uint64(baseUsage)
+	estimatedMemUsage := estimatedMemUsagePerLab * uint64(maxLabs)
 	log.Debug().Uint64("estimatedMemUsage", estimatedMemUsage).Msg("estimated memory usage for event")
 
-	return estimatedMemUsage
+	return estimatedMemUsage, estimatedMemUsagePerLab
 }

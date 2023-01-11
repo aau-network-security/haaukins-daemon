@@ -169,7 +169,7 @@ func New(conf *Config) (*daemon, error) {
 				SignKey:    a.SignKey,
 				TLSEnabled: a.Tls,
 			}
-			conn, err := NewAgentConnection(agentConfig)
+			conn, memoryInstalled, err := NewAgentConnection(agentConfig)
 			if err != nil {
 				log.Warn().Err(err).Msg("error connecting to agent at url: " + agentConfig.Grpc)
 				wg.Done()
@@ -181,6 +181,9 @@ func New(conf *Config) (*daemon, error) {
 					StateLock: a.Statelock,
 					Errors:    []error{},
 					Close:     cancel,
+					Resources: AgentResources{
+						MemoryInstalled: memoryInstalled,
+					},
 				}
 				if err := agentPool.connectToStreams(streamCtx, newLabs, agentToAdd, eventPool); err != nil {
 					log.Error().Err(err).Msg("error connecting to agent streams")

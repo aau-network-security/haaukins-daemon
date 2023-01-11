@@ -129,12 +129,12 @@ func NewExerciseClientConn(config ServiceConfig) (eproto.ExerciseStoreClient, er
 	return client, nil
 }
 
-func NewAgentConnection(config ServiceConfig) (*grpc.ClientConn, error) {
+func NewAgentConnection(config ServiceConfig) (*grpc.ClientConn, uint64, error) {
 	log.Debug().Str("url", config.Grpc).Msg("connecting to agent")
 	creds := enableClientCertificates()
 	authCreds, err := constructAuthCreds(config.AuthKey, config.SignKey)
 	if err != nil {
-		return nil, fmt.Errorf("[agent]: Error in constructing auth credentials %v", err)
+		return nil, 0, fmt.Errorf("[agent]: Error in constructing auth credentials %v", err)
 	}
 	if config.TLSEnabled {
 		log.Debug().Bool("TLS", config.TLSEnabled).Msg(" TLS for agent enabled, creating secure connection...")
@@ -148,18 +148,18 @@ func NewAgentConnection(config ServiceConfig) (*grpc.ClientConn, error) {
 
 		conn, err := grpc.Dial(config.Grpc, dialOpts...)
 		if err != nil {
-			return nil, TranslateRPCErr(err)
+			return nil, 0, TranslateRPCErr(err)
 		}
 		client := aproto.NewAgentClient(conn)
 		ctx := context.Background()
 		// Ping to make sure the sign and auth keys supplied are valid
 		pong, err := client.Ping(ctx, &proto.PingRequest{Ping: "ping"})
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		log.Debug().Str("pong", pong.Pong).Msg("recieved pong from agent")
 
-		return conn, nil
+		return conn, pong.MemInstalled, nil
 	}
 	authCreds.Insecure = true
 	dialOpts := []grpc.DialOption{
@@ -172,7 +172,7 @@ func NewAgentConnection(config ServiceConfig) (*grpc.ClientConn, error) {
 
 	conn, err := grpc.Dial(config.Grpc, dialOpts...)
 	if err != nil {
-		return nil, TranslateRPCErr(err)
+		return nil, 0, TranslateRPCErr(err)
 	}
 
 	client := aproto.NewAgentClient(conn)
@@ -180,9 +180,9 @@ func NewAgentConnection(config ServiceConfig) (*grpc.ClientConn, error) {
 	// Ping to make sure the sign and auth keys supplied are valid
 	pong, err := client.Ping(ctx, &proto.PingRequest{Ping: "ping"})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	log.Debug().Str("pong", pong.Pong).Msg("recieved pong from agent")
 
-	return conn, nil
+	return conn, pong.MemInstalled, nil
 }

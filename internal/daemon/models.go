@@ -52,6 +52,8 @@ type Event struct {
 	UnassignedVpnLabs          chan *AgentLab
 	TeamsWaitingForBrowserLabs chan *Team
 	TeamsWaitingForVpnLabs     chan *Team
+	EstimatedMemoryUsage       uint64
+	EstimatedMemoryUsagePerLab uint64
 }
 
 type EventConfig struct {
@@ -86,7 +88,13 @@ type AgentPool struct {
 	M                 sync.RWMutex
 	Agents            map[string]*Agent
 	AgentWeights      map[string]float64
-	TotalMemAvailable uint64
+	TotalMemInstalled uint64
+}
+
+type ResourceEstimates struct {
+	EstimatedMemUsage       uint64
+	EstimatedMemUsagePerLab uint64
+	EstimatedMemorySpent    uint64
 }
 
 type Agent struct {
@@ -101,12 +109,14 @@ type Agent struct {
 }
 
 type AgentResources struct {
-	Cpu             float64
-	Memory          float64
-	MemoryAvailable uint64
-	LabCount        uint32
-	VmCount         uint32
-	ContainerCount  uint32
+	Cpu                      float64
+	Memory                   float64
+	MemoryAvailable          uint64
+	MemoryInstalled          uint64
+	EstimatedMemoryAvailable uint64
+	LabCount                 uint32
+	VmCount                  uint32
+	ContainerCount           uint32
 }
 type AgentLab struct {
 	ParentAgent string

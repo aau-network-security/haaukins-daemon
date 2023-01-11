@@ -107,7 +107,7 @@ func (d *daemon) newAgent(c *gin.Context) {
 			SignKey:    req.SignKey,
 			TLSEnabled: req.Tls,
 		}
-		conn, err := NewAgentConnection(serviceConf)
+		conn, memoryInstalled, err := NewAgentConnection(serviceConf)
 		if err != nil {
 			log.Error().Err(err).Msg("error connecting to new agent")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: fmt.Sprintf("error connecting to new agent: %v", err)})
@@ -121,6 +121,9 @@ func (d *daemon) newAgent(c *gin.Context) {
 			StateLock: false,
 			Errors:    []error{},
 			Close:     cancel,
+			Resources: AgentResources{
+				MemoryInstalled: memoryInstalled,
+			},
 		}
 
 		if err := d.agentPool.connectToStreams(streamCtx, d.newLabs, agentForPool, d.eventpool); err != nil {
@@ -318,7 +321,7 @@ func (d *daemon) reconnectAgent(c *gin.Context) {
 			SignKey:    dbAgent.SignKey,
 			TLSEnabled: dbAgent.Tls,
 		}
-		conn, err := NewAgentConnection(serviceConf)
+		conn, memoryInstalled, err := NewAgentConnection(serviceConf)
 		if err != nil {
 			log.Error().Err(err).Msg("error reconnecting to agent")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: fmt.Sprintf("error reconnecting to agent: %v", err)})
@@ -332,6 +335,9 @@ func (d *daemon) reconnectAgent(c *gin.Context) {
 			StateLock: false,
 			Errors:    []error{},
 			Close:     cancel,
+			Resources: AgentResources{
+				MemoryInstalled: memoryInstalled,
+			},
 		}
 
 		if err := d.agentPool.connectToStreams(streamCtx, d.newLabs, agentForPool, d.eventpool); err != nil {
