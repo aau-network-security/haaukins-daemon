@@ -37,19 +37,21 @@ func (d *daemon) adminAgentsSubrouter(r *gin.RouterGroup) {
 type AgentRequest struct {
 	Name    string `json:"name"`
 	Url     string `json:"url,omitempty"`
+	Weight  int32  `json:"weight,omitempty"`
 	SignKey string `json:"signKey,omitempty"`
 	AuthKey string `json:"authKey,omitempty"`
 	Tls     bool   `json:"tls,omitempty"`
 }
 
 type AgentResponse struct {
-	Name       string `json:"name"`
-	Connected  bool   `json:"connected"`
-	Url        string `json:"url"`
-	SignKey    string `json:"signKey"`
-	AuthKey    string `json:"authKey"`
-	Tls        bool   `json:"tls"`
-	StateLock  bool   `json:"stateLock"`
+	Name      string `json:"name"`
+	Connected bool   `json:"connected"`
+	Url       string `json:"url"`
+	Weight    int32  `json:"weight,omitempty"`
+	SignKey   string `json:"signKey"`
+	AuthKey   string `json:"authKey"`
+	Tls       bool   `json:"tls"`
+	StateLock bool   `json:"stateLock"`
 }
 
 // Creates a new agent connection and stores connection information in the database
@@ -118,6 +120,7 @@ func (d *daemon) newAgent(c *gin.Context) {
 		agentForPool := &Agent{
 			Name:      req.Name,
 			Conn:      conn,
+			Weight:    req.Weight,
 			StateLock: false,
 			Errors:    []error{},
 			Close:     cancel,
@@ -138,6 +141,7 @@ func (d *daemon) newAgent(c *gin.Context) {
 		newAgentParams := db.InsertNewAgentParams{
 			Name:    req.Name,
 			Url:     req.Url,
+			Weight:  req.Weight,
 			Signkey: req.SignKey,
 			Authkey: req.AuthKey,
 			Tls:     req.Tls,
@@ -192,6 +196,7 @@ func (d *daemon) getAgents(c *gin.Context) {
 				aResp = AgentResponse{
 					Name:      a.Name,
 					Connected: false,
+					Weight:    a.Weight,
 					Url:       a.Url,
 					Tls:       a.Tls,
 				}
@@ -199,11 +204,12 @@ func (d *daemon) getAgents(c *gin.Context) {
 				continue
 			}
 			aResp = AgentResponse{
-				Name:       a.Name,
-				Connected:  true,
-				Url:        a.Url,
-				Tls:        a.Tls,
-				StateLock:  aFromPool.StateLock,
+				Name:      a.Name,
+				Connected: true,
+				Weight:    a.Weight,
+				Url:       a.Url,
+				Tls:       a.Tls,
+				StateLock: aFromPool.StateLock,
 			}
 			resp = append(resp, aResp)
 		}
@@ -332,6 +338,7 @@ func (d *daemon) reconnectAgent(c *gin.Context) {
 		agentForPool := &Agent{
 			Name:      dbAgent.Name,
 			Conn:      conn,
+			Weight:    dbAgent.Weight,
 			StateLock: false,
 			Errors:    []error{},
 			Close:     cancel,

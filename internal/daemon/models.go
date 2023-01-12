@@ -61,7 +61,7 @@ type EventConfig struct {
 	Name                  string    `json:"name" binding:"required"`
 	Tag                   string    `json:"tag" binding:"required"`
 	TeamSize              int32     `json:"teamSize" binding:"required"`
-	InitialLabs           int32     `json:"initialLabs,omitempty"`
+	InitialLabs           int32     `json:"initialLabs,omitempty"` // TODO Remove as this should no longre be used
 	MaxLabs               int32     `json:"maxLabs" binding:"required"`
 	VmName                string    `json:"vmName,omitempty"`
 	ExerciseTags          []string  `json:"exerciseTags" binding:"required"`
@@ -102,6 +102,7 @@ type Agent struct {
 	Conn        *grpc.ClientConn   `json:"-"`
 	Close       context.CancelFunc `json:"-"`
 	Resources   AgentResources
+	Weight      int32
 	QueuedTasks uint32
 	Heartbeat   string
 	StateLock   bool
@@ -119,8 +120,9 @@ type AgentResources struct {
 	ContainerCount           uint32
 }
 type AgentLab struct {
-	ParentAgent string
-	LabInfo     *aproto.Lab
+	ParentAgent          string
+	EstimatedMemoryUsage uint64
+	LabInfo              *aproto.Lab
 }
 
 type ExerciseStatus struct {

@@ -178,6 +178,7 @@ func New(conf *Config) (*daemon, error) {
 				var agentToAdd = &Agent{
 					Name:      a.Name,
 					Conn:      conn,
+					Weight:    a.Weight,
 					StateLock: a.Statelock,
 					Errors:    []error{},
 					Close:     cancel,
