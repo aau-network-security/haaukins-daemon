@@ -410,7 +410,7 @@ func (q *Queries) GetAdminUsers(ctx context.Context, organization interface{}) (
 }
 
 const getAgentByName = `-- name: GetAgentByName :one
-SELECT id, name, url, sign_key, auth_key, tls, statelock FROM agents WHERE lower(name) = lower($1)
+SELECT id, name, url, weight, sign_key, auth_key, tls, statelock FROM agents WHERE lower(name) = lower($1)
 `
 
 func (q *Queries) GetAgentByName(ctx context.Context, name string) (Agent, error) {
@@ -420,6 +420,7 @@ func (q *Queries) GetAgentByName(ctx context.Context, name string) (Agent, error
 		&i.ID,
 		&i.Name,
 		&i.Url,
+		&i.Weight,
 		&i.SignKey,
 		&i.AuthKey,
 		&i.Tls,
@@ -429,7 +430,7 @@ func (q *Queries) GetAgentByName(ctx context.Context, name string) (Agent, error
 }
 
 const getAgents = `-- name: GetAgents :many
-SELECT id, name, url, sign_key, auth_key, tls, statelock FROM agents
+SELECT id, name, url, weight, sign_key, auth_key, tls, statelock FROM agents
 `
 
 func (q *Queries) GetAgents(ctx context.Context) ([]Agent, error) {
@@ -445,6 +446,7 @@ func (q *Queries) GetAgents(ctx context.Context) ([]Agent, error) {
 			&i.ID,
 			&i.Name,
 			&i.Url,
+			&i.Weight,
 			&i.SignKey,
 			&i.AuthKey,
 			&i.Tls,
@@ -1073,12 +1075,13 @@ func (q *Queries) GetTeamFromEventByUsernameNoPw(ctx context.Context, arg GetTea
 }
 
 const insertNewAgent = `-- name: InsertNewAgent :exec
-INSERT INTO agents (name, url, sign_key, auth_key, tls, statelock) VALUES ($1, $2, $3, $4, $5, false)
+INSERT INTO agents (name, url, weight, sign_key, auth_key, tls, statelock) VALUES ($1, $2, $3, $4, $5, $6, false)
 `
 
 type InsertNewAgentParams struct {
 	Name    string
 	Url     string
+	Weight  int32
 	Signkey string
 	Authkey string
 	Tls     bool
@@ -1088,6 +1091,7 @@ func (q *Queries) InsertNewAgent(ctx context.Context, arg InsertNewAgentParams) 
 	_, err := q.db.ExecContext(ctx, insertNewAgent,
 		arg.Name,
 		arg.Url,
+		arg.Weight,
 		arg.Signkey,
 		arg.Authkey,
 		arg.Tls,

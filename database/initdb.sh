@@ -95,6 +95,7 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
                 id serial primary key,
                 name varchar (255) NOT NULL,
                 url varchar (255) NOT NULL,
+                weight integer NOT NULL,
                 sign_key varchar (255) NOT NULL,
                 auth_key varchar (255) NOT NULL,
                 tls boolean NOT NULL DEFAULT true,

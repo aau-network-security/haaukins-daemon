@@ -23,6 +23,7 @@ type Agent struct {
 	ID        int32
 	Name      string
 	Url       string
+	Weight    int32
 	SignKey   string
 	AuthKey   string
 	Tls       bool
