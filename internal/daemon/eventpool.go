@@ -45,6 +45,22 @@ func (ep *EventPool) GetEvent(eventTag string) (*Event, error) {
 	return event, nil
 }
 
+func (ep *EventPool) GetAllAgentLabsForAgent(agentName string) []*AgentLab {
+	ep.M.RLock()
+	defer ep.M.RUnlock()
+
+	var labsForAgent []*AgentLab
+	for _, event := range ep.Events {
+		for _, lab := range event.Labs {
+			if lab.ParentAgent == agentName {
+				labsForAgent = append(labsForAgent, lab)
+			}
+		}
+	}
+
+	return labsForAgent
+}
+
 // Event
 func (event *Event) GetTeam(username string) (*Team, error) {
 	event.M.RLock()

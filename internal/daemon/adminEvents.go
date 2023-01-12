@@ -38,6 +38,7 @@ const (
 	displayTimeFormat        = "2006-01-02 15:04:05"
 	averageContainerMemUsage = 50  // MB found from running a lab with alot of containers and taking the average mem usage
 	labBaseMemoryUsage       = 100 // In MB all labs have a DHCP and DNS container running
+	vmAvrMemoryUsage         = 3072
 )
 
 func (d *daemon) adminEventSubrouter(r *gin.RouterGroup) {
@@ -132,7 +133,7 @@ func (d *daemon) newEvent(c *gin.Context) {
 			EstimatedMemorySpent:    estimatedMemSpent,
 		}
 
-		if err := d.agentPool.createNewEnvOnAvailableAgents(ctx, req, resourceEstimates); err != nil {
+		if err := d.agentPool.createNewEnvOnAvailableAgents(ctx, d.eventpool, req,resourceEstimates); err != nil {
 			if err == AllAgentsReturnedErr {
 				log.Error().Err(AllAgentsReturnedErr).Msg("error creating environments on all agents")
 				c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error... Agents may be out of resources"})
@@ -484,7 +485,7 @@ func calculateEstimatedEventMemUsage(exercises []*eproto.Exercise, teamSize, max
 		containerCountPerLab = 5 // Advanced labs can have max 5 exercises running at a time
 	}
 
-	estimatedMemUsagePerLab := uint64(vmCountPerLab)*(3074*1000000) + uint64(containerCountPerLab)*averageContainerMemUsage*1000000 + uint64(labBaseMemoryUsage)*1000000
+	estimatedMemUsagePerLab := uint64(vmCountPerLab)*(vmAvrMemoryUsage*1000000) + uint64(containerCountPerLab)*averageContainerMemUsage*1000000 + uint64(labBaseMemoryUsage)*1000000
 
 	log.Debug().Uint64("estimatedMemUsagePerLab", estimatedMemUsagePerLab).Int("vmCountPerLab", vmCountPerLab).Int("containerCountPerLab", containerCountPerLab).Msg("Calculated amount of virtual instances per lab")
 	// VMs idle at little over 2 gigs of ram and maximum 4 gigs of usage
