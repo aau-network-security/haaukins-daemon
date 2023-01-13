@@ -7,6 +7,7 @@ import (
 
 	aproto "github.com/aau-network-security/haaukins-agent/pkg/proto"
 	"github.com/aau-network-security/haaukins-daemon/internal/db"
+	"github.com/aau-network-security/haaukins-exercises/proto"
 	"google.golang.org/grpc"
 )
 
@@ -28,14 +29,17 @@ type TeamClaims struct {
 }
 
 type APIResponse struct {
-	Status   string             `json:"status,omitempty"`
-	Token    string             `json:"token,omitempty"`
-	UserInfo *AdminUserReponse  `json:"userinfo,omitempty"`
-	Users    []AdminUserReponse `json:"users,omitempty"`
-	Orgs     []db.Organization  `json:"orgs,omitempty"`
-	Agents   []AgentResponse    `json:"agents,omitempty"`
-	Events   []db.Event         `json:"events,omitempty"`
-	TeamInfo *TeamResponse      `json:"teaminfo,omitempty"`
+	Status     string                                  `json:"status,omitempty"`
+	Token      string                                  `json:"token,omitempty"`
+	UserInfo   *AdminUserReponse                       `json:"userinfo,omitempty"`
+	Users      []AdminUserReponse                      `json:"users,omitempty"`
+	Exercises  []*proto.Exercise                       `json:"exercises,omitempty"`
+	Profiles   []ExerciseProfile                       `json:"profiles,omitempty"`
+	Categories []*proto.GetCategoriesResponse_Category `json:"categories,omitempty"`
+	Orgs       []db.Organization                       `json:"orgs,omitempty"`
+	Agents     []AgentResponse                         `json:"agents,omitempty"`
+	Events     []db.Event                              `json:"events,omitempty"`
+	TeamInfo   *TeamResponse                           `json:"teaminfo,omitempty"`
 }
 
 type EventPool struct {
@@ -80,6 +84,14 @@ type Team struct {
 	Status           TeamStatus
 	Lab              *AgentLab
 	RunningExercises map[string]struct{}
+}
+
+type ExerciseProfile struct {
+	Id           int32                         `json:"id"`
+	Name         string                        `json:"name"`
+	Secret       bool                          `json:"secret"`
+	Organization string                        `json:"organization"`
+	Exercises    []db.GetExercisesInProfileRow `json:"exercises,omitempty"`
 }
 
 // Agent related types

@@ -1,14 +1,26 @@
--- name: AddProfile :exec
-INSERT INTO profiles (name, secret) VALUES ($1, $2);
+-- name: AddProfile :one
+INSERT INTO profiles (name, secret, organization) VALUES (@profileName, @secret, @orgName) RETURNING id;
+
+-- name: AddProfileChallenge :exec
+INSERT INTO profile_challenges (tag, name, profile_id) VALUES (@tag, @name, @profileId);
 
 -- name: GetProfiles :many
-SELECT * FROM profiles ORDER BY id asc;
+SELECT * FROM profiles;
 
--- name: UpdateProfile :exec
--- UPDATE profiles SET secret = $1 WHERE name = $3;
+-- name: GetAllProfilesInOrg :many
+SELECT * FROM profiles WHERE lower(organization) = lower(@orgName);
+
+-- name: GetNonSecretProfilesInOrg :many
+SELECT * FROM profiles WHERE lower(organization) = lower(@orgName) and secret = FALSE;
+
+-- name: GetProfileByNameAndOrgName :one
+SELECT * FROM profiles WHERE lower(name) = @profileName AND lower(organization) = lower(@orgName);
+
+-- name: GetExercisesInProfile :many
+SELECT profile_challenges.id, profile_challenges.tag, profile_challenges.name  FROM profiles INNER JOIN profile_challenges ON profiles.id = profile_challenges.profile_id WHERE profiles.id = @profileId AND profiles.organization = @orgName ORDER BY profiles.id asc;
 
 -- name: DeleteProfile :exec
-DELETE FROM profiles WHERE name = $1;
+DELETE FROM profiles WHERE lower(name) = lower(@profileName) AND lower(organization) = lower(@orgName);
 
--- name: CheckProfileExists :one
-SELECT EXISTS(SELECT 1 FROM profiles WHERE name = $1);
+-- name: CheckIfProfileExists :one
+SELECT EXISTS(SELECT 1 FROM profiles WHERE lower(name) = lower(@profileName) AND lower(organization) = lower(@orgName));

@@ -69,7 +69,7 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
                 secret boolean NOT NULL, 
                 organization varchar(255) NOT NULL REFERENCES organizations (name) ON DELETE CASCADE
         );        
-        CREATE UNIQUE INDEX profilename_lower_index ON profiles (LOWER(name));
+        CREATE UNIQUE INDEX profilename_lower_index ON profiles (LOWER(name), LOWER(organization));
 
         CREATE TABLE IF NOT EXISTS profile_challenges (
                 id serial primary key,

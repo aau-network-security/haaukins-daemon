@@ -1,10 +1,14 @@
 package daemon
 
 import (
+	"bytes"
 	"fmt"
 	"regexp"
 
 	"github.com/gin-gonic/gin"
+	"github.com/microcosm-cc/bluemonday"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/renderer/html"
 )
 
 func unpackAdminClaims(c *gin.Context) AdminClaims {
@@ -46,4 +50,18 @@ func assemblePolicies(s [][]string, org string) ([][]string, error) {
 		policies = append(policies, policy)
 	}
 	return policies, nil
+}
+
+func sanitizeUnsafeMarkdown(md []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	renderer := goldmark.New(
+		goldmark.WithRendererOptions(html.WithUnsafe()),
+	)
+	if err := renderer.Convert(md, &buf); err != nil {
+		return nil, err
+	}
+	unsafeHtml := buf.Bytes()
+
+	html := bluemonday.UGCPolicy().SanitizeBytes(unsafeHtml)
+	return html, nil
 }
