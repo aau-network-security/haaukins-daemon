@@ -83,7 +83,7 @@ func (d *daemon) newEvent(c *gin.Context) {
 	}
 	if authorized, err := d.enforcer.BatchEnforce(casbinRequests); authorized[0] || err != nil {
 		if err != nil {
-			log.Error().Err(err).Msgf("Encountered an error while authorizing user creation")
+			log.Error().Err(err).Msgf("Encountered an error while authorizing event creation")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
 		}
@@ -102,7 +102,7 @@ func (d *daemon) newEvent(c *gin.Context) {
 		for _, exercise := range exClientResp.Exercises {
 			if exercise.Secret && !authorized[1] {
 				log.Warn().Msg("admin user without secret rights tried creating an event with secret challenges")
-				c.JSON(http.StatusUnauthorized, APIResponse{Status: "unauthorized"})
+				c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 				return
 			}
 		}
@@ -232,7 +232,7 @@ func (d *daemon) getEvents(c *gin.Context) {
 	}
 	if authorized, err := d.enforcer.BatchEnforce(casbinRequests); authorized[1] || err != nil {
 		if err != nil {
-			log.Error().Err(err).Msgf("Encountered an error while authorizing user creation")
+			log.Error().Err(err).Msgf("Encountered an error while authorizing list events")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
 		}
@@ -342,7 +342,7 @@ func (d *daemon) deleteEvent(c *gin.Context) {
 	}
 	if authorized, err := d.enforcer.BatchEnforce(casbinRequests); authorized[0] || err != nil {
 		if err != nil {
-			log.Error().Err(err).Msgf("Encountered an error while authorizing user creation")
+			log.Error().Err(err).Msgf("Encountered an error while authorizing event deletion")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
 		}
@@ -401,7 +401,7 @@ func (d *daemon) closeEvent(c *gin.Context) {
 	}
 	if authorized, err := d.enforcer.BatchEnforce(casbinRequests); authorized[0] || err != nil {
 		if err != nil {
-			log.Error().Err(err).Msgf("Encountered an error while authorizing user creation")
+			log.Error().Err(err).Msgf("Encountered an error while authorizing event closure")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
 		}
