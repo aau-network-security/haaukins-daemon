@@ -98,15 +98,16 @@ type ResourceEstimates struct {
 }
 
 type Agent struct {
-	Name        string
-	Conn        *grpc.ClientConn   `json:"-"`
-	Close       context.CancelFunc `json:"-"`
-	Resources   AgentResources
-	Weight      int32
-	QueuedTasks uint32
-	Heartbeat   string
-	StateLock   bool
-	Errors      []error
+	Name         string
+	Conn         *grpc.ClientConn   `json:"-"`
+	Close        context.CancelFunc `json:"-"`
+	Resources    AgentResources
+	Weight       int32
+	RequestsLeft int32 // Used for round robin algorithm
+	QueuedTasks  uint32
+	Heartbeat    string
+	StateLock    bool
+	Errors       []error
 }
 
 type AgentResources struct {

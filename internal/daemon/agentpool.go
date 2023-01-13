@@ -366,14 +366,7 @@ func (ap *AgentPool) calculateLabDistribution(agentsAvailable []*Agent, eventPoo
 				log.Debug().Int32("labsRemaining", labsRemainingToBeDistributed).Msg("Labs remaining")
 				log.Debug().Str("agentName", agent.Name).Int32("initialLabs", agentInitialLabs).Msg("InitialLabs for agent")
 
-				// Get all labs for a specific agent including their estimated resource usage
-				agentLabs := eventPool.GetAllAgentLabsForAgent(agent.Name)
-
-				// Summarize the currently estimated resource usage of an agent
-				var currentEstimatedLabConsumption uint64 = 0
-				for _, agentLab := range agentLabs {
-					currentEstimatedLabConsumption += agentLab.EstimatedMemoryUsage
-				}
+				currentEstimatedLabConsumption := agent.calculateCurrentEstimatedMemConsumption(eventPool)
 				log.Debug().Str("agentName", agent.Name).Uint64("currentEstimatedLabConsumption", currentEstimatedLabConsumption).Msg("Current summed memory usage estimation for agent")
 
 				// When adding remaining labs to an agent we have to take the estimated memory usage of labs already
@@ -470,85 +463,6 @@ func (ap *AgentPool) calculateLabDistribution(agentsAvailable []*Agent, eventPoo
 
 }
 
-// Creates a new environment on all available connected agents
-// func (ap *AgentPool) createNewEnvOnAvailableAgentsOld(ctx context.Context, config EventConfig, resourceEstimates ResourceEstimates) error {
-// 	// Concurrently start environments for event on all available agents
-// 	ap.M.RLock()
-// 	estimatedMemLeft := ap.TotalMemInstalled - resourceEstimates.EstimatedMemorySpent
-// 	// Check if potential event memory usage will be larger than the total memory installed (To prevent int from overflowing)
-// 	if resourceEstimates.EstimatedMemUsage > estimatedMemLeft { // Prevent integer overflow
-// 		log.Debug().Msg("to many resources requested from event")
-// 		ap.M.RUnlock()
-// 		return NoResourcesError
-// 	} else {
-// 		estimatedMemLeftAfterNewEvent := estimatedMemLeft - resourceEstimates.EstimatedMemUsage
-// 		log.Debug().Uint64("memAfterEvent", estimatedMemLeftAfterNewEvent).Msg("Total memory left when event is started")
-// 		if estimatedMemLeftAfterNewEvent < uint64(5000000000*len(ap.Agents)) { // Corresponding to having 5 gigs of ram left on each connected agent
-// 			log.Debug().Msg("to many resources requested from event")
-// 			ap.M.RUnlock()
-// 			return NoResourcesError
-// 		}
-// 	}
-
-// 	if len(ap.Agents) > 0 {
-// 		var m sync.Mutex
-// 		var wg sync.WaitGroup
-// 		var errs []error
-// 		for agentName, a := range ap.Agents {
-// 			// The initial amount of labs for a specific agent is determined based on the total initial labs needed
-// 			// And the weight calculated for that specific agent
-// 			if _, ok := ap.AgentWeights[agentName]; !ok {
-// 				log.Warn().Str("agent", agentName).Msg("no agent weight calculated for agent")
-// 				errs = append(errs, errors.New("no agent weight calculated for agent"))
-// 				continue
-// 			}
-// 			initialLabs := int32(math.Round(float64(config.InitialLabs) * ap.AgentWeights[agentName]))
-// 			log.Debug().Int32("labs", initialLabs).Str("agent", agentName).Msg("starting env with labs on agent")
-// 			envConfig := aproto.CreatEnvRequest{
-// 				EventTag: config.Tag,
-// 				EnvType:  config.Type,
-// 				// Just temporarily using hardcoded vm config
-// 				Vm: &aproto.VmConfig{
-// 					Image:    config.VmName,
-// 					MemoryMB: 4096,
-// 					Cpu:      0,
-// 				},
-// 				InitialLabs: initialLabs,
-// 				Exercises:   config.ExerciseTags,
-// 				TeamSize:    config.TeamSize,
-// 			}
-// 			wg.Add(1)
-// 			go func(conf *aproto.CreatEnvRequest, a *Agent) {
-// 				defer wg.Done()
-
-// 				if a.StateLock {
-// 					errs = append(errs, errors.New("agent is statelocked"))
-// 					log.Error().Str("agentName", a.Name).Msg("agent is statelocked")
-// 					return
-// 				}
-
-// 				client := aproto.NewAgentClient(a.Conn)
-
-// 				if _, err := client.CreateEnvironment(ctx, conf); err != nil {
-// 					log.Error().Err(err).Str("agentName", a.Name).Msg("error creating environment for agent")
-// 					m.Lock()
-// 					errs = append(errs, err)
-// 					m.Unlock()
-// 				}
-// 			}(&envConfig, a)
-// 		}
-// 		ap.M.RUnlock()
-// 		wg.Wait()
-
-// 		if len(errs) == len(ap.Agents) {
-// 			return AllAgentsReturnedErr
-// 		}
-// 	} else {
-// 		return NoAgentsConnected
-// 	}
-// 	return nil
-// }
-
 // Closes a specific environment on all agents
 func (ap *AgentPool) closeEnvironmentOnAllAgents(ctx context.Context, eventTag string) error {
 	ap.M.RLock()
@@ -591,16 +505,16 @@ func (ap *AgentPool) closeEnvironmentOnAllAgents(ctx context.Context, eventTag s
 }
 
 // Creates a lab for a specified event with a specified type
-func (ap *AgentPool) createLabForEvent(ctx context.Context, isVpn bool, eventTag string) error {
-	agentForLab, err := ap.selectAgentForLab()
+func (ap *AgentPool) createLabForEvent(ctx context.Context, isVpn bool, event *Event, eventPool *EventPool) error {
+	agentForLab, err := ap.selectAgentForLab(event.EstimatedMemoryUsagePerLab, eventPool)
 	if err != nil {
 		return errors.New("no suitable agent found")
 	}
-
+	log.Debug().Str("agent", agentForLab.Name).Int32("requestsLeft", agentForLab.RequestsLeft).Msg("agent selected for lab creation")
 	client := aproto.NewAgentClient(agentForLab.Conn)
 
 	req := &aproto.CreateLabRequest{
-		EventTag: eventTag,
+		EventTag: event.Config.Tag,
 		IsVPN:    isVpn,
 	}
 	if _, err := client.CreateLabForEnv(ctx, req); err != nil {
@@ -610,69 +524,58 @@ func (ap *AgentPool) createLabForEvent(ctx context.Context, isVpn bool, eventTag
 	return nil
 }
 
-// TODO: Use minRamLeft threshhold when selecting agent to make sure you dont overuse available resources
-// Selects the most suitable agent for a lab to be created
-// It chooses an agent either based on weight if all agents are idle or depending on the agent which has the least jobs waiting in queue
-func (ap *AgentPool) selectAgentForLab() (*Agent, error) {
-	ap.M.RLock()
-	defer ap.M.RUnlock()
-
-	var weightCandidates []*Agent
+func (ap *AgentPool) selectAgentForLab(estimatedMemUsagePerLab uint64, eventPool *EventPool) (*Agent, error) {
+	var availableAgents []*Agent
 	for _, agent := range ap.Agents {
-		if agent.QueuedTasks > 0 || agent.StateLock {
+		currentEstimatedMemConsumption := agent.calculateCurrentEstimatedMemConsumption(eventPool)
+		memConsumptionAfterNewLab := currentEstimatedMemConsumption + estimatedMemUsagePerLab
+		if agent.StateLock || memConsumptionAfterNewLab > agent.Resources.MemoryInstalled ||
+			agent.Resources.MemoryInstalled-memConsumptionAfterNewLab < MemoryThreshHold*(10^9) {
+			log.Debug().Str("agent", agent.Name).Uint64("currentConsumtion", currentEstimatedMemConsumption).
+				Uint64("memConsumptionAfterNewLab", memConsumptionAfterNewLab).Uint64("memInstalled", agent.Resources.MemoryInstalled).
+				Msg("Agent is not available to create labs")
 			continue
 		}
-		weightCandidates = append(weightCandidates, agent)
+		availableAgents = append(availableAgents, agent)
 	}
 
-	// If all agents currently have queued tasks
-	if len(weightCandidates) == 0 {
-		log.Debug().Msg("choosing agent based on amount queued tasks")
-		var agentWithLeastTasks *Agent
-		first := true
-		for _, agent := range ap.Agents {
-			if agent.StateLock {
-				continue
-			}
-			if first {
-				agentWithLeastTasks = agent
-				first = false
-				continue
-			}
-			if agent.QueuedTasks < agentWithLeastTasks.QueuedTasks {
-				agentWithLeastTasks = agent
-			}
-		}
-		if agentWithLeastTasks == nil {
-			return nil, errors.New("no suitable agent found")
-		}
-		return agentWithLeastTasks, nil
+	if len(availableAgents) == 0 {
+		return nil, errors.New("no agents currently available")
 	}
 
-	// If one or all agents have 0 queued tasks
-	// TODO If using weights, CPU should probably also play a role
-	log.Debug().Msg("choosing agent based on amount weights")
-	var agentWithHigestWeight *Agent
+SelectAgent:
+	var agentWithMaxWeight *Agent = &Agent{
+		Name:   "placeholder",
+		Weight: 0,
+	}
 	first := true
-	for _, agent := range weightCandidates {
-		if agent.StateLock {
-			continue
-		}
-		if first {
-			agentWithHigestWeight = agent
+	for _, agent := range availableAgents {
+		if first && agent.RequestsLeft > 0 {
 			first = false
-			continue
+			agentWithMaxWeight = agent
 		}
-		if ap.AgentWeights[agent.Name] > ap.AgentWeights[agentWithHigestWeight.Name] {
-			agentWithHigestWeight = agent
+		if agent.Weight > agentWithMaxWeight.Weight && agent.RequestsLeft > 0 {
+			agentWithMaxWeight = agent
 		}
 	}
-	if agentWithHigestWeight == nil {
-		return nil, errors.New("no suitable agent found")
+	if agentWithMaxWeight.Name != "placeholder" {
+		agentWithMaxWeight.RequestsLeft -= 1
+	} else { // No requests left on available agents, resetting
+		log.Debug().Msg("Resetting requests left for all agents")
+		ap.resetRequestsLeft()
+		goto SelectAgent
 	}
 
-	log.Debug().Str("agent", agentWithHigestWeight.Name).Msg("agent with highest weight")
-	return agentWithHigestWeight, nil
+	return agentWithMaxWeight, nil
+}
+
+func (ap *AgentPool) resetRequestsLeft() {
+	ap.M.Lock()
+	defer ap.M.Unlock()
+
+	for _, agent := range ap.Agents {
+		agent.RequestsLeft = agent.Weight
+	}
 }
 
 // Calculates initial lab weights based on remaining memory available on each agent
@@ -710,4 +613,19 @@ func (ap *AgentPool) calculateWeightsAndTotalMemoryInstalled() {
 		ap.AgentWeights[agent.Name] = weight
 		//log.Debug().Float64("calculated weight", ap.AgentWeights[agent.Name]).Msgf("weight for agent: %s", agent.Name)
 	}
+}
+
+// Agent
+
+func (agent *Agent) calculateCurrentEstimatedMemConsumption(eventPool *EventPool) uint64 {
+	// Get all labs for a specific agent including their estimated resource usage
+	agentLabs := eventPool.GetAllAgentLabsForAgent(agent.Name)
+
+	// Summarize the currently estimated resource usage of an agent
+	var currentEstimatedLabConsumption uint64 = 0
+	for _, agentLab := range agentLabs {
+		currentEstimatedLabConsumption += agentLab.EstimatedMemoryUsage
+	}
+
+	return currentEstimatedLabConsumption
 }

@@ -176,12 +176,13 @@ func New(conf *Config) (*daemon, error) {
 			} else {
 				streamCtx, cancel := context.WithCancel(context.Background())
 				var agentToAdd = &Agent{
-					Name:      a.Name,
-					Conn:      conn,
-					Weight:    a.Weight,
-					StateLock: a.Statelock,
-					Errors:    []error{},
-					Close:     cancel,
+					Name:         a.Name,
+					Conn:         conn,
+					Weight:       a.Weight,
+					RequestsLeft: a.Weight,
+					StateLock:    a.Statelock,
+					Errors:       []error{},
+					Close:        cancel,
 					Resources: AgentResources{
 						MemoryInstalled: memoryInstalled,
 					},

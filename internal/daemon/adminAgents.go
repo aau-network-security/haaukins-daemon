@@ -118,12 +118,13 @@ func (d *daemon) newAgent(c *gin.Context) {
 
 		streamCtx, cancel := context.WithCancel(context.Background())
 		agentForPool := &Agent{
-			Name:      req.Name,
-			Conn:      conn,
-			Weight:    req.Weight,
-			StateLock: false,
-			Errors:    []error{},
-			Close:     cancel,
+			Name:         req.Name,
+			Conn:         conn,
+			Weight:       req.Weight,
+			RequestsLeft: req.Weight,
+			StateLock:    false,
+			Errors:       []error{},
+			Close:        cancel,
 			Resources: AgentResources{
 				MemoryInstalled: memoryInstalled,
 			},
@@ -336,12 +337,13 @@ func (d *daemon) reconnectAgent(c *gin.Context) {
 
 		streamCtx, cancel := context.WithCancel(context.Background())
 		agentForPool := &Agent{
-			Name:      dbAgent.Name,
-			Conn:      conn,
-			Weight:    dbAgent.Weight,
-			StateLock: false,
-			Errors:    []error{},
-			Close:     cancel,
+			Name:         dbAgent.Name,
+			Conn:         conn,
+			Weight:       dbAgent.Weight,
+			RequestsLeft: dbAgent.Weight,
+			StateLock:    false,
+			Errors:       []error{},
+			Close:        cancel,
 			Resources: AgentResources{
 				MemoryInstalled: memoryInstalled,
 			},

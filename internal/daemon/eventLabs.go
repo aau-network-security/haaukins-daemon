@@ -69,13 +69,13 @@ func (d *daemon) configureLab(c *gin.Context) {
 		return
 	}
 
-	if err := d.agentPool.createLabForEvent(ctx, req.IsVpn, event.Config.Tag); err != nil {
+	if err := d.agentPool.createLabForEvent(ctx, req.IsVpn, event, d.eventpool); err != nil {
 		log.Error().Err(err).Msg("Error creating lab")
 		c.JSON(http.StatusInternalServerError, APIResponse{Status: "error when creating lab, please try again..."})
 		return
 	}
 
-	// Add to queue
+	//Add team to queue
 	if req.IsVpn {
 		go func() {
 			defer func() {
