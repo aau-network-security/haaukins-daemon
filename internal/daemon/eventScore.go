@@ -28,3 +28,16 @@ func calculateScore(eventConf EventConfig, solves int) int {
 	}
 	return int(math.Round(math.Max(f(float64(solves)), f(s))))
 }
+
+// ctx := context.Background()
+// eventConf := EventConfig{
+// 	DynamicMax:            2000,
+// 	DynamicMin:            50,
+// 	DynamicSolveThreshold: 200,
+// }
+// c.JSON(http.StatusOK, calculateScore(eventConf, 50))
+// res, err := d.db.GetEventSolvesMap(ctx, 4)
+// if err != nil {
+// 	log.Error().Err(err).Msg("error getting solves for event")
+// }
+// c.JSON(http.StatusOK, res)
