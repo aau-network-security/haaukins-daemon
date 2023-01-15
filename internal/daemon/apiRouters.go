@@ -15,4 +15,5 @@ func (d *daemon) adminSubrouter(r *gin.RouterGroup) {
 func (d *daemon) eventSubrouter(r *gin.RouterGroup) {
 	d.eventTeamSubrouter(r)
 	d.eventLabsSubrouter(r)
+	d.eventExercisesSubrouter(r)
 }

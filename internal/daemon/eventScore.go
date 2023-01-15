@@ -21,7 +21,14 @@ func dynB(solves float64) float64 {
 	return (dynA((c1-c0)*solves+c0) - dynA(c1)) / (dynA(c0) - dynA(c1))
 }
 
-func calculateScore(eventConf EventConfig, solves int) int {
+// Returns the dynamic score of an exercise based on the amount of solves.
+//
+// To get the score of the exercise for the next solve, you just pass the direct amount of solves.
+//
+// To get a current teams score you need to take the amount of solves for the exercise
+// and substract 1
+func calculateScore(eventConf EventConfig, solves float64) int {
+	solves = math.Max(0, solves)
 	s := math.Max(1, float64(eventConf.DynamicSolveThreshold))
 	f := func(solves float64) float64 {
 		return float64(eventConf.DynamicMin) + (float64(eventConf.DynamicMax)-float64(eventConf.DynamicMin))*dynB(solves/s)

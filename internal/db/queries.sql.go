@@ -107,6 +107,27 @@ func (q *Queries) AddProfileChallenge(ctx context.Context, arg AddProfileChallen
 	return err
 }
 
+const addSolveForTeamInEvent = `-- name: AddSolveForTeamInEvent :exec
+INSERT INTO solves (tag, event_id, team_id, solved_at) VALUES ($1, $2, $3, $4)
+`
+
+type AddSolveForTeamInEventParams struct {
+	Tag      string
+	Eventid  int32
+	Teamid   int32
+	Solvedat time.Time
+}
+
+func (q *Queries) AddSolveForTeamInEvent(ctx context.Context, arg AddSolveForTeamInEventParams) error {
+	_, err := q.db.ExecContext(ctx, addSolveForTeamInEvent,
+		arg.Tag,
+		arg.Eventid,
+		arg.Teamid,
+		arg.Solvedat,
+	)
+	return err
+}
+
 const addTeam = `-- name: AddTeam :exec
 INSERT INTO teams (tag, event_id, email, username, password, created_at, last_access) VALUES ($1, $2, $3, $4, $5, $6, $7)
 `
@@ -1234,39 +1255,12 @@ func (q *Queries) GetTeamFromEventByUsernameNoPw(ctx context.Context, arg GetTea
 	return column_1, err
 }
 
-const insertNewAgent = `-- name: InsertNewAgent :exec
-INSERT INTO agents (name, url, weight, sign_key, auth_key, tls, statelock) VALUES ($1, $2, $3, $4, $5, $6, false)
-`
-
-type InsertNewAgentParams struct {
-	Name    string
-	Url     string
-	Weight  int32
-	Signkey string
-	Authkey string
-	Tls     bool
-}
-
-func (q *Queries) InsertNewAgent(ctx context.Context, arg InsertNewAgentParams) error {
-	_, err := q.db.ExecContext(ctx, insertNewAgent,
-		arg.Name,
-		arg.Url,
-		arg.Weight,
-		arg.Signkey,
-		arg.Authkey,
-		arg.Tls,
-	)
-	return err
-}
-
-const teamSolvedChls = `-- name: TeamSolvedChls :many
-
+const getTeamsForEvent = `-- name: GetTeamsForEvent :many
 SELECT id, tag, event_id, email, username, password, created_at, last_access FROM teams WHERE event_id=$1
 `
 
-// SELECT solved_challenges FROM teams WHERE tag=$1;
-func (q *Queries) TeamSolvedChls(ctx context.Context, eventID int32) ([]Team, error) {
-	rows, err := q.db.QueryContext(ctx, teamSolvedChls, eventID)
+func (q *Queries) GetTeamsForEvent(ctx context.Context, eventID int32) ([]Team, error) {
+	rows, err := q.db.QueryContext(ctx, getTeamsForEvent, eventID)
 	if err != nil {
 		return nil, err
 	}
@@ -1295,6 +1289,31 @@ func (q *Queries) TeamSolvedChls(ctx context.Context, eventID int32) ([]Team, er
 		return nil, err
 	}
 	return items, nil
+}
+
+const insertNewAgent = `-- name: InsertNewAgent :exec
+INSERT INTO agents (name, url, weight, sign_key, auth_key, tls, statelock) VALUES ($1, $2, $3, $4, $5, $6, false)
+`
+
+type InsertNewAgentParams struct {
+	Name    string
+	Url     string
+	Weight  int32
+	Signkey string
+	Authkey string
+	Tls     bool
+}
+
+func (q *Queries) InsertNewAgent(ctx context.Context, arg InsertNewAgentParams) error {
+	_, err := q.db.ExecContext(ctx, insertNewAgent,
+		arg.Name,
+		arg.Url,
+		arg.Weight,
+		arg.Signkey,
+		arg.Authkey,
+		arg.Tls,
+	)
+	return err
 }
 
 const updateAdminEmail = `-- name: UpdateAdminEmail :exec
@@ -1370,19 +1389,17 @@ func (q *Queries) UpdateOrganization(ctx context.Context, arg UpdateOrganization
 	return err
 }
 
-const updateTeamSolvedChl = `-- name: UpdateTeamSolvedChl :exec
-
+const updateTeamPassword = `-- name: UpdateTeamPassword :exec
 UPDATE teams SET password = $1 WHERE tag = $2 and event_id = $3
 `
 
-type UpdateTeamSolvedChlParams struct {
+type UpdateTeamPasswordParams struct {
 	Password string
 	Tag      string
 	EventID  int32
 }
 
-// UPDATE teams SET solved_challenges = $2 WHERE tag = $1;
-func (q *Queries) UpdateTeamSolvedChl(ctx context.Context, arg UpdateTeamSolvedChlParams) error {
-	_, err := q.db.ExecContext(ctx, updateTeamSolvedChl, arg.Password, arg.Tag, arg.EventID)
+func (q *Queries) UpdateTeamPassword(ctx context.Context, arg UpdateTeamPasswordParams) error {
+	_, err := q.db.ExecContext(ctx, updateTeamPassword, arg.Password, arg.Tag, arg.EventID)
 	return err
 }

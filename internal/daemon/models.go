@@ -29,17 +29,19 @@ type TeamClaims struct {
 }
 
 type APIResponse struct {
-	Status     string                                  `json:"status,omitempty"`
-	Token      string                                  `json:"token,omitempty"`
-	UserInfo   *AdminUserReponse                       `json:"userinfo,omitempty"`
-	Users      []AdminUserReponse                      `json:"users,omitempty"`
-	Exercises  []*proto.Exercise                       `json:"exercises,omitempty"`
-	Profiles   []ExerciseProfile                       `json:"profiles,omitempty"`
-	Categories []*proto.GetCategoriesResponse_Category `json:"categories,omitempty"`
-	Orgs       []db.Organization                       `json:"orgs,omitempty"`
-	Agents     []AgentResponse                         `json:"agents,omitempty"`
-	Events     []db.Event                              `json:"events,omitempty"`
-	TeamInfo   *TeamResponse                           `json:"teaminfo,omitempty"`
+	Status         string                                  `json:"status,omitempty"`
+	Token          string                                  `json:"token,omitempty"`
+	UserInfo       *AdminUserReponse                       `json:"userinfo,omitempty"`
+	Users          []AdminUserReponse                      `json:"users,omitempty"`
+	Exercises      []*proto.Exercise                       `json:"exercises,omitempty"`
+	Profiles       []ExerciseProfile                       `json:"profiles,omitempty"`
+	EventExercises []EventExercise                         `json:"eventExercises,omitempty"`
+	TeamLab        *AgentLab                               `json:"teamLab,omitempty"`
+	Categories     []*proto.GetCategoriesResponse_Category `json:"categories,omitempty"`
+	Orgs           []db.Organization                       `json:"orgs,omitempty"`
+	Agents         []AgentResponse                         `json:"agents,omitempty"`
+	Events         []db.Event                              `json:"events,omitempty"`
+	TeamInfo       *TeamResponse                           `json:"teaminfo,omitempty"`
 }
 
 type EventPool struct {
@@ -111,6 +113,8 @@ type ResourceEstimates struct {
 
 type Agent struct {
 	Name         string
+	Url          string
+	Tls          bool
 	Conn         *grpc.ClientConn   `json:"-"`
 	Close        context.CancelFunc `json:"-"`
 	Resources    AgentResources
@@ -132,10 +136,16 @@ type AgentResources struct {
 	VmCount                  uint32
 	ContainerCount           uint32
 }
+
+type ParentAgent struct {
+	Name string `json:"name"`
+	Url  string `json:"url"`
+	Tls  bool   `json:"tls"`
+}
 type AgentLab struct {
-	ParentAgent          string
-	EstimatedMemoryUsage uint64
-	LabInfo              *aproto.Lab
+	ParentAgent          ParentAgent `json:"parentAgent"`
+	EstimatedMemoryUsage uint64      `json:"-"`
+	LabInfo              *aproto.Lab `json:"labInfo"`
 }
 
 type ExerciseStatus struct {

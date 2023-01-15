@@ -17,15 +17,31 @@ type TeamStatus uint8
 const (
 	WaitingForLab TeamStatus = iota
 	InQueue
+	RunningExerciseCommand
 	Idle
 )
+
+func (status TeamStatus) String() string {
+	switch status {
+	case WaitingForLab:
+		return "waiting for lab"
+	case InQueue:
+		return "in lab queue"
+	case RunningExerciseCommand:
+		return "running exercise command"
+	case Idle:
+		return "idle"
+	default:
+		return "unknown"
+	}
+}
 
 func (d *daemon) eventLabsSubrouter(r *gin.RouterGroup) {
 	labs := r.Group("/labs")
 
 	labs.Use(d.eventAuthMiddleware())
 	labs.POST("", d.configureLab)
-	labs.GET("", d.getLab)
+	labs.GET("", d.getLabInfo)
 	labs.GET("/resetlab", d.resetLab)
 	labs.GET("/resetvm", d.resetVm)
 }
@@ -106,8 +122,40 @@ func (d *daemon) configureLab(c *gin.Context) {
 }
 
 // Gets lab info for the requesting team
-func (d *daemon) getLab(c *gin.Context) {
+func (d *daemon) getLabInfo(c *gin.Context) {
+	teamClaims := unpackTeamClaims(c)
 
+	event, err := d.eventpool.GetEvent(teamClaims.EventTag)
+	if err != nil {
+		log.Error().Err(err).Msg("could not find event in event pool")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "event for team is not currently running"})
+		return
+	}
+
+	team, err := event.GetTeam(teamClaims.Username)
+	if err != nil {
+		log.Error().Err(err).Msg("could not find team for event")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "could not find team for event"})
+		return
+	}
+
+	if team.Lab == nil {
+		log.Debug().Str("team", team.Username).Msg("no lab configured for team or team still in queue")
+		c.JSON(http.StatusNotFound, APIResponse{Status: "lab not found"})
+		return
+	}
+
+	for _, exercise := range team.Lab.LabInfo.Exercises {
+		for _, childExercise := range exercise.ChildExercises {
+			childExercise.Flag = ""
+		}
+		for _, machine := range exercise.Machines {
+			machine.Image = ""
+			machine.Type = ""
+		}
+	}
+
+	c.JSON(http.StatusOK, APIResponse{Status: "OK", TeamLab: team.Lab})
 }
 
 // Can be used by teams to completely reset their lab

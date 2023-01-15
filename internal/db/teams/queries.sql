@@ -13,14 +13,8 @@ SELECT (username, email) FROM teams WHERE lower(username) = lower(@username) AND
 -- name: DeleteTeam :exec
 DELETE FROM teams WHERE tag=$1 and event_id = $2;
 
--- name: UpdateTeamSolvedChl :exec
---UPDATE teams SET solved_challenges = $2 WHERE tag = $1;
-
 -- name: UpdateTeamPassword :exec
 UPDATE teams SET password = $1 WHERE tag = $2 and event_id = $3;
-
--- name: TeamSolvedChls :many
--- SELECT solved_challenges FROM teams WHERE tag=$1;
 
 -- name: GetTeamsForEvent :many
 SELECT * FROM teams WHERE event_id=$1;
