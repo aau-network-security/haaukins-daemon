@@ -196,6 +196,8 @@ func (d *daemon) teamSignup(c *gin.Context) {
 	}
 	event.AddTeam(team)
 
+	saveState(d.eventpool, d.conf.StatePath)
+
 	if EventType(dbEvent.Type) == TypeBeginner {
 		// Put team into waitingForLabs Queue if beginner type event
 		go func() {

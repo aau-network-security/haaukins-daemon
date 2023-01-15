@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	aproto "github.com/aau-network-security/haaukins-agent/pkg/proto"
 	"github.com/aau-network-security/haaukins-daemon/internal/db"
 	eproto "github.com/aau-network-security/haaukins-exercises/proto"
 	"github.com/casbin/casbin/v2"
@@ -30,7 +29,6 @@ type daemon struct {
 	auditLogger *zerolog.Logger
 	enforcer    *casbin.Enforcer
 	cache       *redis.Client
-	newLabs     chan aproto.Lab //TODO Might actually not be used, removal is pending
 	eventpool   *EventPool
 	m           sync.RWMutex
 }
@@ -80,6 +78,14 @@ func NewConfigFromFile(path string) (*Config, error) {
 		dir, _ := os.Getwd()
 		c.AuditLog.Directory = filepath.Join(dir, "logs")
 	}
+	// In case paths has not been set, use working directory
+	pwd, err := os.Getwd()
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to get current working directory")
+	}
+	if c.StatePath == "" {
+		c.StatePath = filepath.Join(pwd, "state")
+	}
 
 	if c.AuditLog.FileName == "" {
 		c.AuditLog.FileName = "audit.log"
@@ -126,6 +132,14 @@ func NewConfigFromFile(path string) (*Config, error) {
 func New(conf *Config) (*daemon, error) {
 	ctx := context.Background()
 	log.Info().Msg("Creating daemon...")
+
+	// Setting up the state path
+	if _, err := os.Stat(conf.StatePath); errors.Is(err, os.ErrNotExist) {
+		err := os.Mkdir(conf.StatePath, os.ModePerm)
+		if err != nil {
+			log.Error().Err(err).Msg("Error creating dir")
+		}
+	}
 	// TODO rewrte init function if filtered adapter is used
 	//Setting up database connection
 	dbConn, gormDb, err := conf.Database.InitConn()
@@ -141,7 +155,20 @@ func New(conf *Config) (*daemon, error) {
 
 	}
 
-	newLabs := make(chan aproto.Lab, 1000)
+	eventPool, err := resumeState(conf.StatePath)
+	if err != nil {
+		eventPool = &EventPool{
+			M:      sync.RWMutex{},
+			Events: make(map[string]*Event),
+		}
+	}
+	if eventPool == nil {
+		eventPool = &EventPool{
+			M:      sync.RWMutex{},
+			Events: make(map[string]*Event),
+		}
+	}
+	
 
 	// Connecting to all haaukins agents
 	log.Info().Msg("Connecting to haaukins agents...")
@@ -154,10 +181,7 @@ func New(conf *Config) (*daemon, error) {
 		M:            sync.RWMutex{},
 		AgentWeights: make(map[string]float64),
 	}
-	eventPool := &EventPool{
-		M:      sync.RWMutex{},
-		Events: make(map[string]*Event),
-	}
+	
 	var wg sync.WaitGroup
 	var m sync.Mutex
 	for _, a := range agentsInDb {
@@ -189,7 +213,7 @@ func New(conf *Config) (*daemon, error) {
 						MemoryInstalled: memoryInstalled,
 					},
 				}
-				if err := agentPool.connectToStreams(streamCtx, newLabs, agentToAdd, eventPool); err != nil {
+				if err := agentPool.connectToStreams(streamCtx, agentToAdd, eventPool, conf.StatePath); err != nil {
 					log.Error().Err(err).Msg("error connecting to agent streams")
 					wg.Done()
 					return
@@ -261,7 +285,6 @@ func New(conf *Config) (*daemon, error) {
 		agentPool:   agentPool,
 		auditLogger: &auditLogger,
 		enforcer:    enforcer,
-		newLabs:     newLabs,
 		eventpool:   eventPool,
 	}
 	return d, nil

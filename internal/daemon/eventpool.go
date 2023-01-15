@@ -85,7 +85,7 @@ func (event *Event) AddTeam(team *Team) {
 // Then waits for a lab to become available
 // When a labs enters the unassigned lab queue, it will assign the lab to the team previously pulled
 // Relies heavily on the blocking functionality of channels
-func (event *Event) startQueueHandlers() {
+func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string) {
 	browserQueueHandler := func() {
 		for {
 			log.Debug().Msg("Waiting for teams to enter browser lab queue")
@@ -114,6 +114,8 @@ func (event *Event) startQueueHandlers() {
 			team.Lab = lab
 			team.Status = Idle
 			team.M.Unlock()
+
+			saveState(eventPool, statePath)
 			// TODO Assign labs but first implement correct object to be sent between agent and daemon
 		}
 	}
@@ -145,8 +147,9 @@ func (event *Event) startQueueHandlers() {
 			team.Lab = lab
 			team.Status = Idle
 			team.M.Unlock()
-			// TODO Assign labs but first implement correct object to be sent between agent and daemon
 
+			saveState(eventPool, statePath)
+			// TODO Assign labs but first implement correct object to be sent between agent and daemon
 		}
 	}
 

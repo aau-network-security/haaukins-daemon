@@ -42,15 +42,15 @@ var (
 )
 
 // Connects the daemon to an agent's streams (monitoring etc.)
-func (ap *AgentPool) connectToStreams(ctx context.Context, newLabs chan aproto.Lab, a *Agent, eventPool *EventPool) error {
-	if err := ap.connectToMonitoringStream(ctx, newLabs, a, eventPool); err != nil {
+func (ap *AgentPool) connectToStreams(ctx context.Context, a *Agent, eventPool *EventPool, statePath string) error {
+	if err := ap.connectToMonitoringStream(ctx, a, eventPool, statePath); err != nil {
 		return err
 	}
 	return nil
 }
 
 // Send a heartbeat to all agents in the database, remove/add agent if connection status changes
-func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, newLabs chan aproto.Lab, a *Agent, eventPool *EventPool) error {
+func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, a *Agent, eventPool *EventPool, statePath string) error {
 	client := aproto.NewAgentClient(a.Conn)
 	stream, err := client.MonitorStream(routineCtx)
 	log.Debug().Msg("connecting to monitor stream")
@@ -58,7 +58,7 @@ func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, newLa
 		return fmt.Errorf("error connecting to labStream: %v", err)
 	}
 
-	go func(ctx context.Context, stream aproto.Agent_MonitorStreamClient, newLabs chan aproto.Lab) {
+	go func(ctx context.Context, stream aproto.Agent_MonitorStreamClient) {
 		for {
 			select {
 			case <-ctx.Done():
@@ -108,6 +108,7 @@ func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, newLa
 						}
 						event.UnassignedVpnLabs <- agentLab
 						event.Labs[l.Tag] = agentLab
+						saveState(eventPool, statePath)
 						continue
 					}
 					agentLab := &AgentLab{
@@ -121,6 +122,7 @@ func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, newLa
 					}
 					event.UnassignedBrowserLabs <- agentLab
 					event.Labs[l.Tag] = agentLab
+					saveState(eventPool, statePath)
 					continue
 				}
 				ap.updateAgentMetrics(a.Name, msg)
@@ -128,7 +130,7 @@ func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, newLa
 			}
 			time.Sleep(1 * time.Second)
 		}
-	}(routineCtx, stream, newLabs)
+	}(routineCtx, stream)
 	return nil
 }
 

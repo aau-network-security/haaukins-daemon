@@ -1,5 +1,6 @@
 host: localhost
 port: 8080
+state-path: /path/to/state/dir
 
 auditLog: 
   directory: /path/to/log/dir

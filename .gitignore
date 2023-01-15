@@ -9,3 +9,4 @@ casbin.md
 .env
 .data
 .logs
+state/state.json

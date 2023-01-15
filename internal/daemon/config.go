@@ -12,6 +12,7 @@ type Config struct {
 	JwtSecret       string        `yaml:"jwtSecret,omitempty"`
 	Rechaptcha      string        `yaml:"recaptcha-key,omitempty"`
 	APICreds        APICreds      `yaml:"api-creds,omitempty"`
+	StatePath       string        `yaml:"state-path,omitempty"`
 }
 
 type Logging struct {

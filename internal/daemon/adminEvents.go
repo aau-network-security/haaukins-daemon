@@ -191,7 +191,9 @@ func (d *daemon) newEvent(c *gin.Context) {
 		}
 		d.eventpool.AddEvent(event)
 
-		event.startQueueHandlers()
+		event.startQueueHandlers(d.eventpool, d.conf.StatePath)
+
+		saveState(d.eventpool, d.conf.StatePath)
 
 		// Since environment successfully
 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
@@ -437,6 +439,8 @@ func (d *daemon) closeEvent(c *gin.Context) {
 		if err := d.eventpool.RemoveEvent(event.Tag); err != nil {
 			log.Warn().Msg("event not found in event pool, something else has removed")
 		}
+
+		saveState(d.eventpool, d.conf.StatePath)
 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 		return
 	}

@@ -46,21 +46,21 @@ type APIResponse struct {
 }
 
 type EventPool struct {
-	M      sync.RWMutex
-	Events map[string]*Event
+	M      sync.RWMutex      `json:"-"`
+	Events map[string]*Event `json:"events,omitempty"`
 }
 
 type Event struct {
-	M                          sync.RWMutex
-	Config                     EventConfig
-	Teams                      map[string]*Team
-	Labs                       map[string]*AgentLab
-	UnassignedBrowserLabs      chan *AgentLab
-	UnassignedVpnLabs          chan *AgentLab
-	TeamsWaitingForBrowserLabs chan *Team
-	TeamsWaitingForVpnLabs     chan *Team
-	EstimatedMemoryUsage       uint64
-	EstimatedMemoryUsagePerLab uint64
+	M                          sync.RWMutex         `json:"-"`
+	Config                     EventConfig          `json:"config,omitempty"`
+	Teams                      map[string]*Team     `json:"teams,omitempty"`
+	Labs                       map[string]*AgentLab `json:"labs,omitempty"`
+	UnassignedBrowserLabs      chan *AgentLab       `json:"-"`
+	UnassignedVpnLabs          chan *AgentLab       `json:"-"`
+	TeamsWaitingForBrowserLabs chan *Team           `json:"-"`
+	TeamsWaitingForVpnLabs     chan *Team           `json:"-"`
+	EstimatedMemoryUsage       uint64               `json:"estimatedMemoryUsage,omitempty"`
+	EstimatedMemoryUsagePerLab uint64               `json:"estimatedMemoryUsagePerLab,omitempty"`
 }
 
 type EventConfig struct {
@@ -81,12 +81,12 @@ type EventConfig struct {
 }
 
 type Team struct {
-	M                sync.RWMutex
-	Username         string
-	Email            string
-	Status           TeamStatus
-	Lab              *AgentLab
-	RunningExercises map[string]struct{}
+	M                sync.RWMutex        `json:"-"`
+	Username         string              `json:"username,omitempty"`
+	Email            string              `json:"email,omitempty"`
+	Status           TeamStatus          `json:"status,omitempty"`
+	Lab              *AgentLab           `json:"lab,omitempty"`
+	RunningExercises map[string]struct{} `json:"RunningExercises,omitempty"`
 }
 
 type ExerciseProfile struct {
@@ -144,9 +144,9 @@ type ParentAgent struct {
 	Tls  bool   `json:"tls"`
 }
 type AgentLab struct {
-	ParentAgent          ParentAgent `json:"parentAgent"`
-	EstimatedMemoryUsage uint64      `json:"-"`
-	LabInfo              *aproto.Lab `json:"labInfo"`
+	ParentAgent          ParentAgent `json:"parentAgent,omitempty"`
+	EstimatedMemoryUsage uint64      `json:"estimatedMemoryUsage,omitempty"`
+	LabInfo              *aproto.Lab `json:"labInfo,omitempty"`
 }
 
 type ExerciseStatus struct {

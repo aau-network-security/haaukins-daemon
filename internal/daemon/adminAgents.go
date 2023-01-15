@@ -132,7 +132,7 @@ func (d *daemon) newAgent(c *gin.Context) {
 			},
 		}
 
-		if err := d.agentPool.connectToStreams(streamCtx, d.newLabs, agentForPool, d.eventpool); err != nil {
+		if err := d.agentPool.connectToStreams(streamCtx, agentForPool, d.eventpool, d.conf.StatePath); err != nil {
 			log.Error().Err(err).Msg("error connecting to agent streams")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: fmt.Sprintf("error connecting to agent streams: %v", err)})
 			return
@@ -353,7 +353,7 @@ func (d *daemon) reconnectAgent(c *gin.Context) {
 			},
 		}
 
-		if err := d.agentPool.connectToStreams(streamCtx, d.newLabs, agentForPool, d.eventpool); err != nil {
+		if err := d.agentPool.connectToStreams(streamCtx, agentForPool, d.eventpool, d.conf.StatePath); err != nil {
 			log.Error().Err(err).Msg("error connecting to agent streams")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: fmt.Sprintf("error connecting to agent streams: %v", err)})
 			return
