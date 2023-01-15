@@ -213,7 +213,7 @@ func (d *daemon) teamSignup(c *gin.Context) {
 
 	// For debugging purposes
 	for _, lab := range d.eventpool.Events[event.Config.Tag].Labs {
-		log.Debug().Str("labTag", lab.LabInfo.Tag).Str("labParentAgent", lab.ParentAgent).Msg("lab in event")
+		log.Debug().Str("labTag", lab.LabInfo.Tag).Str("labParentAgent", lab.ParentAgent.Url).Msg("lab in event")
 	}
 	c.JSON(http.StatusOK, APIResponse{Status: "OK", Token: token})
 }

@@ -98,7 +98,11 @@ func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, newLa
 
 					if l.IsVPN {
 						agentLab := &AgentLab{
-							ParentAgent:          a.Name,
+							ParentAgent: ParentAgent{
+								Name: a.Name,
+								Url:  a.Url,
+								Tls:  a.Tls,
+							},
 							EstimatedMemoryUsage: event.EstimatedMemoryUsagePerLab - vmAvrMemoryUsage,
 							LabInfo:              l,
 						}
@@ -107,7 +111,11 @@ func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, newLa
 						continue
 					}
 					agentLab := &AgentLab{
-						ParentAgent:          a.Name,
+						ParentAgent: ParentAgent{
+							Name: a.Name,
+							Url:  a.Url,
+							Tls:  a.Tls,
+						},
 						EstimatedMemoryUsage: event.EstimatedMemoryUsagePerLab,
 						LabInfo:              l,
 					}

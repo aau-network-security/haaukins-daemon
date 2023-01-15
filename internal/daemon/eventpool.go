@@ -52,7 +52,7 @@ func (ep *EventPool) GetAllAgentLabsForAgent(agentName string) []*AgentLab {
 	var labsForAgent []*AgentLab
 	for _, event := range ep.Events {
 		for _, lab := range event.Labs {
-			if lab.ParentAgent == agentName {
+			if lab.ParentAgent.Name == agentName {
 				labsForAgent = append(labsForAgent, lab)
 			}
 		}

@@ -119,6 +119,8 @@ func (d *daemon) newAgent(c *gin.Context) {
 		streamCtx, cancel := context.WithCancel(context.Background())
 		agentForPool := &Agent{
 			Name:         req.Name,
+			Url:          req.Url,
+			Tls:          req.Tls,
 			Conn:         conn,
 			Weight:       req.Weight,
 			RequestsLeft: req.Weight,
@@ -338,6 +340,8 @@ func (d *daemon) reconnectAgent(c *gin.Context) {
 		streamCtx, cancel := context.WithCancel(context.Background())
 		agentForPool := &Agent{
 			Name:         dbAgent.Name,
+			Url:          dbAgent.Url,
+			Tls:          dbAgent.Tls,
 			Conn:         conn,
 			Weight:       dbAgent.Weight,
 			RequestsLeft: dbAgent.Weight,

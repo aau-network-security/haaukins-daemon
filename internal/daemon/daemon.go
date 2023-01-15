@@ -177,6 +177,8 @@ func New(conf *Config) (*daemon, error) {
 				streamCtx, cancel := context.WithCancel(context.Background())
 				var agentToAdd = &Agent{
 					Name:         a.Name,
+					Url:          a.Url,
+					Tls:          a.Tls,
 					Conn:         conn,
 					Weight:       a.Weight,
 					RequestsLeft: a.Weight,
