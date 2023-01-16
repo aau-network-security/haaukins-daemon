@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"container/list"
 	"context"
 	"sync"
 	"time"
@@ -57,11 +58,14 @@ type Event struct {
 	Labs                       map[string]*AgentLab `json:"labs,omitempty"`
 	UnassignedBrowserLabs      chan *AgentLab       `json:"-"`
 	UnassignedVpnLabs          chan *AgentLab       `json:"-"`
-	TeamsWaitingForBrowserLabs chan *Team           `json:"-"`
-	TeamsWaitingForVpnLabs     chan *Team           `json:"-"`
+	TeamsWaitingForBrowserLabs *list.List           `json:"-"`
+	TeamsWaitingForVpnLabs     *list.List           `json:"-"`
 	EstimatedMemoryUsage       uint64               `json:"estimatedMemoryUsage,omitempty"`
 	EstimatedMemoryUsagePerLab uint64               `json:"estimatedMemoryUsagePerLab,omitempty"`
 }
+
+// TeamsWaitingForBrowserLabs chan *Team           `json:"-"`
+// TeamsWaitingForVpnLabs     chan *Team           `json:"-"`
 
 type EventConfig struct {
 	Type                  int32     `json:"type"`

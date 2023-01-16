@@ -199,18 +199,9 @@ func (d *daemon) teamSignup(c *gin.Context) {
 	saveState(d.eventpool, d.conf.StatePath)
 
 	if EventType(dbEvent.Type) == TypeBeginner {
-		// Put team into waitingForLabs Queue if beginner type event
-		go func() {
-			defer func() {
-				if recover() != nil {
-					log.Debug().Msg("channel closed while sending team to queue")
-				}
-			}()
-			team.Status = InQueue
-			log.Info().Str("username", team.Username).Msg("putting team into queue for beginner lab")
-			event.TeamsWaitingForBrowserLabs <- team
-			log.Info().Str("username", team.Username).Msg("team got taken out of beginner queue, exiting go routine")
-		}()
+		team.Status = InQueue
+		log.Info().Str("username", team.Username).Msg("putting team into queue for beginner lab")
+		event.TeamsWaitingForBrowserLabs.PushBack(team)
 	}
 
 	// For debugging purposes

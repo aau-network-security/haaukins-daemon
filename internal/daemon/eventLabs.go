@@ -93,30 +93,14 @@ func (d *daemon) configureLab(c *gin.Context) {
 
 	//Add team to queue
 	if req.IsVpn {
-		go func() {
-			defer func() {
-				if recover() != nil {
-					log.Debug().Msg("channel closed while sending team to queue")
-				}
-			}()
-			team.Status = InQueue
-			log.Info().Str("username", team.Username).Msg("putting team into queue for vpn lab")
-			event.TeamsWaitingForVpnLabs <- team
-			log.Info().Str("username", team.Username).Msg("team got taken out of vpn queue, exiting go routine")
-		}()
-		return
-	}
-	go func() {
-		defer func() {
-			if recover() != nil {
-				log.Debug().Msg("channel closed while sending team to queue")
-			}
-		}()
 		team.Status = InQueue
 		log.Info().Str("username", team.Username).Msg("putting team into queue for vpn lab")
-		event.TeamsWaitingForBrowserLabs <- team
-		log.Info().Str("username", team.Username).Msg("team got taken out of vpn queue, exiting go routine")
-	}()
+		event.TeamsWaitingForVpnLabs.PushBack(team)
+		return
+	}
+	team.Status = InQueue
+	log.Info().Str("username", team.Username).Msg("putting team into queue for vpn lab")
+	event.TeamsWaitingForBrowserLabs.PushBack(team)
 
 	c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 }

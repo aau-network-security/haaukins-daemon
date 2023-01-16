@@ -24,8 +24,6 @@ func (ep *EventPool) RemoveEvent(eventTag string) error {
 	if !ok {
 		return fmt.Errorf("could not find event with tag: %s ", eventTag)
 	}
-	close(event.TeamsWaitingForBrowserLabs)
-	close(event.TeamsWaitingForVpnLabs)
 	close(event.UnassignedBrowserLabs)
 	close(event.UnassignedVpnLabs)
 
@@ -87,15 +85,16 @@ func (event *Event) AddTeam(team *Team) {
 // Relies heavily on the blocking functionality of channels
 func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string) {
 	browserQueueHandler := func() {
+		log.Debug().Msg("Waiting for teams to enter browser lab queue")
 		for {
-			log.Debug().Msg("Waiting for teams to enter browser lab queue")
-			team, ok := <-event.TeamsWaitingForBrowserLabs
-			if ok {
-				log.Debug().Msgf("pulled team from browser queue: %v", team)
-			} else {
-				log.Debug().Msg("channel closed closing browserQueueHandler")
-				return
+			e := event.TeamsWaitingForBrowserLabs.Front()
+			if e == nil {
+				continue	
 			}
+			log.Debug().Msg("team pulled from browser queue")
+			event.TeamsWaitingForBrowserLabs.Remove(e)
+
+			team := e.Value.(*Team)
 			team.M.Lock()
 			team.Status = WaitingForLab
 			team.M.Unlock()
@@ -121,16 +120,16 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string) {
 	}
 
 	vpnQueueHandler := func() {
-		for {
-			log.Debug().Msg("Waiting for team to enter vpn lab queue")
-
-			team, ok := <-event.TeamsWaitingForVpnLabs
-			if ok {
-				log.Debug().Msgf("pulled team from vpn queue: %v", team)
-			} else {
-				log.Debug().Msg("channel closed closing vpnQueueHandler")
-				return
+		log.Debug().Msg("Waiting for team to enter vpn lab queue")
+		for {			
+			e := event.TeamsWaitingForVpnLabs.Front()
+			if e == nil {
+				continue	
 			}
+			event.TeamsWaitingForVpnLabs.Remove(e)
+			log.Debug().Msg("team pulled from vpn queue")
+
+			team := e.Value.(*Team)
 			team.M.Lock()
 			team.Status = WaitingForLab
 			team.M.Unlock()

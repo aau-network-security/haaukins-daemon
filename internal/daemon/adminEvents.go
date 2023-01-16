@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"container/list"
 	"context"
 	"database/sql"
 	"fmt"
@@ -133,7 +134,7 @@ func (d *daemon) newEvent(c *gin.Context) {
 			EstimatedMemorySpent:    estimatedMemSpent,
 		}
 
-		if err := d.agentPool.createNewEnvOnAvailableAgents(ctx, d.eventpool, req,resourceEstimates); err != nil {
+		if err := d.agentPool.createNewEnvOnAvailableAgents(ctx, d.eventpool, req, resourceEstimates); err != nil {
 			if err == AllAgentsReturnedErr {
 				log.Error().Err(AllAgentsReturnedErr).Msg("error creating environments on all agents")
 				c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error... Agents may be out of resources"})
@@ -183,9 +184,9 @@ func (d *daemon) newEvent(c *gin.Context) {
 			Teams:                      make(map[string]*Team),
 			Labs:                       make(map[string]*AgentLab),
 			UnassignedBrowserLabs:      make(chan *AgentLab, req.MaxLabs),
-			TeamsWaitingForBrowserLabs: make(chan *Team),
+			TeamsWaitingForBrowserLabs: list.New(),
 			UnassignedVpnLabs:          make(chan *AgentLab, req.MaxLabs),
-			TeamsWaitingForVpnLabs:     make(chan *Team),
+			TeamsWaitingForVpnLabs:     list.New(),
 			EstimatedMemoryUsage:       estimatedMemUsage,
 			EstimatedMemoryUsagePerLab: estimatedMemUsagePerLab,
 		}

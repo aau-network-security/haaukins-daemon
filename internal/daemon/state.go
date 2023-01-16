@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"container/list"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -51,9 +52,9 @@ func resumeState(statePath string) (*EventPool, error) {
 
 	for _, event := range state.EventPool.Events {
 		event.UnassignedBrowserLabs = make(chan *AgentLab, event.Config.MaxLabs)
-		event.TeamsWaitingForBrowserLabs = make(chan *Team)
+		event.TeamsWaitingForBrowserLabs = list.New()
 		event.UnassignedVpnLabs = make(chan *AgentLab, event.Config.MaxLabs)
-		event.TeamsWaitingForVpnLabs = make(chan *Team)
+		event.TeamsWaitingForVpnLabs = list.New()
 		if event.Teams == nil {
 			log.Debug().Msgf("event teams is nil")
 			event.Teams = make(map[string]*Team)
