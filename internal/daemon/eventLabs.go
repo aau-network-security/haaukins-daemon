@@ -95,13 +95,14 @@ func (d *daemon) configureLab(c *gin.Context) {
 	if req.IsVpn {
 		team.Status = InQueue
 		log.Info().Str("username", team.Username).Msg("putting team into queue for vpn lab")
-		event.TeamsWaitingForVpnLabs.PushBack(team)
+		queueElement := event.TeamsWaitingForVpnLabs.PushBack(team)
+		team.QueueElement = queueElement
 		return
 	}
 	team.Status = InQueue
 	log.Info().Str("username", team.Username).Msg("putting team into queue for vpn lab")
-	event.TeamsWaitingForBrowserLabs.PushBack(team)
-
+	queueElement := event.TeamsWaitingForBrowserLabs.PushBack(team)
+	team.QueueElement = queueElement
 	c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 }
 

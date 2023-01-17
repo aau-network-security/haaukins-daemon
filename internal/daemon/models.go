@@ -58,7 +58,7 @@ type Event struct {
 	Labs                       map[string]*AgentLab `json:"labs,omitempty"`
 	UnassignedBrowserLabs      chan *AgentLab       `json:"-"`
 	UnassignedVpnLabs          chan *AgentLab       `json:"-"`
-	TeamsWaitingForBrowserLabs *list.List           `json:"-"`
+	TeamsWaitingForBrowserLabs *list.List           `json:"-"` // Using linked list in order to remove teams from the queue again
 	TeamsWaitingForVpnLabs     *list.List           `json:"-"`
 	EstimatedMemoryUsage       uint64               `json:"estimatedMemoryUsage,omitempty"`
 	EstimatedMemoryUsagePerLab uint64               `json:"estimatedMemoryUsagePerLab,omitempty"`
@@ -91,6 +91,7 @@ type Team struct {
 	Status           TeamStatus          `json:"status,omitempty"`
 	Lab              *AgentLab           `json:"lab,omitempty"`
 	RunningExercises map[string]struct{} `json:"RunningExercises,omitempty"`
+	QueueElement     *list.Element       `json:"-"`
 }
 
 type ExerciseProfile struct {
