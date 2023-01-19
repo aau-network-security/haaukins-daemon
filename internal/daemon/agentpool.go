@@ -59,6 +59,11 @@ func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, a *Ag
 	}
 
 	go func(ctx context.Context, stream aproto.Agent_MonitorStreamClient) {
+		defer func() {
+			if recover() != nil {
+				log.Debug().Msg("channel closed while sending team to queue")
+			}
+		}()
 		for {
 			select {
 			case <-ctx.Done():
