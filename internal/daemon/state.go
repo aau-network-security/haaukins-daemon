@@ -50,6 +50,10 @@ func resumeState(statePath string) (*EventPool, error) {
 		return nil, nil
 	}
 
+	if state.EventPool.Events == nil {
+		state.EventPool.Events = make(map[string]*Event)
+	}
+
 	for _, event := range state.EventPool.Events {
 		event.UnassignedBrowserLabs = make(chan *AgentLab, event.Config.MaxLabs)
 		event.TeamsWaitingForBrowserLabs = list.New()

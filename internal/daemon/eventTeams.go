@@ -19,6 +19,9 @@ func (d *daemon) eventTeamSubrouter(r *gin.RouterGroup) {
 	team.POST("/login", d.teamLogin)
 	team.POST("/signup", d.teamSignup)
 
+	team.Use(d.eventAuthMiddleware())
+	team.GET("/:teamName", d.getTeam)
+
 }
 
 type TeamRequest struct {
@@ -27,11 +30,6 @@ type TeamRequest struct {
 	Email     string `json:"email"`
 	EventTag  string `json:"eventTag"`
 	SecretKey string `json:"secretKey"`
-}
-
-type TeamResponse struct {
-	Username string `json:"username"`
-	Email    string `json:"email"`
 }
 
 func (d *daemon) teamLogin(c *gin.Context) {
@@ -84,17 +82,12 @@ func (d *daemon) teamLogin(c *gin.Context) {
 		return
 	}
 
-	teamInfo := &TeamResponse{
-		Username: dbTeam.Username,
-		Email:    dbTeam.Email,
-	}
-
 	event, _ := d.eventpool.GetEvent(req.EventTag)
 
 	// Debugging purposes only
 	team, _ := event.GetTeam(dbTeam.Username)
 	log.Debug().Msgf("team: %v", team.Lab)
-	c.JSON(http.StatusOK, APIResponse{Status: "OK", Token: token, TeamInfo: teamInfo})
+	c.JSON(http.StatusOK, APIResponse{Status: "OK", Token: token, TeamInfo: team})
 }
 
 // TODO Add measures to verify email address
@@ -209,7 +202,27 @@ func (d *daemon) teamSignup(c *gin.Context) {
 	for _, lab := range d.eventpool.Events[event.Config.Tag].Labs {
 		log.Debug().Str("labTag", lab.LabInfo.Tag).Str("labParentAgent", lab.ParentAgent.Url).Msg("lab in event")
 	}
-	c.JSON(http.StatusOK, APIResponse{Status: "OK", Token: token})
+	c.JSON(http.StatusOK, APIResponse{Status: "OK", Token: token, TeamInfo: team})
+}
+
+func (d *daemon) getTeam(c *gin.Context) {
+	teamClaims := unpackTeamClaims(c)
+
+	event, err := d.eventpool.GetEvent(teamClaims.EventTag)
+	if err != nil {
+		log.Error().Err(err).Msg("could not find event in event pool")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "event for team is not currently running"})
+		return
+	}
+
+	team, err := event.GetTeam(teamClaims.Username)
+	if err != nil {
+		log.Error().Err(err).Msg("could not find team for event")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "could not find team for event"})
+		return
+	}
+
+	c.JSON(http.StatusOK, APIResponse{Status: "OK", TeamInfo: team})
 }
 
 // TODO When email functionality has been implemented, make reset password function

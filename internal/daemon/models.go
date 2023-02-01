@@ -42,7 +42,7 @@ type APIResponse struct {
 	Orgs           []db.Organization                       `json:"orgs,omitempty"`
 	Agents         []AgentResponse                         `json:"agents,omitempty"`
 	Events         []db.Event                              `json:"events,omitempty"`
-	TeamInfo       *TeamResponse                           `json:"teaminfo,omitempty"`
+	TeamInfo       *Team                           `json:"teaminfo,omitempty"`
 	EventInfo      *EventInfoResponse                      `json:"eventinfo,omitempty"`
 }
 
@@ -88,7 +88,7 @@ type Team struct {
 	M                sync.RWMutex        `json:"-"`
 	Username         string              `json:"username,omitempty"`
 	Email            string              `json:"email,omitempty"`
-	Status           TeamStatus          `json:"status,omitempty"`
+	Status           TeamStatus          `json:"status"`
 	Lab              *AgentLab           `json:"lab,omitempty"`
 	RunningExercises map[string]struct{} `json:"RunningExercises,omitempty"`
 	QueueElement     *list.Element       `json:"-"`
