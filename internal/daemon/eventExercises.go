@@ -234,7 +234,7 @@ func (d *daemon) solveExercise(c *gin.Context) {
 		for _, instance := range exClientResp.Exercises[0].Instance {
 			for _, childExercise := range instance.Children {
 				staticFlag := strings.Trim(childExercise.Static, " ")
-				log.Debug().Str("flagFromLab", staticFlag).Str("flagFromRequest", req.Flag).Msg("comparing flags")
+				log.Debug().Str("exTag", childExercise.Tag).Str("flagFromLab", staticFlag).Str("flagFromRequest", req.Flag).Msg("comparing flags")
 				if childExercise.Tag == req.Tag && staticFlag == strings.Trim(req.Flag, " ") {
 					addSolveParams := db.AddSolveForTeamInEventParams{
 						Tag:      req.Tag,
@@ -261,7 +261,7 @@ func (d *daemon) solveExercise(c *gin.Context) {
 			for _, childExercise := range exercise.ChildExercises {
 				if childExercise.Tag == req.Tag {
 					flag := strings.Trim(childExercise.Flag, " ")
-					log.Debug().Str("flagFromLab", flag).Str("flagFromRequest", req.Flag).Msg("comparing flags")
+					log.Debug().Str("exTag", childExercise.Tag).Str("flagFromLab", flag).Str("flagFromRequest", req.Flag).Msg("comparing flags")
 					if flag == strings.Trim(req.Flag, " ") {
 						addSolveParams := db.AddSolveForTeamInEventParams{
 							Tag:      req.Tag,
