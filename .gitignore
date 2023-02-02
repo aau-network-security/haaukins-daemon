@@ -5,3 +5,8 @@ build-errors.log
 main
 logs
 .VSCodeCounter
+casbin.md
+.env
+.data
+.logs
+state/state.json

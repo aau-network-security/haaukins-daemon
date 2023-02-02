@@ -9,7 +9,9 @@ import (
 	"strings"
 	"time"
 
-	eproto "github.com/aau-network-security/haaukins-daemon/internal/exercise/ex-proto"
+	"github.com/aau-network-security/haaukins-agent/pkg/proto"
+	aproto "github.com/aau-network-security/haaukins-agent/pkg/proto"
+	eproto "github.com/aau-network-security/haaukins-exercises/proto"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
@@ -27,13 +29,6 @@ var (
 	UnreachableDBErr = errors.New("Database seems to be unreachable")
 	UnauthorizedErr  = errors.New("You seem to not be logged in")
 )
-
-type ServiceConfig struct {
-	Grpc    string
-	AuthKey string
-	SignKey string
-	Enabled bool
-}
 
 type Creds struct {
 	Token    string
@@ -109,8 +104,8 @@ func NewExerciseClientConn(config ServiceConfig) (eproto.ExerciseStoreClient, er
 	if err != nil {
 		return nil, fmt.Errorf("[exercise-service]: Error in constructing auth credentials %v", err)
 	}
-	if config.Enabled {
-		log.Debug().Bool("TLS", config.Enabled).Msg(" secure connection enabled for creating secure [exercise-service] client")
+	if config.TLSEnabled {
+		log.Debug().Bool("TLS", config.TLSEnabled).Msg("TLS for exercise service is enabled, creating secure connection...")
 		dialOpts := []grpc.DialOption{
 			grpc.WithTransportCredentials(creds),
 			grpc.WithPerRPCCredentials(authCreds),
@@ -132,4 +127,62 @@ func NewExerciseClientConn(config ServiceConfig) (eproto.ExerciseStoreClient, er
 	}
 	client := eproto.NewExerciseStoreClient(conn)
 	return client, nil
+}
+
+func NewAgentConnection(config ServiceConfig) (*grpc.ClientConn, uint64, error) {
+	log.Debug().Str("url", config.Grpc).Msg("connecting to agent")
+	creds := enableClientCertificates()
+	authCreds, err := constructAuthCreds(config.AuthKey, config.SignKey)
+	if err != nil {
+		return nil, 0, fmt.Errorf("[agent]: Error in constructing auth credentials %v", err)
+	}
+	if config.TLSEnabled {
+		log.Debug().Bool("TLS", config.TLSEnabled).Msg(" TLS for agent enabled, creating secure connection...")
+		dialOpts := []grpc.DialOption{
+			grpc.WithTransportCredentials(creds),
+			grpc.WithPerRPCCredentials(authCreds),
+			grpc.WithBlock(),
+			grpc.WithReturnConnectionError(),
+			grpc.WithTimeout(time.Second * 3),
+		}
+
+		conn, err := grpc.Dial(config.Grpc, dialOpts...)
+		if err != nil {
+			return nil, 0, TranslateRPCErr(err)
+		}
+		client := aproto.NewAgentClient(conn)
+		ctx := context.Background()
+		// Ping to make sure the sign and auth keys supplied are valid
+		pong, err := client.Ping(ctx, &proto.PingRequest{Ping: "ping"})
+		if err != nil {
+			return nil, 0, err
+		}
+		log.Debug().Str("pong", pong.Pong).Msg("recieved pong from agent")
+
+		return conn, pong.MemInstalled, nil
+	}
+	authCreds.Insecure = true
+	dialOpts := []grpc.DialOption{
+		grpc.WithInsecure(),
+		grpc.WithPerRPCCredentials(authCreds),
+		grpc.WithBlock(),
+		grpc.WithReturnConnectionError(),
+		grpc.WithTimeout(time.Second * 3),
+	}
+
+	conn, err := grpc.Dial(config.Grpc, dialOpts...)
+	if err != nil {
+		return nil, 0, TranslateRPCErr(err)
+	}
+
+	client := aproto.NewAgentClient(conn)
+	ctx := context.Background()
+	// Ping to make sure the sign and auth keys supplied are valid
+	pong, err := client.Ping(ctx, &proto.PingRequest{Ping: "ping"})
+	if err != nil {
+		return nil, 0, err
+	}
+	log.Debug().Str("pong", pong.Pong).Msg("recieved pong from agent")
+
+	return conn, pong.MemInstalled, nil
 }

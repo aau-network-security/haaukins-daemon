@@ -2,12 +2,14 @@ package daemon
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
-	"github.com/aau-network-security/haaukins-daemon/internal/database"
+	"github.com/aau-network-security/haaukins-daemon/internal/db"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
@@ -16,16 +18,21 @@ import (
 type adminUserRequest struct {
 	Username            string `json:"username,omitempty"`
 	Password            string `json:"password,omitempty"`
+	FullName            string `json:"fullName,omitempty"`
 	Email               string `json:"email,omitempty"`
-	RoleId              int32  `json:"role_id,omitempty"`
-	OrganizationId      int32  `json:"organization_id,omitempty"`
-	VerifyAdminPassword string `json:"verify_admin_password,omitempty"`
+	Role                string `json:"role,omitempty"`
+	Organization        string `json:"organization,omitempty"`
+	VerifyAdminPassword string `json:"verifyAdminPassword,omitempty"`
+}
+
+type AdminUserReponse struct {
+	User  interface{}       `json:"user,omitempty"`
+	Perms map[string]string `json:"perms,omitempty"`
 }
 
 func (d *daemon) adminUserSubrouter(r *gin.RouterGroup) {
 	user := r.Group("/users")
 	// Public endpoints
-	user.Use(corsMiddleware())
 	user.POST("/login", d.adminLogin)
 
 	// Private endpoints
@@ -34,9 +41,11 @@ func (d *daemon) adminUserSubrouter(r *gin.RouterGroup) {
 	user.GET("/:username", d.getAdminUser)
 	user.GET("", d.getAdminUsers)
 	user.PUT("", d.updateAdminUser)
-	user.DELETE("", d.deleteAdminUser)
+	user.DELETE("/:username", d.deleteAdminUser)
 
 }
+
+// TODO Overall make sure that incoming request parameters are validated
 
 func (d *daemon) adminLogin(c *gin.Context) {
 	ctx := context.Background()
@@ -46,23 +55,26 @@ func (d *daemon) adminLogin(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "Error"})
 		return
 	}
-
 	// Get user information
-	user, err := d.db.GetAdminUser(ctx, req.Username)
+	user, err := d.db.GetAdminUserByUsername(ctx, req.Username)
 	if err != nil {
 		log.Error().Err(err).Msgf("Error in admin login. Could not find user with username: %s", req.Username)
 		// Run hashing algorithm to prevent timed enumeration attacks on usernames
-		dummyHash := "$2a$10$s8RIrctKwSA/jib7jSaGE.Z4TdukcRP/Irkxse5dotyYT0uHb3b.2"
-		fakePassword := "fakepassword"
-		_ = verifyPassword(dummyHash, fakePassword)
-		c.JSON(http.StatusOK, APIResponse{Status: "Incorrect username or password"})
+		if err == sql.ErrNoRows {
+			dummyHash := "$2a$10$s8RIrctKwSA/jib7jSaGE.Z4TdukcRP/Irkxse5dotyYT0uHb3b.2"
+			fakePassword := "fakepassword"
+			_ = verifyPassword(dummyHash, fakePassword)
+			c.JSON(http.StatusUnauthorized, APIResponse{Status: incorrectUsernameOrPasswordError})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 		return
 	}
 
 	// Check if password matches that which is in the database
 	match := verifyPassword(user.Password, req.Password)
 	if !match {
-		c.JSON(http.StatusOK, APIResponse{Status: "Incorrect username or password"})
+		c.JSON(http.StatusUnauthorized, APIResponse{Status: incorrectUsernameOrPasswordError})
 		return
 	}
 
@@ -74,9 +86,29 @@ func (d *daemon) adminLogin(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, APIResponse{Status: "OK", Token: token})
+	userNoPw, err := d.db.GetAdminUserNoPwByUsername(ctx, req.Username)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting admin user from database")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+		return
+	}
+
+	perms, err := d.getDetailedUserPerms(userNoPw.Username, userNoPw.Organization)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting implicit permissions for user")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+		return
+	}
+
+	userToReturn := &AdminUserReponse{
+		User:  &userNoPw,
+		Perms: perms,
+	}
+
+	c.JSON(http.StatusOK, APIResponse{Status: "OK", Token: token, UserInfo: userToReturn})
 }
 
+// TODO Add email func to send randomly generated password if password is set to blank for new user
 func (d *daemon) newAdminUser(c *gin.Context) {
 	ctx := context.Background()
 	// Unpack user request into go struct
@@ -89,76 +121,56 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 
 	// Unpack the jwt claims passed in the gin context to a struct
 	admin := unpackAdminClaims(c)
-	log.Debug().Msgf("admin claims: %v", admin)
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
 		Str("AdminEmail", admin.Email).
 		Str("NewUser", req.Username).
 		Msg("AdminUser is trying to create a new user")
-
-	// Check if role to assign actually exists
-	role, err := d.db.GetRoleById(ctx, req.RoleId)
-	if err != nil {
-		log.Error().Err(err).Msgf("Error finding role for new user")
-		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
-		return
+	// Setting up casbin request
+	// TODO Waiting on an answer from github, but would be nice only to load relevant policies
+	// TODO especially if we start getting alot of them
+	// if err := d.enforcer.LoadPolicy(); err != nil {
+	// 	log.Error().Err(err).Msgf("Error loading policies")
+	// 	c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+	// 	return
+	// }
+	// Check if user has access
+	var casbinRequests = [][]interface{}{
+		{admin.Username, admin.Organization, "users::Admins", "write"},
+		{admin.Username, admin.Organization, fmt.Sprintf("role::%s", req.Role), "write"},
+		{admin.Username, admin.Organization, fmt.Sprintf("users::%s", admin.Organization), "write"},
 	}
-	// Check if org to assign actually exists
-	_, err = d.db.GetOrgById(ctx, req.OrganizationId)
-	if err != nil {
-		log.Error().Err(err).Msgf("Error finding org for new user")
-		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
-		return
-	}
-
-	if admin.WriteAll { // User is allowed to create new users with no restrictions
-		// Password should be more than 8 characters
-		if len(req.Password) < 8 {
-			c.JSON(http.StatusBadRequest, APIResponse{Status: "Password has to be at least 8 characters"})
-			return
-		}
-		// Create new user if it does not already exist
-		alreadyExists, err := d.createAdminUser(ctx, req)
-		if err != nil || alreadyExists {
-			if alreadyExists {
-				log.Error().Err(err).Msgf("Error creating admin user")
-				c.JSON(http.StatusInternalServerError, APIResponse{Status: "User already exists"})
-				return
-			}
-			log.Error().Err(err).Msgf("Error creating admin user")
+	if authorized, err := d.enforcer.BatchEnforce(casbinRequests); (authorized[1] && authorized[2]) || err != nil {
+		if err != nil {
+			log.Error().Err(err).Msgf("Encountered an error while authorizing user creation")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
-			return
-		}
-		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
-		return
-	} else if admin.WriteLocal { // User is only allowed to write within their organization
-		// Check if admin has access to organization
-		if !authOrganizationAccess(admin, req.OrganizationId) {
-			c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized, you do not have access to this organization"})
-			return
-		}
-
-		// Check if admin can attach desired role to user
-		if !authRoleAccess(admin, role) {
-			c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized, you cannot create a user which has more permissions than yourself"})
 			return
 		}
 		// Password should be more than 8 characters
 		if len(req.Password) < 8 {
-			c.JSON(http.StatusBadRequest, APIResponse{Status: "Password has to be at least 8 characters"})
+			c.JSON(http.StatusBadRequest, APIResponse{Status: passwordTooShortError})
 			return
 		}
 		// Create new user if it does not already exist
-		alreadyExists, err := d.createAdminUser(ctx, req)
-		if err != nil || alreadyExists {
-			if alreadyExists {
-				log.Error().Err(err).Msgf("Error creating admin user")
-				c.JSON(http.StatusInternalServerError, APIResponse{Status: "User already exists"})
+		org := admin.Organization
+		if authorized[0] { // Superadmin
+			org = req.Organization
+			if req.Role == "superadmin" && org != "Admins" {
+				c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized... Superadmins can only be added to the Admins organization"})
 				return
+			
 			}
+		}
+		alreadyExists, err := d.createAdminUser(ctx, req, org)
+		if err != nil {
 			log.Error().Err(err).Msgf("Error creating admin user")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+		if alreadyExists {
+			log.Error().Msgf("Error creating admin user: %s", userExistsError)
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: userExistsError})
 			return
 		}
 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
@@ -170,13 +182,8 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 
 func (d *daemon) deleteAdminUser(c *gin.Context) {
 	ctx := context.Background()
-	// Unpack user request into go struct
-	var req adminUserRequest
-	if err := c.BindJSON(&req); err != nil {
-		log.Error().Err(err).Msg("Error parsing request data: ")
-		c.JSON(http.StatusBadRequest, APIResponse{Status: "Error"})
-		return
-	}
+	
+	username := c.Param("username")
 	// Unpack the jwt claims passed in the gin context to a struct
 	admin := unpackAdminClaims(c)
 	log.Debug().Msgf("admin claims: %v", admin)
@@ -184,52 +191,54 @@ func (d *daemon) deleteAdminUser(c *gin.Context) {
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
 		Str("AdminEmail", admin.Email).
-		Str("Username", req.Username).
+		Str("Username", username).
 		Msg("AdminUser is trying to delete user")
 
 	// Getting info for user to delete
-	user, err := d.db.GetAdminUser(ctx, req.Username)
+	userToDelete, err := d.db.GetAdminUserByUsername(ctx, username)
 	if err != nil {
 		log.Error().Err(err).Msg("Error getting admin user for deletion")
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "Could not find user to delete"})
 		return
 	}
-	// Getting role info for user to delete
-	userRole, err := d.db.GetRoleById(ctx, user.RoleID)
-	if err != nil {
-		log.Error().Err(err).Msg("Error getting user role for user to delete")
-		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error, please contact an server administrator"})
-		return
+	// Setting up an array of casbin requests in format sub, dom, obj and act
+	var requests = [][]interface{}{
+		{admin.Username, admin.Organization, fmt.Sprintf("users::%s", userToDelete.Organization), "write"},
+		{admin.Username, admin.Organization, userToDelete.Role, "write"},
 	}
-
-	if admin.WriteAll { // User is allowed to create new users with no restrictions
-		if err := d.db.DeleteAdminUser(ctx, req.Username); err != nil {
+	// Trying to authorize user
+	if authorized, err := d.enforcer.BatchEnforce(requests); (authorized[0] && authorized[1]) || err != nil {
+		if err != nil {
+			log.Error().Err(err).Msgf("Encountered an error while authorizing user delete")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+		owner, err := d.db.CheckIfUserOwnsOrg(ctx, userToDelete.Username)
+		if err != nil {
 			log.Error().Err(err).Msg("Error deleting admin user")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
 		}
-		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
-		return
-	} else if admin.WriteLocal { // User is only allowed to write within their organization
-		if !authOrganizationAccess(admin, user.OrganizationID) {
-			c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized, you do not have access to this organization"})
+		if owner {
+			log.Warn().Msg("admin tried to delete owner of an organization")
+			c.JSON(http.StatusBadRequest, APIResponse{Status: "Cannot delete an owner of an organization"})
 			return
 		}
-		// Check if admin can actually delete the user, deny if user to delete has more privileges
-		if !authRoleAccess(admin, userRole) {
-			c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized, you cannot delete a user which has more permissions than yourself"})
-			return
-		}
-		// If authorized delete the user
-		if err := d.db.DeleteAdminUser(ctx, req.Username); err != nil {
+		// Delete user info from database
+		if err := d.db.DeleteAdminUserByUsername(ctx, userToDelete.Username); err != nil {
 			log.Error().Err(err).Msg("Error deleting admin user")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
 		}
+		//Delete policy for user in db
+		if _, err := d.enforcer.DeleteUser(userToDelete.Username); err != nil {
+			log.Error().Err(err).Msg("Error deleting admin user policy")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error, something when wrong removing the user, please contact an admin"})
+		}
 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 		return
 	}
-
+	// User not authorized
 	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 }
 
@@ -250,44 +259,28 @@ func (d *daemon) updateAdminUser(c *gin.Context) {
 		Str("AdminUser", admin.Username).
 		Str("AdminEmail", admin.Email).
 		Str("Username", req.Username).
-		Msg("AdminUser is updating user")
+		Msg("AdminUser is trying to update a user")
 
 	// Get current user info for comparison
-	currUser, err := d.db.GetAdminUser(ctx, req.Username)
+	currUser, err := d.db.GetAdminUserByUsername(ctx, req.Username)
 	if err != nil {
 		log.Error().Err(err).Msg("Error getting user")
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "Could not find user to update"})
 		return
 	}
-	// Get current user role to make sure under privileged user does not change pw for fx a super admin
-	currUserRole, err := d.db.GetRoleById(ctx, currUser.RoleID)
-	if err != nil {
-		log.Error().Err(err).Msg("Error getting user role for user to delete")
-		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error, please contact an server administrator"})
-		return
+	// Setting up an array of casbin requests in format sub, dom, obj and act
+	var requests = [][]interface{}{
+		{admin.Username, admin.Organization, fmt.Sprintf("users::%s", currUser.Organization), "write"},
+		{admin.Username, admin.Organization, currUser.Role, "write"},
 	}
 
-	if admin.WriteAll { // No restrictions
-		// Update the current user
-		if err := d.updateAdminUserQuery(ctx, req, currUser, admin); err != nil {
-			log.Error().Err(err).Msg("Error updating user")
-			c.JSON(http.StatusBadRequest, APIResponse{Status: fmt.Sprintf("Could not update user: %s", err)})
+	if authorized, err := d.enforcer.BatchEnforce(requests); (authorized[0] && authorized[1]) || err != nil {
+		if err != nil {
+			log.Error().Err(err).Msgf("Encountered an error while authorizing user update")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
 		}
-		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
-		return
-	} else if admin.WriteLocal { // Restricted to organization, can only manipulate users with same role privileges or less
-		// Check if admin has access to organization
-		if !authOrganizationAccess(admin, currUser.OrganizationID) {
-			c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized, you do not have access to this organization"})
-			return
-		}
-		// Check if admin can update the desired user
-		if !authRoleAccess(admin, currUserRole) {
-			c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized, you cannot update a user which has more permissions than yourself"})
-			return
-		}
-		// Update the current user
+
 		if err := d.updateAdminUserQuery(ctx, req, currUser, admin); err != nil {
 			log.Error().Err(err).Msg("Error updating user")
 			c.JSON(http.StatusBadRequest, APIResponse{Status: fmt.Sprintf("Could not update user: %s", err)})
@@ -322,28 +315,44 @@ func (d *daemon) getAdminUser(c *gin.Context) {
 		Str("AdminUser", admin.Username).
 		Str("AdminEmail", admin.Email).
 		Str("Username", username).
-		Msg("AdminUser is listing users")
+		Msg("AdminUser is trying to list a specific user")
 
-	// Get the user to return without showing the pw hash
-	user, err := d.db.GetAdminUserNoPw(ctx, username)
+	// Get the dbUser to return without showing the pw hash
+	dbUser, err := d.db.GetAdminUserNoPwByUsername(ctx, username)
 	if err != nil {
 		log.Error().Err(err).Msg("Error getting admin user")
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "Could not find user"})
 		return
 	}
-
-	if admin.ReadAll { // if user can read all, return with no restrictions
-		c.JSON(http.StatusOK, APIResponse{Status: "OK", User: &user})
-		return
-	} else if admin.ReadLocal { // Only show user if within the requesting users organization
-		if !authOrganizationAccess(admin, user.OrganizationID) {
-			c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized, you do not have access to this organization"})
-			return
-		}
-		c.JSON(http.StatusOK, APIResponse{Status: "OK", User: &user})
+	perms, err := d.getDetailedUserPerms(dbUser.Username, dbUser.Organization)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting implicit permissions for user")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 		return
 	}
 
+	userToReturn := &AdminUserReponse{
+		User:  &dbUser,
+		Perms: perms,
+	}
+	// Setting up casbin request
+	sub := admin.Username
+	dom := admin.Organization
+	obj := fmt.Sprintf("users::%s", dbUser.Organization)
+	act := "read"
+	// Trying to authorize user
+	if authorized, err := d.enforcer.Enforce(sub, dom, obj, act); authorized || err != nil {
+		if err != nil {
+			log.Error().Err(err).Msgf("Encountered an error while authorizing user read")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+		c.JSON(http.StatusOK, APIResponse{Status: "OK", UserInfo: userToReturn})
+		return
+	} else if admin.Username == dbUser.Username {
+		c.JSON(http.StatusOK, APIResponse{Status: "OK", UserInfo: userToReturn})
+		return
+	}
 	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 }
 
@@ -359,56 +368,112 @@ func (d *daemon) getAdminUsers(c *gin.Context) {
 		Str("AdminEmail", admin.Email).
 		Msg("AdminUser is listing users")
 
-	if admin.ReadAll { // return all users in database without pwhash
-		// When org id is zero it gets all users from the db
-		users, err := d.db.GetAdminUsers(ctx, 0)
+	// Setting up an array of casbin requests in format sub, dom, obj and act
+	var requests = [][]interface{}{
+		{admin.Username, admin.Organization, "users::Admins", "read"},
+		{admin.Username, admin.Organization, fmt.Sprintf("users::%s", admin.Organization), "read"},
+	}
+	// Trying to authorize user
+	if authorized, err := d.enforcer.BatchEnforce(requests); authorized[0] || authorized[1] || err != nil {
 		if err != nil {
-			log.Error().Err(err).Msg("Error getting admin users")
+			log.Error().Err(err).Msgf("Encountered an error while authorizing users read")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
 		}
-		c.JSON(http.StatusOK, APIResponse{Status: "OK", Users: users})
-		return
-	} else if admin.ReadLocal { // Return only users within the requesting users organization
-		// By specifying an org id which is not 0, the query only returns users withing that organization
-		users, err := d.db.GetAdminUsers(ctx, admin.OrganizationID)
-		if err != nil {
-			log.Error().Err(err).Msg("Error getting admin users")
-			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+		// Superuser
+		if authorized[0] {
+			users, err := d.db.GetAdminUsers(ctx, c.Query("organization"))
+			if err != nil {
+				log.Error().Err(err).Msg("Error getting admin users")
+				c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+				return
+			}
+			usersWithPerms := []AdminUserReponse{}
+			for _, dbUser := range users {
+				perms, err := d.getDetailedUserPerms(dbUser.Username, dbUser.Organization)
+				if err != nil {
+					log.Error().Err(err).Msg("error getting implicit permissions for user")
+					c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+					return
+				}
+				userToReturn := AdminUserReponse{
+					User:  dbUser,
+					Perms: perms,
+				}
+				usersWithPerms = append(usersWithPerms, userToReturn)
+			}
+			c.JSON(http.StatusOK, APIResponse{Status: "OK", Users: usersWithPerms})
+			return
+		} else if authorized[1] { // Some organisational user
+			users, err := d.db.GetAdminUsers(ctx, admin.Organization)
+			if err != nil {
+				log.Error().Err(err).Msg("Error getting admin users")
+				c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+				return
+			}
+			usersWithPerms := []AdminUserReponse{}
+			for _, dbUser := range users {
+				perms, err := d.getDetailedUserPerms(dbUser.Username, dbUser.Organization)
+				if err != nil {
+					log.Error().Err(err).Msg("error getting implicit permissions for user")
+					c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+					return
+				}
+				userToReturn := AdminUserReponse{
+					User:  dbUser,
+					Perms: perms,
+				}
+				usersWithPerms = append(usersWithPerms, userToReturn)
+			}
+			c.JSON(http.StatusOK, APIResponse{Status: "OK", Users: usersWithPerms})
 			return
 		}
-		c.JSON(http.StatusOK, APIResponse{Status: "OK", Users: users})
-		return
 	}
 
 	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 }
 
-func (d *daemon) createAdminUser(ctx context.Context, user adminUserRequest) (bool, error) {
+// createAdminUser creates a new admin user and is called in the newAdminUser handler
+func (d *daemon) createAdminUser(ctx context.Context, user adminUserRequest, org string) (bool, error) {
 	// Create password hash from password
 	pwHash, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return false, err
 	}
 	// Passing request data to query param struct
-	newUser := database.CreateAdminUserParams{
-		Username:       user.Username,
-		Password:       string(pwHash),
-		Email:          user.Email,
-		RoleID:         user.RoleId,
-		OrganizationID: user.OrganizationId,
+	newUser := db.CreateAdminUserParams{
+		Username:     user.Username,
+		Password:     string(pwHash),
+		FullName:     user.FullName,
+		Email:        user.Email,
+		Role:         fmt.Sprintf("role::%s", user.Role),
+		Organization: org,
 	}
+	log.Debug().Msgf("New User:%v", newUser)
+	userExists, err := d.db.CheckIfUserExists(ctx, user.Username)
+	if err != nil {
+		return false, err
+	}
+	if userExists {
+		return true, nil
+	}
+
 	// Create the admin user
 	if err := d.db.CreateAdminUser(ctx, newUser); err != nil {
-		// User already exists
-		return true, err
+		return false, err
+	}
+
+	// Create casbin group
+	if _, err := d.enforcer.AddGroupingPolicy(newUser.Username, newUser.Role, newUser.Organization); err != nil {
+		return false, err
 	}
 	return false, nil
 }
 
-func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUserRequest, currUser database.AdminUser, admin AdminClaims) error {
+// updateAdminUser holds the logic for updating the pasword or email for a user, and is called from the updateAdminUser handler
+func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUserRequest, currUser db.AdminUser, admin AdminClaims) error {
 	// Get admininfo for password verification to prevent unauthorized updates of users
-	adminInfo, err := d.db.GetAdminUser(ctx, admin.Username)
+	adminInfo, err := d.db.GetAdminUserByUsername(ctx, admin.Username)
 	if err != nil {
 		return err
 	}
@@ -430,7 +495,7 @@ func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUser
 			return err
 		}
 		// Pass the password hash and user to update into the query param struct
-		newPw := database.UpdateAdminPasswordParams{
+		newPw := db.UpdateAdminPasswordParams{
 			Password: string(newPwHash),
 			Username: updatedUser.Username,
 		}
@@ -441,10 +506,10 @@ func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUser
 	}
 
 	// Update email if changed
-	if updatedUser.Email != currUser.Email {
+	if updatedUser.Email != currUser.Email && updatedUser.Email != "" {
 		log.Debug().Msg("Updating email")
 		// Pass the email and user to update into the query param struct
-		newEmail := database.UpdateAdminEmailParams{
+		newEmail := db.UpdateAdminEmailParams{
 			Email:    updatedUser.Email,
 			Username: updatedUser.Username,
 		}
@@ -455,4 +520,31 @@ func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUser
 	}
 
 	return nil
+}
+
+func (d *daemon) getDetailedUserPerms(username, userorg string) (map[string]string, error) {
+	perms, err := d.enforcer.GetImplicitPermissionsForUser(username, userorg)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting implicit permissions for user")
+		return nil, err
+	}
+	permsToReturn := make(map[string]string)
+	for _, p := range perms {
+		// index 2 holds the object and index 3 holds the accessRights
+		object := strings.Split(p[2], "::")[0]
+
+		if object == "objects" {
+			// gets the children object of the object group policy
+			detailedPerms := d.enforcer.GetFilteredNamedGroupingPolicy("g2", 1, p[2])
+			for _, perm := range detailedPerms {
+				object = strings.Split(perm[0], "::")[0]
+				permsToReturn[object] = p[3]
+			}
+			continue
+		}
+		accessRights := p[3]
+		permsToReturn[object] = accessRights
+	}
+
+	return permsToReturn, nil
 }

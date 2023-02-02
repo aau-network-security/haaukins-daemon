@@ -6,10 +6,16 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sync"
+	"time"
 
-	"github.com/aau-network-security/haaukins-daemon/internal/database"
-	eproto "github.com/aau-network-security/haaukins-daemon/internal/exercise/ex-proto"
+	"github.com/aau-network-security/haaukins-daemon/internal/db"
+	eproto "github.com/aau-network-security/haaukins-exercises/proto"
+	"github.com/casbin/casbin/v2"
+	gormadapter "github.com/casbin/gorm-adapter/v3"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v2"
@@ -17,9 +23,39 @@ import (
 
 type daemon struct {
 	conf        *Config
-	db          *database.Queries
-	exClients   map[string]eproto.ExerciseStoreClient
+	db          *db.Queries
+	exClient    eproto.ExerciseStoreClient
+	agentPool   *AgentPool
 	auditLogger *zerolog.Logger
+	enforcer    *casbin.Enforcer
+	cache       *redis.Client
+	eventpool   *EventPool
+	m           sync.RWMutex
+}
+
+const (
+	orgExistsError                   = "organization already exists"
+	userExistsError                  = "user already exists"
+	passwordTooShortError            = "password must be at least 8 characters"
+	incorrectUsernameOrPasswordError = "incorrect username or password"
+)
+
+var defaultPolicies = [][]string{
+	{"role::superadmin", "Admins", "objects::Admins", "(read|write)"},
+	{"role::superadmin", "Admins", "organizations", "(read|write)"},
+}
+
+var defaultObjectGroups = [][]string{
+	{"g2", "events::Admins", "objects::Admins"},
+	{"g2", "roles::Admins", "objects::Admins"},
+	{"g2", "users::Admins", "objects::Admins"},
+	{"g2", "exercises::Admins", "objects::Admins"},
+	{"g2", "secretchals::Admins", "objects::Admins"},
+	{"g2", "vms::Admins", "objects::Admins"},
+	{"g2", "agents::Admins", "objects::Admins"},
+	{"g2", "challengeProfiles::Admins", "objects::Admins"},
+	{"g2", "settings::Admins", "objects::Admins"},
+	{"g2", "role::superadmin", "roles::Admins"},
 }
 
 func NewConfigFromFile(path string) (*Config, error) {
@@ -41,6 +77,14 @@ func NewConfigFromFile(path string) (*Config, error) {
 	if c.AuditLog.Directory == "" {
 		dir, _ := os.Getwd()
 		c.AuditLog.Directory = filepath.Join(dir, "logs")
+	}
+	// In case paths has not been set, use working directory
+	pwd, err := os.Getwd()
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to get current working directory")
+	}
+	if c.StatePath == "" {
+		c.StatePath = filepath.Join(pwd, "state")
 	}
 
 	if c.AuditLog.FileName == "" {
@@ -78,6 +122,9 @@ func NewConfigFromFile(path string) (*Config, error) {
 	if c.Database.Username == "" {
 		c.Database.Password = "haaukins"
 	}
+	if c.Database.EventRetention == 0 {
+		c.Database.EventRetention = 30 // Default to 30 days of retention
+	}
 
 	return &c, nil
 }
@@ -85,46 +132,160 @@ func NewConfigFromFile(path string) (*Config, error) {
 func New(conf *Config) (*daemon, error) {
 	ctx := context.Background()
 	log.Info().Msg("Creating daemon...")
-	db, err := conf.Database.InitConn()
+
+	// Setting up the state path
+	if _, err := os.Stat(conf.StatePath); errors.Is(err, os.ErrNotExist) {
+		err := os.Mkdir(conf.StatePath, os.ModePerm)
+		if err != nil {
+			log.Error().Err(err).Msg("Error creating dir")
+		}
+	}
+	// TODO rewrte init function if filtered adapter is used
+	//Setting up database connection
+	dbConn, gormDb, err := conf.Database.InitConn()
 	if err != nil {
 		log.Fatal().Err(err).Msg("[Haaukins-daemon] Failed to connect to database")
-		return nil, err
 	}
-	// Getting exercise database connections stored in the database
-	exersiceDatabases, err := db.GetExerciseDatabases(ctx)
+
+	// Connecting to the exercise service
+	log.Info().Msg("connecting to exercise service")
+	exClient, err := NewExerciseClientConn(conf.ExerciseService)
 	if err != nil {
-		log.Fatal().Err(err).Msg("[Haaukins-daemon] Failed to get currently connected exercise databases")
-		return nil, err
+		log.Fatal().Err(err).Msgf("[exercise-service]: error on creating gRPC communication")
+
 	}
-	// Creating audit logger to log admin events seperately
+
+	eventPool, err := resumeState(conf.StatePath)
+	if err != nil {
+		eventPool = &EventPool{
+			M:      sync.RWMutex{},
+			Events: make(map[string]*Event),
+		}
+	}
+	if eventPool == nil {
+		eventPool = &EventPool{
+			M:      sync.RWMutex{},
+			Events: make(map[string]*Event),
+		}
+	}
+	
+
+	// Connecting to all haaukins agents
+	log.Info().Msg("Connecting to haaukins agents...")
+	agentsInDb, err := dbConn.GetAgents(ctx)
+	if err != nil {
+		log.Fatal().Err(err).Msg("could not get haaukins agents from database")
+	}
+	agents := make(map[string]*Agent)
+	agentPool := &AgentPool{
+		M:            sync.RWMutex{},
+		AgentWeights: make(map[string]float64),
+	}
+	
+	var wg sync.WaitGroup
+	var m sync.Mutex
+	for _, a := range agentsInDb {
+		wg.Add(1)
+		go func(agents map[string]*Agent, a db.Agent) {
+			agentConfig := ServiceConfig{
+				Grpc:       a.Url,
+				AuthKey:    a.AuthKey,
+				SignKey:    a.SignKey,
+				TLSEnabled: a.Tls,
+			}
+			conn, memoryInstalled, err := NewAgentConnection(agentConfig)
+			if err != nil {
+				log.Warn().Err(err).Msg("error connecting to agent at url: " + agentConfig.Grpc)
+				wg.Done()
+			} else {
+				streamCtx, cancel := context.WithCancel(context.Background())
+				var agentToAdd = &Agent{
+					Name:         a.Name,
+					Url:          a.Url,
+					Tls:          a.Tls,
+					Conn:         conn,
+					Weight:       a.Weight,
+					RequestsLeft: a.Weight,
+					StateLock:    a.Statelock,
+					Errors:       []error{},
+					Close:        cancel,
+					Resources: AgentResources{
+						MemoryInstalled: memoryInstalled,
+					},
+				}
+				if err := agentPool.connectToStreams(streamCtx, agentToAdd, eventPool, conf.StatePath); err != nil {
+					log.Error().Err(err).Msg("error connecting to agent streams")
+					wg.Done()
+					return
+				}
+				m.Lock()
+				agents[a.Name] = agentToAdd
+				m.Unlock()
+				wg.Done()
+			}
+		}(agents, a)
+	}
+	wg.Wait()
+	agentPool.Agents = agents
+	log.Debug().Msg("added agents to agent pool")
+	// dataSource := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable", conf.Database.Host, conf.Database.Username, conf.Database.Password, conf.Database.DbName, conf.Database.Port)
+	// adapter, err := gormadapter.NewFilteredAdapter("postgres", dataSource, true)
+	// if err != nil {
+	// 	log.Fatal().Err(err).Msg("Failed to create casbin adapter")
+	// }
+
+	adapter, err := gormadapter.NewAdapterByDB(gormDb)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to create casbin adapter")
+	}
+
+	enforcer, err := casbin.NewEnforcer("config/rbac_model.conf", adapter, false)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to create casbin enforcer")
+	}
+
+	// filter := gormadapter.Filter{
+	// 	V1: []string{"Admins"},
+	// 	V2: []string{"objects::Admins"},
+	// }
+	// if err := enforcer.LoadFilteredPolicy(filter); err != nil {
+	// 	log.Fatal().Err(err).Msg("Error loading policies")
+	// }
+
+	// Inserting default casbin policies if they don't already exist
+	for _, p := range defaultPolicies {
+		if !enforcer.HasPolicy(p) {
+			if _, err := enforcer.AddPolicy(p); err != nil {
+				log.Fatal().Err(err).Msg("Error adding missing policy")
+			}
+		}
+	}
+
+	for _, g := range defaultObjectGroups {
+		if !enforcer.HasNamedGroupingPolicy(g[0], g[1:]) {
+			if _, err := enforcer.AddNamedGroupingPolicy(g[0], g[1:]); err != nil {
+				log.Fatal().Err(err).Msg("Error adding missing policy")
+			}
+		}
+	}
+	// Adding initial admin account in admin org
+	if !enforcer.HasGroupingPolicy("admin", "role::superadmin", "Admins") {
+		if _, err := enforcer.AddGroupingPolicy("admin", "role::superadmin", "Admins"); err != nil {
+			log.Fatal().Err(err).Msg("Error administrator")
+		}
+	}
+
+	// Creating audit logger to log admin events seperately in a file
 	auditLogger := zerolog.New(newRollingFile(conf)).With().Logger()
-
-	// Using a hashtable for exercise database connections
-	// If the database name is not in the hashtable we know that the database is not connected
-	log.Info().Msg("Connecting to currently stored exercise databases...")
-	exClients := make(map[string]eproto.ExerciseStoreClient)
-	for _, exDb := range exersiceDatabases {
-		exDbConfig := ServiceConfig{
-			Grpc:    exDb.Url,
-			AuthKey: exDb.AuthKey,
-			SignKey: exDb.SignKey,
-			Enabled: true,
-		}
-		exClient, err := NewExerciseClientConn(exDbConfig)
-		if err != nil {
-			log.Warn().Err(err).Msgf("[exercise-service]: error on creating gRPC communication")
-
-		} else {
-			exClients[exDb.Name] = exClient
-			log.Debug().Str("Url", exDbConfig.Grpc).Msg("Exercise service connected !")
-		}
-	}
 
 	d := &daemon{
 		conf:        conf,
-		db:          db,
-		exClients:   exClients,
+		db:          dbConn,
+		exClient:    exClient,
+		agentPool:   agentPool,
 		auditLogger: &auditLogger,
+		enforcer:    enforcer,
+		eventpool:   eventPool,
 	}
 	return d, nil
 }
@@ -132,13 +293,24 @@ func New(conf *Config) (*daemon, error) {
 func (d *daemon) Run() error {
 
 	r := gin.Default()
+	r.SetTrustedProxies([]string{"127.0.0.1"})
+	// Setting up CORS
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"},
+		AllowMethods:     []string{"POST", "GET", "OPTIONS", "PUT", "DELETE"},
+		AllowHeaders:     []string{"Content-Type", "Content-Length", "Accept-Encoding", "X-CSRF-Token", "Authorization", "Accept", "Origin", "Cache-Control", "X-Requested-With"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
+	r.Use(gin.Recovery())
 	d.setupRouters(r)
 	return r.Run(":8080")
 }
 
 func (d *daemon) setupRouters(r *gin.Engine) {
-	admin := r.Group("/api/v1/admin")
-	event := r.Group("/api/v1/event")
+	admin := r.Group("/v1/admin")
+	event := r.Group("/v1/event")
 
 	d.adminSubrouter(admin)
 	d.eventSubrouter(event)
