@@ -20,7 +20,7 @@ func (d *daemon) eventTeamSubrouter(r *gin.RouterGroup) {
 	team.POST("/signup", d.teamSignup)
 
 	team.Use(d.eventAuthMiddleware())
-	team.GET("/:teamName", d.getTeam)
+	team.GET("/self", d.getOwnTeam)
 }
 
 type TeamSignupRequest struct {
@@ -33,9 +33,16 @@ type TeamSignupRequest struct {
 }
 
 type TeamLoginRequest struct {
-	Username        string `json:"username" binding:"required"`
-	Password        string `json:"password" binding:"required"`
-	EventTag        string `json:"eventTag"`
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
+	EventTag string `json:"eventTag"`
+}
+
+type TeamResponse struct {
+	Username string       `json:"username,omitempty"`
+	Email    string       `json:"email,omitempty"`
+	Status   string       `json:"status,omitempty"`
+	Lab      *LabResponse `json:"lab,omitempty"`
 }
 
 func (d *daemon) teamLogin(c *gin.Context) {
@@ -90,10 +97,22 @@ func (d *daemon) teamLogin(c *gin.Context) {
 
 	event, _ := d.eventpool.GetEvent(req.EventTag)
 
-	// Debugging purposes only
-	team, _ := event.GetTeam(dbTeam.Username)
-	log.Debug().Msgf("team: %v", team.Lab)
-	c.JSON(http.StatusOK, APIResponse{Status: "OK", Token: token, TeamInfo: team})
+	team, err := event.GetTeam(dbTeam.Username)
+	if err != nil {
+		log.Error().Err(err).Msg("could not find team for event")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "could not find team for event"})
+		return
+	}
+
+	teamResponse := &TeamResponse{
+		Username: team.Username,
+		Email: team.Email,
+		Status: team.Status.String(),
+	}
+	if team.Lab != nil {
+		teamResponse.Lab = assembleLabResponse(team.Lab)
+	}
+	c.JSON(http.StatusOK, APIResponse{Status: "OK", Token: token, TeamInfo: teamResponse})
 }
 
 // TODO Add measures to verify email address
@@ -209,14 +228,18 @@ func (d *daemon) teamSignup(c *gin.Context) {
 		team.QueueElement = queueElement
 	}
 
-	// For debugging purposes
-	for _, lab := range d.eventpool.Events[event.Config.Tag].Labs {
-		log.Debug().Str("labTag", lab.LabInfo.Tag).Str("labParentAgent", lab.ParentAgent.Url).Msg("lab in event")
+	teamResponse := &TeamResponse{
+		Username: team.Username,
+		Email: team.Email,
+		Status: team.Status.String(),
 	}
-	c.JSON(http.StatusOK, APIResponse{Status: "OK", Token: token, TeamInfo: team})
+	if team.Lab != nil {
+		teamResponse.Lab = assembleLabResponse(team.Lab)
+	}
+	c.JSON(http.StatusOK, APIResponse{Status: "OK", Token: token, TeamInfo: teamResponse})
 }
 
-func (d *daemon) getTeam(c *gin.Context) {
+func (d *daemon) getOwnTeam(c *gin.Context) {
 	teamClaims := unpackTeamClaims(c)
 
 	event, err := d.eventpool.GetEvent(teamClaims.EventTag)
@@ -232,8 +255,16 @@ func (d *daemon) getTeam(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "could not find team for event"})
 		return
 	}
+	teamResponse := &TeamResponse{
+		Username: team.Username,
+		Email: team.Email,
+		Status: team.Status.String(),
+	}
+	if team.Lab != nil {
+		teamResponse.Lab = assembleLabResponse(team.Lab)
+	}
 
-	c.JSON(http.StatusOK, APIResponse{Status: "OK", TeamInfo: team})
+	c.JSON(http.StatusOK, APIResponse{Status: "OK", TeamInfo: teamResponse})
 }
 
 // TODO When email functionality has been implemented, make reset password function

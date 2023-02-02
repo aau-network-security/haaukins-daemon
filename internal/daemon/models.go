@@ -37,12 +37,12 @@ type APIResponse struct {
 	Exercises      []*proto.Exercise                       `json:"exercises,omitempty"`
 	Profiles       []ExerciseProfile                       `json:"profiles,omitempty"`
 	EventExercises *EventExercisesResponse                 `json:"eventExercises,omitempty"`
-	TeamLab        *AgentLab                               `json:"teamLab,omitempty"`
+	TeamLab        *LabResponse                              `json:"teamLab,omitempty"`
 	Categories     []*proto.GetCategoriesResponse_Category `json:"categories,omitempty"`
 	Orgs           []db.Organization                       `json:"orgs,omitempty"`
 	Agents         []AgentResponse                         `json:"agents,omitempty"`
 	Events         []db.Event                              `json:"events,omitempty"`
-	TeamInfo       *Team                                   `json:"teaminfo,omitempty"`
+	TeamInfo       *TeamResponse                                   `json:"teaminfo,omitempty"`
 	EventInfo      *EventInfoResponse                      `json:"eventinfo,omitempty"`
 }
 
@@ -153,11 +153,6 @@ type AgentLab struct {
 	ParentAgent          ParentAgent `json:"parentAgent,omitempty"`
 	EstimatedMemoryUsage uint64      `json:"estimatedMemoryUsage,omitempty"`
 	LabInfo              *aproto.Lab `json:"labInfo,omitempty"`
-}
-
-type ExerciseStatus struct {
-	Tag             string
-	ContainerStatus map[string]uint
 }
 
 type Category struct {

@@ -4,13 +4,10 @@ import (
 	"context"
 	"net/http"
 
+	aproto "github.com/aau-network-security/haaukins-agent/pkg/proto"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
-
-type LabRequest struct {
-	IsVpn bool `json:"isVpn"`
-}
 
 type TeamStatus uint8
 
@@ -44,6 +41,34 @@ func (d *daemon) eventLabsSubrouter(r *gin.RouterGroup) {
 	labs.GET("", d.getLabInfo)
 	labs.GET("/resetlab", d.resetLab)
 	labs.GET("/resetvm", d.resetVm)
+}
+
+type LabRequest struct {
+	IsVpn bool `json:"isVpn"`
+}
+
+type LabResponse struct {
+	ParentAgent ParentAgent `json:"parentAgent,omitempty"`
+	Lab         Lab         `json:"labInfo,omitempty"`
+}
+
+type Lab struct {
+	Tag             string            `json:"tag"`
+	EventTag        string            `json:"eventTag"`
+	ExercisesStatus []ExerciseStatus  `json:"exercisesStatus"`
+	IsVpn           bool              `json:"isVpn"`
+	GuacCreds       *aproto.GuacCreds `json:"guacCreds"`
+}
+
+type ExerciseStatus struct {
+	Tag            string    `json:"tag"`
+	ChildExercises []string  `json:"childExercises"`
+	Machines       []Machine `json:"machines"`
+}
+
+type Machine struct {
+	Id     string `json:"id"`
+	Status string `json:"status"`
 }
 
 // Used by teams who have not yet configured their lab lab (advanced events only)
@@ -129,18 +154,9 @@ func (d *daemon) getLabInfo(c *gin.Context) {
 		c.JSON(http.StatusNotFound, APIResponse{Status: "lab not found"})
 		return
 	}
+	labResponse := assembleLabResponse(team.Lab)
 
-	for _, exercise := range team.Lab.LabInfo.Exercises {
-		for _, childExercise := range exercise.ChildExercises {
-			childExercise.Flag = ""
-		}
-		for _, machine := range exercise.Machines {
-			machine.Image = ""
-			machine.Type = ""
-		}
-	}
-
-	c.JSON(http.StatusOK, APIResponse{Status: "OK", TeamLab: team.Lab})
+	c.JSON(http.StatusOK, APIResponse{Status: "OK", TeamLab: labResponse})
 }
 
 // Can be used by teams to completely reset their lab
@@ -151,4 +167,37 @@ func (d *daemon) resetLab(c *gin.Context) {
 // Resets the connected VM in a teams lab in case of problems like freezing etc.
 func (d *daemon) resetVm(c *gin.Context) {
 
+}
+
+func assembleLabResponse(teamLab *AgentLab) (*LabResponse) {
+	var exercisesStatus []ExerciseStatus
+	for _, exercise := range teamLab.LabInfo.Exercises {
+		var childExercises []string
+		for _, childExercise := range exercise.ChildExercises {
+			childExercises = append(childExercises, childExercise.Tag)
+		}
+		var machines []Machine
+		for _, machine := range exercise.Machines {
+			machines = append(machines, Machine{
+				Id:     machine.Id,
+				Status: machine.Status,
+			})
+		}
+		exercisesStatus = append(exercisesStatus, ExerciseStatus{
+			Tag:            exercise.Tag,
+			ChildExercises: childExercises,
+			Machines:       machines,
+		})
+	}
+	labResponse := &LabResponse{
+		ParentAgent: teamLab.ParentAgent,
+		Lab: Lab{
+			Tag:             teamLab.LabInfo.Tag,
+			EventTag:        teamLab.LabInfo.EventTag,
+			ExercisesStatus: exercisesStatus,
+			IsVpn:           teamLab.LabInfo.IsVPN,
+			GuacCreds:       teamLab.LabInfo.GuacCreds,
+		},
+	}
+	return labResponse
 }
