@@ -2,9 +2,11 @@ module github.com/aau-network-security/haaukins-daemon
 
 go 1.16
 
-replace github.com/aau-network-security/haaukins-agent => /home/mikkel/Desktop/haaukinsdev/haaukins-agent
+//replace github.com/aau-network-security/haaukins-agent => /home/mikkel/Desktop/haaukinsdev/haaukins-agent
+replace github.com/aau-network-security/haaukins-agent => /home/mikkel/haaukinsdev/haaukins-agent
 
-replace github.com/aau-network-security/haaukins-exercises => /home/mikkel/Desktop/haaukinsdev/haaukins-exercises
+//replace github.com/aau-network-security/haaukins-exercises => /home/mikkel/Desktop/haaukinsdev/haaukins-exercises
+replace github.com/aau-network-security/haaukins-exercises => /home/mikkel/haaukinsdev/haaukins-exercises
 
 require (
 	github.com/aau-network-security/haaukins-agent v0.0.1

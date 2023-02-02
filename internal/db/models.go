@@ -41,6 +41,7 @@ type Event struct {
 	Status                int32
 	Frontend              string
 	Exercises             string
+	PublicScoreboard      bool
 	DynamicScoring        bool
 	DynamicMax            int32
 	DynamicMin            int32

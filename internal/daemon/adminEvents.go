@@ -160,6 +160,7 @@ func (d *daemon) newEvent(c *gin.Context) {
 			Frontend:              req.VmName,
 			Status:                StatusRunning,
 			Exercises:             strings.Join(req.ExerciseTags, ","),
+			PublicScoreboard:      req.PublicScoreBoard,
 			DynamicScoring:        req.DynamicScoring,
 			DynamicMax:            req.DynamicMax,
 			DynamicMin:            req.DynamicMin,

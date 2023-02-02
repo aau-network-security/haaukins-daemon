@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS events (
         status integer NOT NULL, 
         frontend text NOT NULL, 
         exercises text NOT NULL,
+        public_scoreboard boolean NOT NULL,
         dynamic_scoring boolean NOT NULL,
         dynamic_max integer NOT NULL,
         dynamic_min integer NOT NULL,

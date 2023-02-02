@@ -24,10 +24,12 @@ func (d *daemon) eventSubrouter(r *gin.RouterGroup) {
 }
 
 type EventInfoResponse struct {
-	Tag      string `json:"tag"`
-	Name     string `json:"name"`
-	Type     string `json:"type"`
-	TeamSize int32  `json:"teamSize"`
+	Tag              string `json:"tag"`
+	Name             string `json:"name"`
+	Type             string `json:"type"`
+	Secret           bool   `json:"secret"`
+	PublicScoreboard bool   `json:"publicScoreboard"`
+	TeamSize         int32  `json:"teamSize"`
 }
 
 func (d *daemon) getEventInfo(c *gin.Context) {
@@ -39,12 +41,17 @@ func (d *daemon) getEventInfo(c *gin.Context) {
 		c.JSON(http.StatusNotFound, APIResponse{Status: "event not found"})
 		return
 	}
-
+	secret := false
+	if event.Config.SecretKey != "" {
+		secret = true
+	}
 	eventInfoResponse := &EventInfoResponse{
-		Tag:      event.Config.Tag,
-		Name:     event.Config.Name,
-		Type:     EventType(event.Config.Type).String(),
-		TeamSize: event.Config.TeamSize,
+		Tag:              event.Config.Tag,
+		Name:             event.Config.Name,
+		Type:             EventType(event.Config.Type).String(),
+		PublicScoreboard: event.Config.PublicScoreBoard,
+		Secret:           secret,
+		TeamSize:         event.Config.TeamSize,
 	}
 
 	c.JSON(http.StatusOK, APIResponse{Status: "OK", EventInfo: eventInfoResponse})

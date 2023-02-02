@@ -20,6 +20,7 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
                 status integer NOT NULL, 
                 frontend text NOT NULL, 
                 exercises text NOT NULL,
+                public_scoreboard boolean NOT NULL,
                 dynamic_scoring boolean NOT NULL,
                 dynamic_max integer NOT NULL,
                 dynamic_min integer NOT NULL,
@@ -110,7 +111,6 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
                 memoryMB integer
         );
         CREATE UNIQUE INDEX frontendname_lower_index ON frontends (LOWER(name));
-
 
         -- Setting up an administrative account with password admin
         INSERT INTO organizations (name, owner_user, owner_email) VALUES ('Admins', 'admin', 'cyber@es.aau.dk');

@@ -28,21 +28,11 @@ func (d *daemon) eventExercisesSubrouter(r *gin.RouterGroup) {
 	exercises.POST("/reset/:exerciseTag", d.resetExercise)
 }
 
-//	type EventExercise struct {
-//		Tag            string               `json:"tag"`
-//		Static         bool                 `json:"static"`
-//		ChildExercises []EventExercise `json:"childExercises"`
-//	}
-type EventExercise struct {
-	ParentExerciseTag string `json:"parentExerciseTag"`
-	Static            bool   `json:"static"` // False if no docker containers for challenge
-	Name              string `json:"name"`
-	Tag               string `json:"tag"`
-	Points            int    `json:"points"`
-	Category          string `json:"category"`
-	Description       string `json:"description"`
-	Solved            bool   `json:"solved"`
+type EventExercisesResponse struct {
+	Categories []Category `json:"categories"`
 }
+
+
 
 // Get all exercises for event that the requesting team belongs to
 // Depending if the event has dynamic scoring enabled, it will inject the points into the
@@ -77,9 +67,16 @@ func (d *daemon) getEventExercises(c *gin.Context) {
 		return
 	}
 
-	exClientResp, err := d.exClient.GetExerciseByTags(ctx, &proto.GetExerciseByTagsRequest{Tag: event.Config.ExerciseTags})
+	exercisesFromExService, err := d.exClient.GetExerciseByTags(ctx, &proto.GetExerciseByTagsRequest{Tag: event.Config.ExerciseTags})
 	if err != nil {
 		log.Error().Err(err).Msg("error getting exercise by tags from exercise service")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
+
+	categoriesFromExService, err := d.exClient.GetCategories(ctx, &proto.Empty{})
+	if err != nil {
+		log.Error().Err(err).Msg("error getting categories from exercise service")
 		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
 		return
 	}
@@ -100,40 +97,70 @@ func (d *daemon) getEventExercises(c *gin.Context) {
 	}
 
 	// TODO return amount of solves of challenge as well
-	var eventExercises []EventExercise
-	for _, exercise := range exClientResp.Exercises {
-
-		for _, instance := range exercise.Instance {
-			for _, childExercise := range instance.Children {
-				totalExerciseSolves, ok := solvesMap[childExercise.Tag]
-				if !ok {
-					totalExerciseSolves = 0
-				}
-
-				solvedByTeam, ok := teamSolves[childExercise.Tag]
-				if !ok {
-					solvedByTeam = false
-				}
-				var points int = int(childExercise.Points)
-				if event.Config.DynamicScoring {
-					points = calculateScore(event.Config, float64(totalExerciseSolves))
-				}
-				eventChildExercise := EventExercise{
-					ParentExerciseTag: exercise.Tag,
-					Static:            exercise.Static,
-					Name:              childExercise.Name,
-					Tag:               childExercise.Tag,
-					Points:            points,
-					Category:          childExercise.Category,
-					Description:       childExercise.TeamDescription,
-					Solved:            solvedByTeam,
-				}
-				eventExercises = append(eventExercises, eventChildExercise)
-			}
-		}
+	eventExercisesResponse := &EventExercisesResponse{
+		Categories: []Category{},
 	}
 
-	c.JSON(http.StatusOK, APIResponse{Status: "OK", EventExercises: eventExercises})
+	for _, exServiceCategory := range categoriesFromExService.Categories {
+		var exercises []Exercise
+		for _, exServiceExercise := range exercisesFromExService.Exercises {
+			for _, instance := range exServiceExercise.Instance {
+			Inner:
+				for _, childExercise := range instance.Children {
+					if childExercise.Category != exServiceCategory.Name {
+						continue Inner
+					}
+
+					solves := []Solve{}
+					for _, dbSolve := range solvesMap[childExercise.Tag] {
+						solve := Solve{
+							Date: dbSolve.Date.Format(time.RFC822),
+							Team: dbSolve.Username,
+						}
+						solves = append(solves, solve)
+					}
+
+					solvedByTeam, ok := teamSolves[childExercise.Tag]
+					if !ok {
+						solvedByTeam = false
+					}
+
+					var points int = int(childExercise.Points)
+					if event.Config.DynamicScoring {
+						points = calculateScore(event.Config, float64(len(solvesMap[childExercise.Tag])))
+					}
+
+					safeHtml, err := sanitizeUnsafeMarkdown([]byte(childExercise.TeamDescription))
+					if err != nil {
+						log.Error().Msgf("Error converting to commonmark: %s", err)
+					}
+
+					exercise := Exercise{
+						ParentExerciseTag: exServiceExercise.Tag,
+						Static:            exServiceExercise.Static,
+						Name:              childExercise.Name,
+						Tag:               childExercise.Tag,
+						Points:            points,
+						Category:          childExercise.Category,
+						Description:       string(safeHtml),
+						Solved:            solvedByTeam,
+						Solves:            solves,
+					}
+					exercises = append(exercises, exercise)
+				}
+			}
+		}
+		if len(exercises) == 0 {
+			continue
+		}
+		category := Category{
+			Name:      exServiceCategory.Name,
+			Exercises: exercises,
+		}
+		eventExercisesResponse.Categories = append(eventExercisesResponse.Categories, category)
+	}
+
+	c.JSON(http.StatusOK, APIResponse{Status: "OK", EventExercises: eventExercisesResponse})
 }
 
 // Returns a list of currently running exercises for a team
@@ -158,7 +185,7 @@ func (d *daemon) solveExercise(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "Error"})
 		return
 	}
-	
+
 	teamClaims := unpackTeamClaims(c)
 
 	event, err := d.eventpool.GetEvent(teamClaims.EventTag)
@@ -181,10 +208,10 @@ func (d *daemon) solveExercise(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
 		return
 	}
-	
+
 	getTeamParam := db.GetTeamFromEventByUsernameParams{
 		Username: teamClaims.Username,
-		Eventid: dbEvent.ID,
+		Eventid:  dbEvent.ID,
 	}
 	dbTeam, err := d.db.GetTeamFromEventByUsername(ctx, getTeamParam)
 	if err != nil {
@@ -206,9 +233,9 @@ func (d *daemon) solveExercise(c *gin.Context) {
 				staticFlag := strings.Trim(childExercise.Static, " ")
 				if childExercise.Tag == req.Tag && staticFlag == strings.Trim(req.Flag, " ") {
 					addSolveParams := db.AddSolveForTeamInEventParams{
-						Tag: req.Tag,
-						Eventid: dbEvent.ID,
-						Teamid: dbTeam.ID,
+						Tag:      req.Tag,
+						Eventid:  dbEvent.ID,
+						Teamid:   dbTeam.ID,
 						Solvedat: time.Now(),
 					}
 					if err := d.db.AddSolveForTeamInEvent(ctx, addSolveParams); err != nil {
@@ -225,7 +252,6 @@ func (d *daemon) solveExercise(c *gin.Context) {
 		return
 	}
 
-
 	if team.Lab != nil {
 		for _, exercise := range team.Lab.LabInfo.Exercises {
 			for _, childExercise := range exercise.ChildExercises {
@@ -233,9 +259,9 @@ func (d *daemon) solveExercise(c *gin.Context) {
 					flag := strings.Trim(childExercise.Flag, " ")
 					if flag == strings.Trim(req.Flag, " ") {
 						addSolveParams := db.AddSolveForTeamInEventParams{
-							Tag: req.Tag,
-							Eventid: dbEvent.ID,
-							Teamid: dbTeam.ID,
+							Tag:      req.Tag,
+							Eventid:  dbEvent.ID,
+							Teamid:   dbTeam.ID,
 							Solvedat: time.Now(),
 						}
 						if err := d.db.AddSolveForTeamInEvent(ctx, addSolveParams); err != nil {

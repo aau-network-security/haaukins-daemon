@@ -36,13 +36,13 @@ type APIResponse struct {
 	Users          []AdminUserReponse                      `json:"users,omitempty"`
 	Exercises      []*proto.Exercise                       `json:"exercises,omitempty"`
 	Profiles       []ExerciseProfile                       `json:"profiles,omitempty"`
-	EventExercises []EventExercise                         `json:"eventExercises,omitempty"`
+	EventExercises *EventExercisesResponse                 `json:"eventExercises,omitempty"`
 	TeamLab        *AgentLab                               `json:"teamLab,omitempty"`
 	Categories     []*proto.GetCategoriesResponse_Category `json:"categories,omitempty"`
 	Orgs           []db.Organization                       `json:"orgs,omitempty"`
 	Agents         []AgentResponse                         `json:"agents,omitempty"`
 	Events         []db.Event                              `json:"events,omitempty"`
-	TeamInfo       *Team                           `json:"teaminfo,omitempty"`
+	TeamInfo       *Team                                   `json:"teaminfo,omitempty"`
 	EventInfo      *EventInfoResponse                      `json:"eventinfo,omitempty"`
 }
 
@@ -77,6 +77,7 @@ type EventConfig struct {
 	VmName                string    `json:"vmName,omitempty"`
 	ExerciseTags          []string  `json:"exerciseTags" binding:"required"`
 	ExpectedFinishDate    time.Time `json:"expectedFinishDate" binding:"required"`
+	PublicScoreBoard      bool      `json:"publicScoreBoard,omitempty"`
 	SecretKey             string    `json:"secretKey,omitempty"`
 	DynamicScoring        bool      `json:"dynamicScoring,omitempty"`
 	DynamicMax            int32     `json:"dynamicMax,omitempty"`
@@ -157,4 +158,26 @@ type AgentLab struct {
 type ExerciseStatus struct {
 	Tag             string
 	ContainerStatus map[string]uint
+}
+
+type Category struct {
+	Name      string     `json:"name"`
+	Exercises []Exercise `json:"exercises"`
+}
+
+type Exercise struct {
+	ParentExerciseTag string  `json:"parentExerciseTag"`
+	Static            bool    `json:"static"` // False if no docker containers for challenge
+	Name              string  `json:"name"`
+	Tag               string  `json:"tag"`
+	Points            int     `json:"points"`
+	Category          string  `json:"category"`
+	Description       string  `json:"description"`
+	Solved            bool    `json:"solved"`
+	Solves            []Solve `json:"solves"`
+}
+
+type Solve struct {
+	Date string `json:"date"`
+	Team string `json:"team"`
 }

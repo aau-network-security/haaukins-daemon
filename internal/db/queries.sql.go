@@ -12,7 +12,7 @@ import (
 )
 
 const addEvent = `-- name: AddEvent :exec
-INSERT INTO events (tag, type, name, organization, initial_labs, max_labs, frontend, status, exercises, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretKey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+INSERT INTO events (tag, type, name, organization, initial_labs, max_labs, frontend, status, exercises, public_scoreboard, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretKey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 `
 
 type AddEventParams struct {
@@ -25,6 +25,7 @@ type AddEventParams struct {
 	Frontend              string
 	Status                int32
 	Exercises             string
+	PublicScoreboard      bool
 	DynamicScoring        bool
 	DynamicMax            int32
 	DynamicMin            int32
@@ -47,6 +48,7 @@ func (q *Queries) AddEvent(ctx context.Context, arg AddEventParams) error {
 		arg.Frontend,
 		arg.Status,
 		arg.Exercises,
+		arg.PublicScoreboard,
 		arg.DynamicScoring,
 		arg.DynamicMax,
 		arg.DynamicMin,
@@ -524,7 +526,7 @@ func (q *Queries) GetAgents(ctx context.Context) ([]Agent, error) {
 }
 
 const getAllEvents = `-- name: GetAllEvents :many
-SELECT id, tag, type, organization, name, initial_labs, max_labs, status, frontend, exercises, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretkey FROM events
+SELECT id, tag, type, organization, name, initial_labs, max_labs, status, frontend, exercises, public_scoreboard, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretkey FROM events
 `
 
 func (q *Queries) GetAllEvents(ctx context.Context) ([]Event, error) {
@@ -547,6 +549,7 @@ func (q *Queries) GetAllEvents(ctx context.Context) ([]Event, error) {
 			&i.Status,
 			&i.Frontend,
 			&i.Exercises,
+			&i.PublicScoreboard,
 			&i.DynamicScoring,
 			&i.DynamicMax,
 			&i.DynamicMin,
@@ -603,7 +606,7 @@ func (q *Queries) GetAllProfilesInOrg(ctx context.Context, orgname string) ([]Pr
 }
 
 const getEventByTag = `-- name: GetEventByTag :one
-SELECT id, tag, type, organization, name, initial_labs, max_labs, status, frontend, exercises, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretkey FROM events WHERE tag = $1
+SELECT id, tag, type, organization, name, initial_labs, max_labs, status, frontend, exercises, public_scoreboard, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretkey FROM events WHERE tag = $1
 `
 
 func (q *Queries) GetEventByTag(ctx context.Context, tag string) (Event, error) {
@@ -620,6 +623,7 @@ func (q *Queries) GetEventByTag(ctx context.Context, tag string) (Event, error) 
 		&i.Status,
 		&i.Frontend,
 		&i.Exercises,
+		&i.PublicScoreboard,
 		&i.DynamicScoring,
 		&i.DynamicMax,
 		&i.DynamicMin,
@@ -661,7 +665,7 @@ func (q *Queries) GetEventStatusByTag(ctx context.Context, tag string) ([]int32,
 }
 
 const getEventsByStatus = `-- name: GetEventsByStatus :many
-SELECT id, tag, type, organization, name, initial_labs, max_labs, status, frontend, exercises, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretkey FROM events WHERE status=$1
+SELECT id, tag, type, organization, name, initial_labs, max_labs, status, frontend, exercises, public_scoreboard, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretkey FROM events WHERE status=$1
 `
 
 func (q *Queries) GetEventsByStatus(ctx context.Context, status int32) ([]Event, error) {
@@ -684,6 +688,7 @@ func (q *Queries) GetEventsByStatus(ctx context.Context, status int32) ([]Event,
 			&i.Status,
 			&i.Frontend,
 			&i.Exercises,
+			&i.PublicScoreboard,
 			&i.DynamicScoring,
 			&i.DynamicMax,
 			&i.DynamicMin,
@@ -708,7 +713,7 @@ func (q *Queries) GetEventsByStatus(ctx context.Context, status int32) ([]Event,
 }
 
 const getEventsByUser = `-- name: GetEventsByUser :many
-SELECT id, tag, type, organization, name, initial_labs, max_labs, status, frontend, exercises, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretkey FROM events WHERE createdBy=$1
+SELECT id, tag, type, organization, name, initial_labs, max_labs, status, frontend, exercises, public_scoreboard, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretkey FROM events WHERE createdBy=$1
 `
 
 func (q *Queries) GetEventsByUser(ctx context.Context, createdby string) ([]Event, error) {
@@ -731,6 +736,7 @@ func (q *Queries) GetEventsByUser(ctx context.Context, createdby string) ([]Even
 			&i.Status,
 			&i.Frontend,
 			&i.Exercises,
+			&i.PublicScoreboard,
 			&i.DynamicScoring,
 			&i.DynamicMax,
 			&i.DynamicMin,
@@ -755,7 +761,7 @@ func (q *Queries) GetEventsByUser(ctx context.Context, createdby string) ([]Even
 }
 
 const getEventsExeptClosed = `-- name: GetEventsExeptClosed :many
-SELECT id, tag, type, organization, name, initial_labs, max_labs, status, frontend, exercises, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretkey FROM events WHERE status!=2
+SELECT id, tag, type, organization, name, initial_labs, max_labs, status, frontend, exercises, public_scoreboard, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretkey FROM events WHERE status!=2
 `
 
 func (q *Queries) GetEventsExeptClosed(ctx context.Context) ([]Event, error) {
@@ -778,6 +784,7 @@ func (q *Queries) GetEventsExeptClosed(ctx context.Context) ([]Event, error) {
 			&i.Status,
 			&i.Frontend,
 			&i.Exercises,
+			&i.PublicScoreboard,
 			&i.DynamicScoring,
 			&i.DynamicMax,
 			&i.DynamicMin,
@@ -899,7 +906,7 @@ func (q *Queries) GetOrgByName(ctx context.Context, orgname string) (Organizatio
 }
 
 const getOrgEvents = `-- name: GetOrgEvents :many
-SELECT id, tag, type, organization, name, initial_labs, max_labs, status, frontend, exercises, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretkey FROM events WHERE organization = $1
+SELECT id, tag, type, organization, name, initial_labs, max_labs, status, frontend, exercises, public_scoreboard, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretkey FROM events WHERE organization = $1
 `
 
 func (q *Queries) GetOrgEvents(ctx context.Context, organization string) ([]Event, error) {
@@ -922,6 +929,7 @@ func (q *Queries) GetOrgEvents(ctx context.Context, organization string) ([]Even
 			&i.Status,
 			&i.Frontend,
 			&i.Exercises,
+			&i.PublicScoreboard,
 			&i.DynamicScoring,
 			&i.DynamicMax,
 			&i.DynamicMin,
@@ -946,7 +954,7 @@ func (q *Queries) GetOrgEvents(ctx context.Context, organization string) ([]Even
 }
 
 const getOrgEventsByCreatedBy = `-- name: GetOrgEventsByCreatedBy :many
-SELECT id, tag, type, organization, name, initial_labs, max_labs, status, frontend, exercises, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretkey FROM events WHERE organization = $1 AND createdBy = $2
+SELECT id, tag, type, organization, name, initial_labs, max_labs, status, frontend, exercises, public_scoreboard, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretkey FROM events WHERE organization = $1 AND createdBy = $2
 `
 
 type GetOrgEventsByCreatedByParams struct {
@@ -974,6 +982,7 @@ func (q *Queries) GetOrgEventsByCreatedBy(ctx context.Context, arg GetOrgEventsB
 			&i.Status,
 			&i.Frontend,
 			&i.Exercises,
+			&i.PublicScoreboard,
 			&i.DynamicScoring,
 			&i.DynamicMax,
 			&i.DynamicMin,
@@ -998,7 +1007,7 @@ func (q *Queries) GetOrgEventsByCreatedBy(ctx context.Context, arg GetOrgEventsB
 }
 
 const getOrgEventsByStatus = `-- name: GetOrgEventsByStatus :many
-SELECT id, tag, type, organization, name, initial_labs, max_labs, status, frontend, exercises, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretkey FROM events WHERE organization = $1 AND status = $2
+SELECT id, tag, type, organization, name, initial_labs, max_labs, status, frontend, exercises, public_scoreboard, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretkey FROM events WHERE organization = $1 AND status = $2
 `
 
 type GetOrgEventsByStatusParams struct {
@@ -1026,6 +1035,7 @@ func (q *Queries) GetOrgEventsByStatus(ctx context.Context, arg GetOrgEventsBySt
 			&i.Status,
 			&i.Frontend,
 			&i.Exercises,
+			&i.PublicScoreboard,
 			&i.DynamicScoring,
 			&i.DynamicMax,
 			&i.DynamicMin,
@@ -1050,7 +1060,7 @@ func (q *Queries) GetOrgEventsByStatus(ctx context.Context, arg GetOrgEventsBySt
 }
 
 const getOrgEventsByStatusAndCreatedBy = `-- name: GetOrgEventsByStatusAndCreatedBy :many
-SELECT id, tag, type, organization, name, initial_labs, max_labs, status, frontend, exercises, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretkey FROM events WHERE organization = $1 AND status = $2 AND createdBy = $3
+SELECT id, tag, type, organization, name, initial_labs, max_labs, status, frontend, exercises, public_scoreboard, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretkey FROM events WHERE organization = $1 AND status = $2 AND createdBy = $3
 `
 
 type GetOrgEventsByStatusAndCreatedByParams struct {
@@ -1079,6 +1089,7 @@ func (q *Queries) GetOrgEventsByStatusAndCreatedBy(ctx context.Context, arg GetO
 			&i.Status,
 			&i.Frontend,
 			&i.Exercises,
+			&i.PublicScoreboard,
 			&i.DynamicScoring,
 			&i.DynamicMax,
 			&i.DynamicMin,

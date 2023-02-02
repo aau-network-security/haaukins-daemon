@@ -21,20 +21,26 @@ func (d *daemon) eventTeamSubrouter(r *gin.RouterGroup) {
 
 	team.Use(d.eventAuthMiddleware())
 	team.GET("/:teamName", d.getTeam)
-
 }
 
-type TeamRequest struct {
-	Username  string `json:"username"`
-	Password  string `json:"password"`
-	Email     string `json:"email"`
-	EventTag  string `json:"eventTag"`
-	SecretKey string `json:"secretKey"`
+type TeamSignupRequest struct {
+	Username        string `json:"username" binding:"required"`
+	Password        string `json:"password" binding:"required"`
+	ConfirmPassword string `json:"confirmPassword" binding:"required"`
+	Email           string `json:"email" binding:"required"`
+	EventTag        string `json:"eventTag"`
+	SecretKey       string `json:"secretKey"`
+}
+
+type TeamLoginRequest struct {
+	Username        string `json:"username" binding:"required"`
+	Password        string `json:"password" binding:"required"`
+	EventTag        string `json:"eventTag"`
 }
 
 func (d *daemon) teamLogin(c *gin.Context) {
 	ctx := context.Background()
-	var req TeamRequest
+	var req TeamLoginRequest
 	if err := c.BindJSON(&req); err != nil {
 		log.Error().Err(err).Msg("Error parsing request data: ")
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "Error"})
@@ -94,7 +100,7 @@ func (d *daemon) teamLogin(c *gin.Context) {
 func (d *daemon) teamSignup(c *gin.Context) {
 	ctx := context.Background()
 
-	var req TeamRequest
+	var req TeamSignupRequest
 	if err := c.BindJSON(&req); err != nil {
 		log.Error().Err(err).Msg("Error parsing request data: ")
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "Error"})
@@ -123,6 +129,11 @@ func (d *daemon) teamSignup(c *gin.Context) {
 
 	if dbEvent.Secretkey != "" && req.SecretKey != dbEvent.Secretkey {
 		c.JSON(http.StatusUnauthorized, APIResponse{Status: "invalid secretkey"})
+		return
+	}
+
+	if req.Password != req.ConfirmPassword {
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "passwords do not match"})
 		return
 	}
 

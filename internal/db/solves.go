@@ -1,29 +1,33 @@
 package db
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 const getSolvesForEvent = `-- name: GetSolvesForEvent :many
-SELECT tag, COUNT(tag) FROM solves WHERE event_id = $1 GROUP BY tag
+SELECT solves.tag, solves.solved_at, teams.username FROM solves INNER JOIN teams ON solves.team_id = teams.id WHERE solves.event_id = $1
 `
 
 type GetSolvesForEventRow struct {
-	Tag   string
-	Count int64
+	Tag  string
+	Date time.Time
+	Username string
 }
 
-func (q *Queries) GetEventSolvesMap(ctx context.Context, eventId int32) (map[string]int64, error) {
+func (q *Queries) GetEventSolvesMap(ctx context.Context, eventId int32) (map[string][]GetSolvesForEventRow, error) {
 	rows, err := q.db.QueryContext(ctx, getSolvesForEvent, eventId)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := make(map[string]int64)
+	items := make(map[string][]GetSolvesForEventRow)
 	for rows.Next() {
 		var i GetSolvesForEventRow
-		if err := rows.Scan(&i.Tag, &i.Count); err != nil {
+		if err := rows.Scan(&i.Tag, &i.Date, &i.Username); err != nil {
 			return nil, err
 		}
-		items[i.Tag] = i.Count
+		items[i.Tag] = append(items[i.Tag], i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
