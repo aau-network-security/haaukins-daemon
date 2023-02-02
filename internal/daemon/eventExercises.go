@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -32,8 +33,7 @@ type EventExercisesResponse struct {
 	Categories []Category `json:"categories"`
 }
 
-
-
+// TODO if not dynamic scoring, sort after points?
 // Get all exercises for event that the requesting team belongs to
 // Depending if the event has dynamic scoring enabled, it will inject the points into the
 // child exercise objects accordingly
@@ -80,6 +80,8 @@ func (d *daemon) getEventExercises(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
 		return
 	}
+
+	sortCategories(categoriesFromExService.Categories)
 
 	// For dynamic scoring if enabled
 	solvesMap, err := d.db.GetEventSolvesMap(ctx, dbEvent.ID)
@@ -228,9 +230,11 @@ func (d *daemon) solveExercise(c *gin.Context) {
 	}
 
 	if exClientResp.Exercises[0].Static {
+		log.Debug().Msg("static challenge found")
 		for _, instance := range exClientResp.Exercises[0].Instance {
 			for _, childExercise := range instance.Children {
 				staticFlag := strings.Trim(childExercise.Static, " ")
+				log.Debug().Str("flagFromLab", staticFlag).Str("flagFromRequest", req.Flag).Msg("comparing flags")
 				if childExercise.Tag == req.Tag && staticFlag == strings.Trim(req.Flag, " ") {
 					addSolveParams := db.AddSolveForTeamInEventParams{
 						Tag:      req.Tag,
@@ -248,7 +252,7 @@ func (d *daemon) solveExercise(c *gin.Context) {
 				}
 			}
 		}
-		c.JSON(http.StatusBadRequest, APIResponse{Status: "wrong flag"})
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "Unknown flag"})
 		return
 	}
 
@@ -257,6 +261,7 @@ func (d *daemon) solveExercise(c *gin.Context) {
 			for _, childExercise := range exercise.ChildExercises {
 				if childExercise.Tag == req.Tag {
 					flag := strings.Trim(childExercise.Flag, " ")
+					log.Debug().Str("flagFromLab", flag).Str("flagFromRequest", req.Flag).Msg("comparing flags")
 					if flag == strings.Trim(req.Flag, " ") {
 						addSolveParams := db.AddSolveForTeamInEventParams{
 							Tag:      req.Tag,
@@ -272,7 +277,7 @@ func (d *daemon) solveExercise(c *gin.Context) {
 						c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 						return
 					} else {
-						c.JSON(http.StatusBadRequest, APIResponse{Status: "wrong flag"})
+						c.JSON(http.StatusBadRequest, APIResponse{Status: "Unknown flag"})
 						return
 					}
 				}
@@ -281,7 +286,7 @@ func (d *daemon) solveExercise(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "exercise not added to lab"})
 		return
 	}
-	c.JSON(http.StatusBadRequest, APIResponse{Status: "configure lab and add exercise before solving this challenge"})
+	c.JSON(http.StatusBadRequest, APIResponse{Status: "lab not yet configured"})
 }
 
 // For teams to add an exercise which is not currently in the lab (advanced events only)
@@ -306,4 +311,15 @@ func (d *daemon) stopExercise(c *gin.Context) {
 // Used by teams to reset specific exercise containers
 func (d *daemon) resetExercise(c *gin.Context) {
 
+}
+
+func sortCategories(categories []*proto.GetCategoriesResponse_Category) {
+	sort.Slice(categories, func(p, q int) bool {
+		return categories[p].Name < categories[q].Name
+	})
+	for i, category := range categories {
+		if category.Name == "Starters" {
+			categories[0], categories[i] = categories[i], categories[0]
+		}
+	}
 }
