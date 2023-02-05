@@ -171,7 +171,8 @@ func (d *daemon) newEvent(c *gin.Context) {
 			Secretkey:             req.SecretKey,
 		}
 
-		if err := d.db.AddEvent(ctx, eventToAdd); err != nil {
+		dbId, err := d.db.AddEvent(ctx, eventToAdd)
+		if err != nil {
 			log.Error().Err(err).Msg("error adding event to database")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 			if err := d.agentPool.closeEnvironmentOnAllAgents(ctx, req.Tag); err != nil {
@@ -181,6 +182,8 @@ func (d *daemon) newEvent(c *gin.Context) {
 		}
 
 		event := &Event{
+			DbId:                       dbId,
+			StartedAt:                  time.Now(),
 			Config:                     req,
 			Teams:                      make(map[string]*Team),
 			Labs:                       make(map[string]*AgentLab),

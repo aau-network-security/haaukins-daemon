@@ -1,5 +1,5 @@
--- name: AddEvent :exec
-INSERT INTO events (tag, type, name, organization, initial_labs, max_labs, frontend, status, exercises, public_scoreboard, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretKey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19);
+-- name: AddEvent :one
+INSERT INTO events (tag, type, name, organization, initial_labs, max_labs, frontend, status, exercises, public_scoreboard, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretKey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) RETURNING id;
 
 -- name: CloseEvent :exec
 UPDATE events SET tag = @newTag, finished_at = @finishedAt, status = @newStatus WHERE tag = @oldTag;

@@ -11,8 +11,8 @@ import (
 	"time"
 )
 
-const addEvent = `-- name: AddEvent :exec
-INSERT INTO events (tag, type, name, organization, initial_labs, max_labs, frontend, status, exercises, public_scoreboard, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretKey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+const addEvent = `-- name: AddEvent :one
+INSERT INTO events (tag, type, name, organization, initial_labs, max_labs, frontend, status, exercises, public_scoreboard, dynamic_scoring, dynamic_max, dynamic_min, dynamic_solve_threshold, started_at, finish_expected, finished_at, createdby, secretKey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) RETURNING id
 `
 
 type AddEventParams struct {
@@ -37,8 +37,8 @@ type AddEventParams struct {
 	Secretkey             string
 }
 
-func (q *Queries) AddEvent(ctx context.Context, arg AddEventParams) error {
-	_, err := q.db.ExecContext(ctx, addEvent,
+func (q *Queries) AddEvent(ctx context.Context, arg AddEventParams) (int32, error) {
+	row := q.db.QueryRowContext(ctx, addEvent,
 		arg.Tag,
 		arg.Type,
 		arg.Name,
@@ -59,7 +59,9 @@ func (q *Queries) AddEvent(ctx context.Context, arg AddEventParams) error {
 		arg.Createdby,
 		arg.Secretkey,
 	)
-	return err
+	var id int32
+	err := row.Scan(&id)
+	return id, err
 }
 
 const addOrganization = `-- name: AddOrganization :exec
@@ -635,6 +637,39 @@ func (q *Queries) GetEventByTag(ctx context.Context, tag string) (Event, error) 
 		&i.Secretkey,
 	)
 	return i, err
+}
+
+const getEventSolves = `-- name: GetEventSolves :many
+SELECT solves.tag, solves.solved_at, teams.username FROM solves INNER JOIN teams ON solves.team_id = teams.id WHERE solves.event_id = $1 ORDER BY solves.solved_at ASC
+`
+
+type GetEventSolvesRow struct {
+	Tag      string
+	SolvedAt time.Time
+	Username string
+}
+
+func (q *Queries) GetEventSolves(ctx context.Context, eventID int32) ([]GetEventSolvesRow, error) {
+	rows, err := q.db.QueryContext(ctx, getEventSolves, eventID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetEventSolvesRow
+	for rows.Next() {
+		var i GetEventSolvesRow
+		if err := rows.Scan(&i.Tag, &i.SolvedAt, &i.Username); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getEventStatusByTag = `-- name: GetEventStatusByTag :many

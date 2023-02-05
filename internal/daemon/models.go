@@ -37,12 +37,12 @@ type APIResponse struct {
 	Exercises      []*proto.Exercise                       `json:"exercises,omitempty"`
 	Profiles       []ExerciseProfile                       `json:"profiles,omitempty"`
 	EventExercises *EventExercisesResponse                 `json:"eventExercises,omitempty"`
-	TeamLab        *LabResponse                              `json:"teamLab,omitempty"`
+	TeamLab        *LabResponse                            `json:"teamLab,omitempty"`
 	Categories     []*proto.GetCategoriesResponse_Category `json:"categories,omitempty"`
 	Orgs           []db.Organization                       `json:"orgs,omitempty"`
 	Agents         []AgentResponse                         `json:"agents,omitempty"`
 	Events         []db.Event                              `json:"events,omitempty"`
-	TeamInfo       *TeamResponse                                   `json:"teaminfo,omitempty"`
+	TeamInfo       *TeamResponse                           `json:"teaminfo,omitempty"`
 	EventInfo      *EventInfoResponse                      `json:"eventinfo,omitempty"`
 }
 
@@ -53,6 +53,8 @@ type EventPool struct {
 
 type Event struct {
 	M                          sync.RWMutex         `json:"-"`
+	DbId                       int32                `json:"dbId"`
+	StartedAt                  time.Time            `json:"startedAt"`
 	Config                     EventConfig          `json:"config,omitempty"`
 	Teams                      map[string]*Team     `json:"teams,omitempty"`
 	Labs                       map[string]*AgentLab `json:"labs,omitempty"`

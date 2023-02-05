@@ -19,7 +19,7 @@ func (d *daemon) eventSubrouter(r *gin.RouterGroup) {
 	d.eventTeamSubrouter(r)
 	d.eventLabsSubrouter(r)
 	d.eventExercisesSubrouter(r)
-
+	d.eventScoreSubrouter(r)
 	r.GET("/:eventTag", d.getEventInfo)
 }
 

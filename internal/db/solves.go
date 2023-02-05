@@ -6,12 +6,12 @@ import (
 )
 
 const getSolvesForEvent = `-- name: GetSolvesForEvent :many
-SELECT solves.tag, solves.solved_at, teams.username FROM solves INNER JOIN teams ON solves.team_id = teams.id WHERE solves.event_id = $1
+SELECT solves.tag, solves.solved_at, teams.username FROM solves INNER JOIN teams ON solves.team_id = teams.id WHERE solves.event_id = $1 ORDER BY solves.solved_at ASC
 `
 
 type GetSolvesForEventRow struct {
-	Tag  string
-	Date time.Time
+	Tag      string
+	Date     time.Time
 	Username string
 }
 
