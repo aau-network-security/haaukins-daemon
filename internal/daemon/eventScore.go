@@ -30,6 +30,7 @@ type TeamScore struct {
 	TeamName          string               `json:"teamName"`
 	Score             int                  `json:"score"`
 	TeamSolves        map[string]TeamSolve `json:"solves"`
+	LatestSolve       time.Time            `json:"latestSolve"`
 	TeamScoreTimeline [][]interface{}      `json:"teamScoreTimeline"`
 }
 
@@ -44,7 +45,6 @@ type solveForTimeline struct {
 	points int
 }
 
-// TODO If two teams have the same amount of points, team who first solved their latest challenge has the lead
 // TODO add comments
 func (d *daemon) getScores(c *gin.Context) {
 	ctx := context.Background()
@@ -112,8 +112,7 @@ func (d *daemon) getScores(c *gin.Context) {
 		return
 	}
 
-	var teamsScore []TeamScore
-
+	var teamScores []TeamScore
 	for _, team := range eventDbTeams {
 		teamSolves := make(map[string]TeamSolve)
 
@@ -124,7 +123,6 @@ func (d *daemon) getScores(c *gin.Context) {
 		for exTag, solves := range solvesMap {
 			exSolveCount := len(solves)
 			for index, solve := range solves {
-				log.Debug().Str("solve", solve.Tag).Str("team", solve.Username).Msg("solve")
 				if team.Username == solve.Username {
 					teamSolves[exTag] = TeamSolve{
 						Tag:    exTag,
@@ -162,17 +160,30 @@ func (d *daemon) getScores(c *gin.Context) {
 			teamScoreTimeline = append(teamScoreTimeline, teamScoreTime)
 		}
 
-		teamsScore = append(teamsScore, TeamScore{
+		latestSolve := teamScoreTimeline[len(teamScoreTimeline)-1][0].(time.Time)
+		teamScores = append(teamScores, TeamScore{
 			TeamName:          team.Username,
 			Score:             score,
 			TeamSolves:        teamSolves,
+			LatestSolve:       latestSolve,
 			TeamScoreTimeline: teamScoreTimeline,
 		})
-		sortTeamScores(teamsScore)
+
 	}
+
+	sortTeamScores(teamScores)
+
+	equalScoreGroups := findEqualScoreGroups(teamScores)
+	for start, end := range equalScoreGroups {
+		log.Debug().Int("Start", start).Int("End", end).Msg("equalScoreGroups")
+	}
+	for start, end := range equalScoreGroups {
+		sortGroupByLatestSolve(teamScores, start, end)
+	}
+
 	ScoreResponse := ScoreResponse{
 		ChallengesList: challengesList,
-		TeamsScore:     teamsScore,
+		TeamsScore:     teamScores,
 	}
 	// c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 	c.JSON(http.StatusOK, ScoreResponse)
@@ -186,7 +197,45 @@ func sortTeamScores(teamsScore []TeamScore) {
 
 func sortTimeline(solvesForTimeline []solveForTimeline) {
 	sort.SliceStable(solvesForTimeline, func(p, q int) bool {
-		return solvesForTimeline[p].date.Before(solvesForTimeline[q].date) 
+		return solvesForTimeline[p].date.Before(solvesForTimeline[q].date)
+	})
+}
+
+// Returns a map of keys and values where the keys are start indeces of an equal scoregroup and the values are the end of each group respectively
+func findEqualScoreGroups(teamScores []TeamScore) map[int]int {
+	equalScoreGroups := make(map[int]int)
+	for i := 0; i < len(teamScores); i++ {
+		firstEqual := true
+		startOfEqualGroup := 0
+		endOfEqualGroup := 0
+	Inner:
+		for j := i+1; j < len(teamScores); j++ {
+			log.Debug().Int("Score of i", teamScores[i].Score).Int("Score of j", teamScores[j].Score).Msg("Comparing scores")
+			if teamScores[i].Score == teamScores[j].Score && firstEqual {
+				firstEqual = false
+				startOfEqualGroup = i
+				endOfEqualGroup = j
+			} else if teamScores[i].Score == teamScores[j].Score && !firstEqual {
+				endOfEqualGroup = j
+			} else if endOfEqualGroup != 0 {
+				i = j-1
+				equalScoreGroups[startOfEqualGroup] = endOfEqualGroup
+				break Inner
+			}
+
+			if j+1 == len(teamScores) && endOfEqualGroup != 0 {
+				i = j
+				equalScoreGroups[startOfEqualGroup] = endOfEqualGroup
+			}
+		}
+	}
+	return equalScoreGroups
+}
+
+func sortGroupByLatestSolve(teamScores []TeamScore, start, end int) {
+	group := teamScores[start : end+1]
+	sort.Slice(group, func(i, j int) bool {
+		return group[i].LatestSolve.Before(group[j].LatestSolve)
 	})
 }
 
