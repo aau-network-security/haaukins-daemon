@@ -25,3 +25,7 @@ exercise-service:
   
 
 jwtSecret: test
+
+test-delay:
+  enabled: true/false
+  delay-seconds: 10

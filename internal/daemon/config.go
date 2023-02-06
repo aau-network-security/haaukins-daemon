@@ -1,6 +1,10 @@
 package daemon
 
-import "github.com/aau-network-security/haaukins-daemon/internal/db"
+import (
+	"time"
+
+	"github.com/aau-network-security/haaukins-daemon/internal/db"
+)
 
 type Config struct {
 	Host            string        `yaml:"host"`
@@ -13,6 +17,7 @@ type Config struct {
 	Rechaptcha      string        `yaml:"recaptcha-key,omitempty"`
 	APICreds        APICreds      `yaml:"api-creds,omitempty"`
 	StatePath       string        `yaml:"state-path,omitempty"`
+	TestDelay       TestDelay     `yaml:"test-delay,omitempty"`
 }
 
 type Logging struct {
@@ -33,4 +38,9 @@ type ServiceConfig struct {
 	AuthKey    string `yaml:"auth-key"`
 	SignKey    string `yaml:"sign-key"`
 	TLSEnabled bool   `yaml:"tls-enabled"`
+}
+
+type TestDelay struct {
+	Enabled bool `yaml:"enabled"`
+	DelayInSeconds time.Duration `yaml:"delay-seconds"`
 }

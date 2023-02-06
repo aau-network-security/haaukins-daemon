@@ -149,3 +149,10 @@ func (d *daemon) eventAuthMiddleware() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+func (d *daemon) delayMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		time.Sleep(time.Second * d.conf.TestDelay.DelayInSeconds)
+		c.Next()
+	}
+}

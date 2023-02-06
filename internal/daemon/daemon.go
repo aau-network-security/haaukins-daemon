@@ -304,6 +304,10 @@ func (d *daemon) Run() error {
 		MaxAge:           12 * time.Hour,
 	}))
 	r.Use(gin.Recovery())
+
+	if d.conf.TestDelay.Enabled {
+		r.Use(d.delayMiddleware())
+	}
 	d.setupRouters(r)
 	return r.Run(":8080")
 }
@@ -311,7 +315,7 @@ func (d *daemon) Run() error {
 func (d *daemon) setupRouters(r *gin.Engine) {
 	admin := r.Group("/v1/admin")
 	event := r.Group("/v1/event")
-
+	
 	d.adminSubrouter(admin)
 	d.eventSubrouter(event)
 }
