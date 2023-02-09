@@ -302,9 +302,11 @@ func (ap *AgentPool) createNewEnvOnAvailableAgents(ctx context.Context, eventPoo
 				return AllAgentsReturnedErr
 			}
 		} else {
+			ap.M.RUnlock()
 			return NoResourcesError
 		}
 	} else {
+		ap.M.RUnlock()
 		return NoAgentsConnected
 	}
 	return nil
@@ -514,6 +516,7 @@ func (ap *AgentPool) closeEnvironmentOnAllAgents(ctx context.Context, eventTag s
 			return AllAgentsReturnedErr
 		}
 	} else {
+		ap.M.RUnlock()
 		return NoAgentsConnected
 	}
 	return nil
