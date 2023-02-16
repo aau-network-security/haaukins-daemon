@@ -23,10 +23,11 @@ type ScoreResponse struct {
 		Name string `json:"name"`
 		Tag  string `json:"tag"`
 	} `json:"challengesList"`
-	TeamsScore []TeamScore `json:"teamsScore"`
+	TeamsScores []TeamScore `json:"teamsScore"`
 }
 
 type TeamScore struct {
+	Rank              int                  `json:"rank"`
 	TeamName          string               `json:"teamName"`
 	Score             int                  `json:"score"`
 	TeamSolves        map[string]TeamSolve `json:"solves"`
@@ -181,9 +182,14 @@ func (d *daemon) getScores(c *gin.Context) {
 		sortGroupByLatestSolve(teamScores, start, end)
 	}
 
+	//Inserting their rank
+	for i := range teamScores {
+		teamScores[i].Rank = i+1
+	}
+
 	ScoreResponse := ScoreResponse{
 		ChallengesList: challengesList,
-		TeamsScore:     teamScores,
+		TeamsScores:     teamScores,
 	}
 	// c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 	c.JSON(http.StatusOK, ScoreResponse)
@@ -209,7 +215,7 @@ func findEqualScoreGroups(teamScores []TeamScore) map[int]int {
 		startOfEqualGroup := 0
 		endOfEqualGroup := 0
 	Inner:
-		for j := i+1; j < len(teamScores); j++ {
+		for j := i + 1; j < len(teamScores); j++ {
 			log.Debug().Int("Score of i", teamScores[i].Score).Int("Score of j", teamScores[j].Score).Msg("Comparing scores")
 			if teamScores[i].Score == teamScores[j].Score && firstEqual {
 				firstEqual = false
@@ -218,7 +224,7 @@ func findEqualScoreGroups(teamScores []TeamScore) map[int]int {
 			} else if teamScores[i].Score == teamScores[j].Score && !firstEqual {
 				endOfEqualGroup = j
 			} else if endOfEqualGroup != 0 {
-				i = j-1
+				i = j - 1
 				equalScoreGroups[startOfEqualGroup] = endOfEqualGroup
 				break Inner
 			}
