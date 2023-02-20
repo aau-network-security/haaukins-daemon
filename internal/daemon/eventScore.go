@@ -174,22 +174,14 @@ func (d *daemon) getScores(c *gin.Context) {
 
 	sortTeamScores(teamScores)
 
-	equalScoreGroups := findEqualScoreGroups(teamScores)
-	for start, end := range equalScoreGroups {
-		log.Debug().Int("Start", start).Int("End", end).Msg("equalScoreGroups")
-	}
-	for start, end := range equalScoreGroups {
-		sortGroupByLatestSolve(teamScores, start, end)
-	}
-
 	//Inserting their rank
 	for i := range teamScores {
-		teamScores[i].Rank = i+1
+		teamScores[i].Rank = i + 1
 	}
 
 	ScoreResponse := ScoreResponse{
 		ChallengesList: challengesList,
-		TeamsScores:     teamScores,
+		TeamsScores:    teamScores,
 	}
 	// c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 	c.JSON(http.StatusOK, ScoreResponse)
@@ -199,49 +191,18 @@ func sortTeamScores(teamsScore []TeamScore) {
 	sort.SliceStable(teamsScore, func(p, q int) bool {
 		return teamsScore[p].Score > teamsScore[q].Score
 	})
+
+	sort.SliceStable(teamsScore, func(p, q int) bool {
+		if teamsScore[p].Score == teamsScore[q].Score {
+			return teamsScore[p].LatestSolve.Before(teamsScore[q].LatestSolve)
+		}
+		return false
+	})
 }
 
 func sortTimeline(solvesForTimeline []solveForTimeline) {
 	sort.SliceStable(solvesForTimeline, func(p, q int) bool {
 		return solvesForTimeline[p].date.Before(solvesForTimeline[q].date)
-	})
-}
-
-// Returns a map of keys and values where the keys are start indeces of an equal scoregroup and the values are the end of each group respectively
-func findEqualScoreGroups(teamScores []TeamScore) map[int]int {
-	equalScoreGroups := make(map[int]int)
-	for i := 0; i < len(teamScores); i++ {
-		firstEqual := true
-		startOfEqualGroup := 0
-		endOfEqualGroup := 0
-	Inner:
-		for j := i + 1; j < len(teamScores); j++ {
-			log.Debug().Int("Score of i", teamScores[i].Score).Int("Score of j", teamScores[j].Score).Msg("Comparing scores")
-			if teamScores[i].Score == teamScores[j].Score && firstEqual {
-				firstEqual = false
-				startOfEqualGroup = i
-				endOfEqualGroup = j
-			} else if teamScores[i].Score == teamScores[j].Score && !firstEqual {
-				endOfEqualGroup = j
-			} else if endOfEqualGroup != 0 {
-				i = j - 1
-				equalScoreGroups[startOfEqualGroup] = endOfEqualGroup
-				break Inner
-			}
-
-			if j+1 == len(teamScores) && endOfEqualGroup != 0 {
-				i = j
-				equalScoreGroups[startOfEqualGroup] = endOfEqualGroup
-			}
-		}
-	}
-	return equalScoreGroups
-}
-
-func sortGroupByLatestSolve(teamScores []TeamScore, start, end int) {
-	group := teamScores[start : end+1]
-	sort.Slice(group, func(i, j int) bool {
-		return group[i].LatestSolve.Before(group[j].LatestSolve)
 	})
 }
 
