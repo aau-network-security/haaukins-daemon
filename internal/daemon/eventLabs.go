@@ -55,7 +55,7 @@ type LabResponse struct {
 type Lab struct {
 	Tag             string            `json:"tag"`
 	EventTag        string            `json:"eventTag"`
-	ExercisesStatus []ExerciseStatus  `json:"exercisesStatus"`
+	ExercisesStatus map[string]ExerciseStatus  `json:"exercisesStatus"`
 	IsVpn           bool              `json:"isVpn"`
 	GuacCreds       *aproto.GuacCreds `json:"guacCreds"`
 }
@@ -170,7 +170,7 @@ func (d *daemon) resetVm(c *gin.Context) {
 }
 
 func assembleLabResponse(teamLab *AgentLab) (*LabResponse) {
-	var exercisesStatus []ExerciseStatus
+	exercisesStatus := make(map[string]ExerciseStatus)
 	for _, exercise := range teamLab.LabInfo.Exercises {
 		var childExercises []string
 		for _, childExercise := range exercise.ChildExercises {
@@ -183,11 +183,11 @@ func assembleLabResponse(teamLab *AgentLab) (*LabResponse) {
 				Status: machine.Status,
 			})
 		}
-		exercisesStatus = append(exercisesStatus, ExerciseStatus{
+		exercisesStatus[exercise.Tag] = ExerciseStatus{
 			Tag:            exercise.Tag,
 			ChildExercises: childExercises,
 			Machines:       machines,
-		})
+		}
 	}
 	labResponse := &LabResponse{
 		ParentAgent: teamLab.ParentAgent,

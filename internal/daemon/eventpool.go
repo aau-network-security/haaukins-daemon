@@ -69,6 +69,10 @@ func (event *Event) GetTeam(username string) (*Team, error) {
 		return nil, fmt.Errorf("could not find team with username: %s ", username)
 	}
 
+	if team.Lab != nil {
+		team.Lab.updateLabInfo()
+	}
+
 	return team, nil
 }
 
@@ -77,6 +81,30 @@ func (event *Event) AddTeam(team *Team) {
 	defer event.M.Unlock()
 
 	event.Teams[team.Username] = team
+}
+
+// Calculates the current amount of labs for an event then checks if it has passed or equal to the configured amount of maximum labs for event
+func (event *Event) IsMaxLabsReached() bool {
+	// First get amount of teams waiting for labs
+	currentNumberOfLabs := event.TeamsWaitingForBrowserLabs.Len() + event.TeamsWaitingForVpnLabs.Len()
+	for _, team := range event.Teams {
+		if team.Status == WaitingForLab {
+			currentNumberOfLabs += 1
+		}
+	}
+
+	// Then add the amount of labs already created
+	for _, lab := range event.Labs {
+		if lab.IsAssigned {
+			currentNumberOfLabs += 1
+		}
+	}
+	log.Info().Int("currentNumberOfLabs", currentNumberOfLabs).Msg("current number of labs")
+	// Compare to configured max lab setting for event
+	if currentNumberOfLabs >= int(event.Config.MaxLabs) {
+		return true
+	}
+	return false
 }
 
 // The queue handlers are pulling out teams waiting for labs from one channel
@@ -89,7 +117,7 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string) {
 		for {
 			e := event.TeamsWaitingForBrowserLabs.Front()
 			if e == nil {
-				continue	
+				continue
 			}
 			log.Debug().Msg("team pulled from browser queue")
 			event.TeamsWaitingForBrowserLabs.Remove(e)
@@ -110,6 +138,7 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string) {
 			}
 
 			team.M.Lock()
+			lab.IsAssigned = true
 			team.Lab = lab
 			team.Status = Idle
 			team.M.Unlock()
@@ -121,10 +150,10 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string) {
 
 	vpnQueueHandler := func() {
 		log.Debug().Msg("Waiting for team to enter vpn lab queue")
-		for {			
+		for {
 			e := event.TeamsWaitingForVpnLabs.Front()
 			if e == nil {
-				continue	
+				continue
 			}
 			event.TeamsWaitingForVpnLabs.Remove(e)
 			log.Debug().Msg("team pulled from vpn queue")
@@ -143,6 +172,7 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string) {
 			}
 
 			team.M.Lock()
+			lab.IsAssigned = true
 			team.Lab = lab
 			team.Status = Idle
 			team.M.Unlock()

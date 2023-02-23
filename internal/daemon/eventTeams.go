@@ -221,7 +221,7 @@ func (d *daemon) teamSignup(c *gin.Context) {
 
 	saveState(d.eventpool, d.conf.StatePath)
 
-	if EventType(dbEvent.Type) == TypeBeginner {
+	if EventType(dbEvent.Type) == TypeBeginner && !event.IsMaxLabsReached() {
 		team.Status = InQueue
 		log.Info().Str("username", team.Username).Msg("putting team into queue for beginner lab")
 		queueElement := event.TeamsWaitingForBrowserLabs.PushBack(team)

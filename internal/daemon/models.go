@@ -152,9 +152,11 @@ type ParentAgent struct {
 	Tls  bool   `json:"tls"`
 }
 type AgentLab struct {
-	ParentAgent          ParentAgent `json:"parentAgent,omitempty"`
-	EstimatedMemoryUsage uint64      `json:"estimatedMemoryUsage,omitempty"`
-	LabInfo              *aproto.Lab `json:"labInfo,omitempty"`
+	ParentAgent          ParentAgent      `json:"parentAgent,omitempty"`
+	EstimatedMemoryUsage uint64           `json:"estimatedMemoryUsage,omitempty"`
+	Conn                 *grpc.ClientConn `json:"-"`
+	LabInfo              *aproto.Lab      `json:"labInfo,omitempty"`
+	IsAssigned           bool             `json:"isAssigned,omitempty"`
 }
 
 type Category struct {

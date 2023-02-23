@@ -109,6 +109,7 @@ func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, a *Ag
 								Tls:  a.Tls,
 							},
 							EstimatedMemoryUsage: event.EstimatedMemoryUsagePerLab - vmAvrMemoryUsage,
+							Conn:                 a.Conn,
 							LabInfo:              l,
 						}
 						event.UnassignedVpnLabs <- agentLab
@@ -122,6 +123,7 @@ func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, a *Ag
 							Url:  a.Url,
 							Tls:  a.Tls,
 						},
+						Conn:                 a.Conn,
 						EstimatedMemoryUsage: event.EstimatedMemoryUsagePerLab,
 						LabInfo:              l,
 					}
@@ -646,4 +648,17 @@ func (agent *Agent) calculateCurrentEstimatedMemConsumption(eventPool *EventPool
 	}
 
 	return currentEstimatedLabConsumption
+}
+
+func (agentLab *AgentLab) updateLabInfo() {
+	ctx := context.Background()
+	agentClient := aproto.NewAgentClient(agentLab.Conn)
+	
+	labInfo, err := agentClient.GetLab(ctx, &aproto.GetLabRequest{LabTag: agentLab.LabInfo.Tag})
+	if err != nil {
+		log.Error().Err(err).Msg("error updating lab info")
+		return
+	}
+
+	agentLab.LabInfo = labInfo.Lab
 }

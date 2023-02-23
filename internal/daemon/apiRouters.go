@@ -30,6 +30,7 @@ type EventInfoResponse struct {
 	Secret           bool   `json:"secret"`
 	PublicScoreboard bool   `json:"publicScoreboard"`
 	TeamSize         int32  `json:"teamSize"`
+	IsMaxLabsReached bool   `json:"isMaxLabsReached"`
 }
 
 func (d *daemon) getEventInfo(c *gin.Context) {
@@ -45,6 +46,9 @@ func (d *daemon) getEventInfo(c *gin.Context) {
 	if event.Config.SecretKey != "" {
 		secret = true
 	}
+
+	isMaxLabsReached := event.IsMaxLabsReached()
+
 	eventInfoResponse := &EventInfoResponse{
 		Tag:              event.Config.Tag,
 		Name:             event.Config.Name,
@@ -52,6 +56,7 @@ func (d *daemon) getEventInfo(c *gin.Context) {
 		PublicScoreboard: event.Config.PublicScoreBoard,
 		Secret:           secret,
 		TeamSize:         event.Config.TeamSize,
+		IsMaxLabsReached: isMaxLabsReached,
 	}
 
 	c.JSON(http.StatusOK, APIResponse{Status: "OK", EventInfo: eventInfoResponse})
