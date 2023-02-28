@@ -447,8 +447,10 @@ func (d *daemon) agentWebsocket(c *gin.Context) {
 		fmt.Println(err)
 		return
 	}
-	defer ws.Close()
-
+	defer func(ws *websocket.Conn) {
+		log.Debug().Msg("closing connection")
+		ws.Close()
+	}(ws)
 	mt := websocket.TextMessage
 	// Construct a type to hold the token
 	type WsAuthRequest struct {
@@ -488,7 +490,9 @@ func (d *daemon) agentWebsocket(c *gin.Context) {
 				}
 
 				agentJson, err := json.Marshal(agent.Resources)
-				err = ws.WriteMessage(mt, agentJson)
+				if err := ws.WriteMessage(mt, agentJson); err != nil {
+					return
+				}
 				time.Sleep(2 * time.Second)
 			}
 		}

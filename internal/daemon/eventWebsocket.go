@@ -66,16 +66,23 @@ func (d *daemon) eventWebsocket(c *gin.Context) {
 		team.ActiveWebsocketConnections[wsId] = ws
 
 		defer func(ws *websocket.Conn, team *Team, wsId string) {
+			log.Debug().Msg("closing connection")
 			delete(team.ActiveWebsocketConnections, wsId)
 			ws.Close()
 		}(ws, team, wsId)
 
 		for {
 			if err = ws.WriteMessage(mt, []byte("hb")); err != nil {
-				log.Error().Err(err).Msg("error writing hb to client")
+				log.Debug().Msg("client disconnected")
 				return
 			}
-			time.Sleep(2 * time.Second)
+			time.Sleep(5 * time.Second)
 		}
+	}
+}
+
+func sendCommandToTeam(team *Team, command string) {
+	for _, ws := range team.ActiveWebsocketConnections {
+		ws.WriteMessage(websocket.TextMessage, []byte(command))
 	}
 }

@@ -144,7 +144,8 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string) {
 			team.Lab = lab
 			team.Status = Idle
 			team.M.Unlock()
-
+			
+			sendCommandToTeam(team, updateTeam)
 			saveState(eventPool, statePath)
 			// TODO Assign labs but first implement correct object to be sent between agent and daemon
 		}
@@ -179,6 +180,7 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string) {
 			team.Status = Idle
 			team.M.Unlock()
 
+			sendCommandToTeam(team, updateTeam)
 			saveState(eventPool, statePath)
 			// TODO Assign labs but first implement correct object to be sent between agent and daemon
 		}

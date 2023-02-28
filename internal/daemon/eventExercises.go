@@ -247,6 +247,7 @@ func (d *daemon) solveExercise(c *gin.Context) {
 						c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
 						return
 					}
+					sendCommandToTeam(team, updateChallenges)
 					c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 					return
 				}
@@ -274,6 +275,7 @@ func (d *daemon) solveExercise(c *gin.Context) {
 							c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
 							return
 						}
+						sendCommandToTeam(team, updateChallenges)
 						c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 						return
 					} else {
