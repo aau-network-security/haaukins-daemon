@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/rs/zerolog/log"
 )
@@ -26,6 +27,12 @@ func (ep *EventPool) RemoveEvent(eventTag string) error {
 	}
 	close(event.UnassignedBrowserLabs)
 	close(event.UnassignedVpnLabs)
+
+	for _, team := range event.Teams {
+		for _, ws := range team.ActiveWebsocketConnections {
+			ws.Close()
+		}
+	}
 
 	delete(ep.Events, eventTag)
 	return nil
@@ -113,10 +120,15 @@ func (event *Event) IsMaxLabsReached() bool {
 // Then waits for a lab to become available
 // When a labs enters the unassigned lab queue, it will assign the lab to the team previously pulled
 // Relies heavily on the blocking functionality of channels
+/* TODO: Queue handlers currently use a linked list in case and element needs to be removed from the queue
+	This had the unfortunate effect of spending 1 core on the CPU per event created...
+	Short minded fix is currently inserting a 1 milisecond delay...
+*/
 func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string) {
 	browserQueueHandler := func() {
 		log.Debug().Msg("Waiting for teams to enter browser lab queue")
 		for {
+			time.Sleep(1*time.Millisecond)
 			e := event.TeamsWaitingForBrowserLabs.Front()
 			if e == nil {
 				continue
@@ -144,7 +156,7 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string) {
 			team.Lab = lab
 			team.Status = Idle
 			team.M.Unlock()
-			
+
 			sendCommandToTeam(team, updateTeam)
 			saveState(eventPool, statePath)
 			// TODO Assign labs but first implement correct object to be sent between agent and daemon
@@ -154,6 +166,7 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string) {
 	vpnQueueHandler := func() {
 		log.Debug().Msg("Waiting for team to enter vpn lab queue")
 		for {
+			time.Sleep(1*time.Millisecond)
 			e := event.TeamsWaitingForVpnLabs.Front()
 			if e == nil {
 				continue
@@ -166,7 +179,7 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string) {
 			team.Status = WaitingForLab
 			team.M.Unlock()
 
-			lab, ok := <-event.UnassignedVpnLabs
+			lab, ok := <- event.UnassignedVpnLabs
 			if ok {
 				log.Debug().Msgf("pulled lab from vpn queue: %v", lab)
 			} else {
