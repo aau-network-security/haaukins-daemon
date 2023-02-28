@@ -39,6 +39,7 @@ func (d *daemon) eventLabsSubrouter(r *gin.RouterGroup) {
 	labs.Use(d.eventAuthMiddleware())
 	labs.POST("", d.configureLab)
 	labs.GET("", d.getLabInfo)
+	labs.GET("/vpnconf", d.getVpnConf)
 	labs.GET("/resetlab", d.resetLab)
 	labs.GET("/resetvm", d.resetVm)
 }
@@ -170,6 +171,51 @@ func (d *daemon) getLabInfo(c *gin.Context) {
 	labResponse := assembleLabResponse(team.Lab)
 
 	c.JSON(http.StatusOK, APIResponse{Status: "OK", TeamLab: labResponse})
+}
+
+func (d *daemon) getVpnConf(c *gin.Context) {
+	teamClaims := unpackTeamClaims(c)
+
+	event, err := d.eventpool.GetEvent(teamClaims.EventTag)
+	if err != nil {
+		log.Error().Err(err).Msg("could not find event in event pool")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "event for team is not currently running"})
+		return
+	}
+
+	team, err := event.GetTeam(teamClaims.Username)
+	if err != nil {
+		log.Error().Err(err).Msg("could not find team for event")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "could not find team for event"})
+		return
+	}
+
+	if team.Lab == nil {
+		log.Debug().Str("team", team.Username).Msg("no lab configured for team")
+		c.JSON(http.StatusNotFound, APIResponse{Status: "lab not found"})
+		return
+	}
+
+	if !team.Lab.LabInfo.IsVPN {
+		log.Debug().Str("team", team.Username).Msg("no lab configured for team")
+		c.JSON(http.StatusNotFound, APIResponse{Status: "cannot download vpn conf for browser lab"})
+		return
+	}
+
+	if team.Lab.Conn != nil {
+		ctx := context.Background()
+		agentClient := aproto.NewAgentClient(team.Lab.Conn)
+		agentResp, err := agentClient.CreateVpnConfForLab(ctx, &aproto.CreateVpnConfRequest{LabTag: team.Lab.LabInfo.Tag})
+		if err != nil {
+			log.Error().Err(err).Msg("error creating vpn config")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
+			return
+		}
+		c.JSON(http.StatusOK, APIResponse{Status: "ok", Message: agentResp.Configs[0]})
+		return
+	}
+	log.Error().Msg("error creating vpn config: lab conn is nil")
+	c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 }
 
 // Can be used by teams to completely reset their lab

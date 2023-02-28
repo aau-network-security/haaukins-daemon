@@ -32,6 +32,7 @@ type TeamClaims struct {
 
 type APIResponse struct {
 	Status         string                                  `json:"status,omitempty"`
+	Message        string                                  `json:"message,omitempty"`
 	Token          string                                  `json:"token,omitempty"`
 	UserInfo       *AdminUserReponse                       `json:"userinfo,omitempty"`
 	Users          []AdminUserReponse                      `json:"users,omitempty"`
