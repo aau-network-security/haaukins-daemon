@@ -91,6 +91,16 @@ func (d *daemon) configureLab(c *gin.Context) {
 		return
 	}
 
+	if event.IsMaxLabsReached() {
+		c.JSON(http.StatusForbidden, APIResponse{Status: "max labs reached for event"})
+		return
+	}
+
+	if event.Config.Type == int32(TypeBeginner) && req.IsVpn {
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "vpn labs cannot be created for beginner events"})
+		return
+	}	
+
 	team, err := event.GetTeam(teamClaims.Username)
 	if err != nil {
 		log.Error().Err(err).Msg("Error getting team from event")

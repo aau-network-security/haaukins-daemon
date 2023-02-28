@@ -70,7 +70,9 @@ func (event *Event) GetTeam(username string) (*Team, error) {
 	}
 
 	if team.Lab != nil {
-		team.Lab.updateLabInfo()
+		if team.Lab.Conn != nil {
+			team.Lab.updateLabInfo()
+		}
 	}
 
 	return team, nil

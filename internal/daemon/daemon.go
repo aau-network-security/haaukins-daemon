@@ -227,6 +227,19 @@ func New(conf *Config) (*daemon, error) {
 	}
 	wg.Wait()
 	agentPool.Agents = agents
+
+	// Reassign labs to their agent since the connection is not stored in state
+	for _, event := range eventPool.Events {
+		for _, l := range event.Labs {
+			for _, agent := range agentPool.Agents {
+				if l.ParentAgent.Name == agent.Name {
+					log.Debug().Msg("Found agent for lab")
+					l.Conn = agent.Conn
+				}
+			}
+		}
+	}
+
 	log.Debug().Msg("added agents to agent pool")
 	// dataSource := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable", conf.Database.Host, conf.Database.Username, conf.Database.Password, conf.Database.DbName, conf.Database.Port)
 	// adapter, err := gormadapter.NewFilteredAdapter("postgres", dataSource, true)

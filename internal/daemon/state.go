@@ -89,6 +89,13 @@ func resumeState(statePath string) (*EventPool, error) {
 			}
 		}
 
+		
+		for _, team := range event.Teams {
+			if team.Lab != nil {
+				event.Labs[team.Lab.LabInfo.Tag] = team.Lab
+			}
+		}
+
 		event.startQueueHandlers(state.EventPool, statePath)
 	}
 
