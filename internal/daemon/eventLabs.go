@@ -132,6 +132,7 @@ func (d *daemon) configureLab(c *gin.Context) {
 		log.Info().Str("username", team.Username).Msg("putting team into queue for vpn lab")
 		queueElement := event.TeamsWaitingForVpnLabs.PushBack(team)
 		team.QueueElement = queueElement
+		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 		return
 	}
 	team.Status = InQueue

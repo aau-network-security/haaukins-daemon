@@ -21,6 +21,7 @@ func (d *daemon) eventSubrouter(r *gin.RouterGroup) {
 	d.eventExercisesSubrouter(r)
 	d.eventScoreSubrouter(r)
 	r.GET("/:eventTag", d.getEventInfo)
+	r.GET("/ws", d.eventWebsocket)
 }
 
 type EventInfoResponse struct {

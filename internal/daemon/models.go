@@ -9,6 +9,7 @@ import (
 	aproto "github.com/aau-network-security/haaukins-agent/pkg/proto"
 	"github.com/aau-network-security/haaukins-daemon/internal/db"
 	"github.com/aau-network-security/haaukins-exercises/proto"
+	"github.com/gorilla/websocket"
 	"google.golang.org/grpc"
 )
 
@@ -88,13 +89,13 @@ type EventConfig struct {
 }
 
 type Team struct {
-	M                sync.RWMutex        `json:"-"`
-	Username         string              `json:"username,omitempty"`
-	Email            string              `json:"email,omitempty"`
-	Status           TeamStatus          `json:"status"`
-	Lab              *AgentLab           `json:"lab,omitempty"`
-	RunningExercises map[string]struct{} `json:"RunningExercises,omitempty"`
-	QueueElement     *list.Element       `json:"-"`
+	M                          sync.RWMutex               `json:"-"`
+	Username                   string                     `json:"username,omitempty"`
+	Email                      string                     `json:"email,omitempty"`
+	Status                     TeamStatus                 `json:"status"`
+	Lab                        *AgentLab                  `json:"lab,omitempty"`
+	QueueElement               *list.Element              `json:"-"`
+	ActiveWebsocketConnections map[string]*websocket.Conn `json:"-"`
 }
 
 type ExerciseProfile struct {

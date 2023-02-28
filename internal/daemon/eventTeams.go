@@ -9,6 +9,7 @@ import (
 	"github.com/aau-network-security/haaukins-daemon/internal/db"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -106,8 +107,8 @@ func (d *daemon) teamLogin(c *gin.Context) {
 
 	teamResponse := &TeamResponse{
 		Username: team.Username,
-		Email: team.Email,
-		Status: team.Status.String(),
+		Email:    team.Email,
+		Status:   team.Status.String(),
 	}
 	if team.Lab != nil {
 		teamResponse.Lab = assembleLabResponse(team.Lab)
@@ -212,10 +213,11 @@ func (d *daemon) teamSignup(c *gin.Context) {
 	}
 
 	team := &Team{
-		Username: req.Username,
-		Email:    req.Email,
-		Status:   Idle,
-		Lab:      nil,
+		Username:                   req.Username,
+		Email:                      req.Email,
+		Status:                     Idle,
+		Lab:                        nil,
+		ActiveWebsocketConnections: make(map[string]*websocket.Conn),
 	}
 	event.AddTeam(team)
 
@@ -230,8 +232,8 @@ func (d *daemon) teamSignup(c *gin.Context) {
 
 	teamResponse := &TeamResponse{
 		Username: team.Username,
-		Email: team.Email,
-		Status: team.Status.String(),
+		Email:    team.Email,
+		Status:   team.Status.String(),
 	}
 	if team.Lab != nil {
 		teamResponse.Lab = assembleLabResponse(team.Lab)
@@ -257,8 +259,8 @@ func (d *daemon) getOwnTeam(c *gin.Context) {
 	}
 	teamResponse := &TeamResponse{
 		Username: team.Username,
-		Email: team.Email,
-		Status: team.Status.String(),
+		Email:    team.Email,
+		Status:   team.Status.String(),
 	}
 	if team.Lab != nil {
 		teamResponse.Lab = assembleLabResponse(team.Lab)
