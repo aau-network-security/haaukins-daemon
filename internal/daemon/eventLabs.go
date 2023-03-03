@@ -54,11 +54,11 @@ type LabResponse struct {
 }
 
 type Lab struct {
-	Tag             string            `json:"tag"`
-	EventTag        string            `json:"eventTag"`
-	ExercisesStatus map[string]ExerciseStatus  `json:"exercisesStatus"`
-	IsVpn           bool              `json:"isVpn"`
-	GuacCreds       *aproto.GuacCreds `json:"guacCreds"`
+	Tag             string                    `json:"tag"`
+	EventTag        string                    `json:"eventTag"`
+	ExercisesStatus map[string]ExerciseStatus `json:"exercisesStatus"`
+	IsVpn           bool                      `json:"isVpn"`
+	GuacCreds       *aproto.GuacCreds         `json:"guacCreds"`
 }
 
 type ExerciseStatus struct {
@@ -100,7 +100,7 @@ func (d *daemon) configureLab(c *gin.Context) {
 	if event.Config.Type == int32(TypeBeginner) && req.IsVpn {
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "vpn labs cannot be created for beginner events"})
 		return
-	}	
+	}
 
 	team, err := event.GetTeam(teamClaims.Username)
 	if err != nil {
@@ -228,7 +228,7 @@ func (d *daemon) resetVm(c *gin.Context) {
 
 }
 
-func assembleLabResponse(teamLab *AgentLab) (*LabResponse) {
+func assembleLabResponse(teamLab *AgentLab) *LabResponse {
 	exercisesStatus := make(map[string]ExerciseStatus)
 	for _, exercise := range teamLab.LabInfo.Exercises {
 		var childExercises []string
