@@ -361,6 +361,14 @@ func (d *daemon) reconnectAgent(c *gin.Context) {
 
 		d.agentPool.addAgent(agentForPool)
 
+		for _, event := range d.eventpool.Events {
+			for _, lab := range event.Labs {
+				if lab.ParentAgent.Name == agentForPool.Name {
+					lab.Conn = conn
+				}
+			}
+		}
+
 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 		return
 	}
