@@ -97,6 +97,7 @@ type Team struct {
 	Lab                        *AgentLab                  `json:"lab,omitempty"`
 	QueueElement               *list.Element              `json:"-"`
 	ActiveWebsocketConnections map[string]*websocket.Conn `json:"-"`
+	LastHeavyRequest           time.Time                  `json:"-"`
 }
 
 type ExerciseProfile struct {

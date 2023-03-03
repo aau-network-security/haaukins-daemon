@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/rs/zerolog/log"
 )
@@ -91,6 +92,7 @@ func resumeState(statePath string) (*EventPool, error) {
 
 		
 		for _, team := range event.Teams {
+			team.LastHeavyRequest = time.Now().AddDate(0, 0, -1)
 			if team.Lab != nil {
 				event.Labs[team.Lab.LabInfo.Tag] = team.Lab
 			}

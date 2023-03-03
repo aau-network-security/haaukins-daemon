@@ -218,6 +218,7 @@ func (d *daemon) teamSignup(c *gin.Context) {
 		Status:                     Idle,
 		Lab:                        nil,
 		ActiveWebsocketConnections: make(map[string]*websocket.Conn),
+		LastHeavyRequest: time.Now().AddDate(0, 0, -1),
 	}
 	event.AddTeam(team)
 
