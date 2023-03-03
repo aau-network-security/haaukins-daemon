@@ -7,10 +7,12 @@ import (
 	"strings"
 	"time"
 
+	aproto "github.com/aau-network-security/haaukins-agent/pkg/proto"
 	"github.com/aau-network-security/haaukins-daemon/internal/db"
 	"github.com/aau-network-security/haaukins-exercises/proto"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
+	"golang.org/x/exp/slices"
 )
 
 func (d *daemon) eventExercisesSubrouter(r *gin.RouterGroup) {
@@ -23,10 +25,10 @@ func (d *daemon) eventExercisesSubrouter(r *gin.RouterGroup) {
 
 	exercises.POST("/solve", d.solveExercise)
 
-	exercises.POST("/add/:exerciseTag", d.addExerciseToLab)
-	exercises.POST("/stop/:exerciseTag", d.stopExercise)
-	exercises.POST("/start/:exerciseTag", d.startExercise)
-	exercises.POST("/reset/:exerciseTag", d.resetExercise)
+	exercises.PUT("/add/:exerciseTag", d.addExerciseToLab)
+	exercises.PUT("/stop/:exerciseTag", d.stopExercise)
+	exercises.PUT("/start/:exerciseTag", d.startExercise)
+	exercises.PUT("/reset/:exerciseTag", d.resetExercise)
 }
 
 type EventExercisesResponse struct {
@@ -291,11 +293,114 @@ func (d *daemon) solveExercise(c *gin.Context) {
 	c.JSON(http.StatusBadRequest, APIResponse{Status: "lab not yet configured"})
 }
 
+// TODO: Join start and add exercise into one function
 // For teams to add an exercise which is not currently in the lab (advanced events only)
 // Only a specific amount of exercises can be started at a time
 // Will stop an arbitrary exercise if team has not explicitly requested a specific exercise to be replaced with
 func (d *daemon) addExerciseToLab(c *gin.Context) {
+	teamClaims := unpackTeamClaims(c)
 
+	exerciseTag := c.Param("exerciseTag")
+	exerciseToReplace := c.Query("replaces")
+
+	event, err := d.eventpool.GetEvent(teamClaims.EventTag)
+	if err != nil {
+		log.Error().Err(err).Msg("could not find event in event pool")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "event for team is not currently running"})
+		return
+	}
+
+	if !slices.Contains(event.Config.ExerciseTags, exerciseTag) {
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "exercise not found in event"})
+		return
+	}
+
+	if event.Config.Type == int32(TypeBeginner) {
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "cannot add exercise to beginner lab"})
+		return
+	}
+
+	team, err := event.GetTeam(teamClaims.Username)
+	if err != nil {
+		log.Error().Err(err).Msg("could not find team for event")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "could not find team for event"})
+		return
+	}
+	
+	if time.Now().Sub(team.LastHeavyRequest).Seconds() < 30  {
+		log.Debug().Msg("team has already made a heavy request short time ago, aborting...")
+		c.JSON(http.StatusTooManyRequests, APIResponse{Status: "too many requests"})
+		return
+	}
+
+	if team.Lab == nil {
+		log.Debug().Str("team", team.Username).Msg("no lab configured for team")
+		c.JSON(http.StatusNotFound, APIResponse{Status: "lab not found"})
+		return
+	}
+
+	// Do not continue if exercise has already been added to lab
+	replacementFound := false // Only used if there are more than 5 exercises running in a lab
+	runningCount := 0
+	for _, exercise := range team.Lab.LabInfo.Exercises {
+		running := false
+		for _, machine := range exercise.Machines {
+			if machine.Status == "running" {
+				running = true
+			}
+		}
+		if running {
+			runningCount += 1
+		}
+		log.Debug().Str("exerciseToReplace", exerciseToReplace).Str("extag", exercise.Tag).Msg("exercise to replace and current exTag")
+		if exerciseToReplace == exercise.Tag && running {
+			replacementFound = true
+		}
+		if exercise.Tag == exerciseTag {
+			c.JSON(http.StatusBadRequest, APIResponse{Status: "exercise already in lab"})
+			return
+		}
+	}
+
+	log.Debug().Int("runningCount", runningCount).Msg("exercises currently running in lab")
+	
+	if runningCount >= 5 && !replacementFound {
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "exercise cap reached, provide replacement"})
+		return
+	}
+
+	if team.Lab.Conn != nil {
+		team.LastHeavyRequest = time.Now()
+		ctx := context.Background()
+		agentClient := aproto.NewAgentClient(team.Lab.Conn)
+
+		if replacementFound {
+			agentReq := &aproto.ExerciseRequest{
+				LabTag: team.Lab.LabInfo.Tag,
+				Exercise: exerciseToReplace,
+			}
+			if _, err := agentClient.StopExerciseInLab(ctx, agentReq); err != nil {
+				log.Error().Err(err).Msg("error stopping exercise to replace")
+				c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
+				return
+			}
+		}
+
+		agentReq := &aproto.ExerciseRequest{
+			LabTag: team.Lab.LabInfo.Tag,
+			Exercises: []string{exerciseTag},
+		}
+		if _, err := agentClient.AddExercisesToLab(ctx, agentReq); err != nil {
+			log.Error().Err(err).Msg("error adding exercise")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
+			return
+		}
+		sendCommandToTeam(team, updateTeam)
+		c.JSON(http.StatusOK, APIResponse{Status: "ok"})
+		return
+	}
+	log.Error().Msg("error resetting exercise config: lab conn is nil")
+	c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 }
 
 // Starts an exercise which is currently stopped in a lab
@@ -312,7 +417,55 @@ func (d *daemon) stopExercise(c *gin.Context) {
 
 // Used by teams to reset specific exercise containers
 func (d *daemon) resetExercise(c *gin.Context) {
+	teamClaims := unpackTeamClaims(c)
 
+	exerciseTag := c.Param("exerciseTag")
+
+	event, err := d.eventpool.GetEvent(teamClaims.EventTag)
+	if err != nil {
+		log.Error().Err(err).Msg("could not find event in event pool")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "event for team is not currently running"})
+		return
+	}
+
+	team, err := event.GetTeam(teamClaims.Username)
+	if err != nil {
+		log.Error().Err(err).Msg("could not find team for event")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "could not find team for event"})
+		return
+	}
+	
+	if time.Now().Sub(team.LastHeavyRequest).Seconds() < 10  {
+		log.Debug().Msg("team has already made a heavy request short time ago, aborting...")
+		c.JSON(http.StatusTooManyRequests, APIResponse{Status: "too many requests"})
+		return
+	}
+
+	if team.Lab == nil {
+		log.Debug().Str("team", team.Username).Msg("no lab configured for team")
+		c.JSON(http.StatusNotFound, APIResponse{Status: "lab not found"})
+		return
+	}
+
+	if team.Lab.Conn != nil {
+		team.LastHeavyRequest = time.Now()
+		ctx := context.Background()
+		agentClient := aproto.NewAgentClient(team.Lab.Conn)
+		agentReq := &aproto.ExerciseRequest{
+			LabTag: team.Lab.LabInfo.Tag,
+			Exercise: exerciseTag,
+		}
+		if _, err := agentClient.ResetExerciseInLab(ctx, agentReq); err != nil {
+			log.Error().Err(err).Msg("error resetting exercise")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
+			return
+		}
+		sendCommandToTeam(team, updateTeam)
+		c.JSON(http.StatusOK, APIResponse{Status: "ok"})
+		return
+	}
+	log.Error().Msg("error resetting exercise config: lab conn is nil")
+	c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 }
 
 func sortCategories(categories []*proto.GetCategoriesResponse_Category) {
