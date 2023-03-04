@@ -25,9 +25,9 @@ func (d *daemon) eventExercisesSubrouter(r *gin.RouterGroup) {
 
 	exercises.POST("/solve", d.solveExercise)
 
-	exercises.PUT("/add/:exerciseTag", d.addExerciseToLab)
+	exercises.PUT("/start/:exerciseTag", d.startExerciseInLab)
 	exercises.PUT("/stop/:exerciseTag", d.stopExercise)
-	exercises.PUT("/start/:exerciseTag", d.startExercise)
+	//exercises.PUT("/start/:exerciseTag", d.startExercise)
 	exercises.PUT("/reset/:exerciseTag", d.resetExercise)
 }
 
@@ -293,15 +293,19 @@ func (d *daemon) solveExercise(c *gin.Context) {
 	c.JSON(http.StatusBadRequest, APIResponse{Status: "lab not yet configured"})
 }
 
-// TODO: Join start and add exercise into one function
-// For teams to add an exercise which is not currently in the lab (advanced events only)
+// Adds the exercise to the lab (creates and starts containers) or starts a stopped container
 // Only a specific amount of exercises can be started at a time
-// Will stop an arbitrary exercise if team has not explicitly requested a specific exercise to be replaced with
-func (d *daemon) addExerciseToLab(c *gin.Context) {
+// Will stop an specified exercise if more than 5 exercises are currently running
+func (d *daemon) startExerciseInLab(c *gin.Context) {
 	teamClaims := unpackTeamClaims(c)
 
 	exerciseTag := c.Param("exerciseTag")
 	exerciseToReplace := c.Query("replaces")
+
+	if exerciseTag == exerciseToReplace {
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "cannot replace exercise with itself"})
+		return
+	}
 
 	event, err := d.eventpool.GetEvent(teamClaims.EventTag)
 	if err != nil {
@@ -316,7 +320,7 @@ func (d *daemon) addExerciseToLab(c *gin.Context) {
 	}
 
 	if event.Config.Type == int32(TypeBeginner) {
-		c.JSON(http.StatusBadRequest, APIResponse{Status: "cannot add exercise to beginner lab"})
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "not usable in beginner lab"})
 		return
 	}
 
@@ -339,9 +343,11 @@ func (d *daemon) addExerciseToLab(c *gin.Context) {
 		return
 	}
 
-	// Do not continue if exercise has already been added to lab
+	existsButStopped := false
 	replacementFound := false // Only used if there are more than 5 exercises running in a lab
 	runningCount := 0
+	
+
 	for _, exercise := range team.Lab.LabInfo.Exercises {
 		running := false
 		for _, machine := range exercise.Machines {
@@ -356,9 +362,11 @@ func (d *daemon) addExerciseToLab(c *gin.Context) {
 		if exerciseToReplace == exercise.Tag && running {
 			replacementFound = true
 		}
-		if exercise.Tag == exerciseTag {
-			c.JSON(http.StatusBadRequest, APIResponse{Status: "exercise already in lab"})
+		if exercise.Tag == exerciseTag && running{
+			c.JSON(http.StatusBadRequest, APIResponse{Status: "exercise already running in lab"})
 			return
+		} else if exercise.Tag == exerciseTag && !running {
+			existsButStopped = true
 		}
 	}
 
@@ -374,6 +382,7 @@ func (d *daemon) addExerciseToLab(c *gin.Context) {
 		ctx := context.Background()
 		agentClient := aproto.NewAgentClient(team.Lab.Conn)
 
+		// In case a replacement is needed, stop the exercise the new exercise replaces
 		if replacementFound {
 			agentReq := &aproto.ExerciseRequest{
 				LabTag: team.Lab.LabInfo.Tag,
@@ -385,7 +394,22 @@ func (d *daemon) addExerciseToLab(c *gin.Context) {
 				return
 			}
 		}
-
+		// If exercise is just stopped, just start it
+		if existsButStopped {
+			agentReq := &aproto.ExerciseRequest{
+				LabTag: team.Lab.LabInfo.Tag,
+				Exercise: exerciseTag,
+			}
+			if _, err := agentClient.StartExerciseInLab(ctx, agentReq); err != nil {
+				log.Error().Err(err).Msg("error stopping exercise to replace")
+				c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
+				return
+			}
+			sendCommandToTeam(team, updateTeam)
+			c.JSON(http.StatusOK, APIResponse{Status: "ok"})
+			return
+		}
+		// If the exercise has not yet been added to the lab, add and start it
 		agentReq := &aproto.ExerciseRequest{
 			LabTag: team.Lab.LabInfo.Tag,
 			Exercises: []string{exerciseTag},
@@ -406,9 +430,9 @@ func (d *daemon) addExerciseToLab(c *gin.Context) {
 // Starts an exercise which is currently stopped in a lab
 // Only a specific amount of exercises can be started at a time
 // Will stop an arbitrary exercise if team has not explicitly requested a specific exercise to be replaced with
-func (d *daemon) startExercise(c *gin.Context) {
+// func (d *daemon) startExercise(c *gin.Context) {
 
-}
+// }
 
 // Will stop a requested exercise for a team
 func (d *daemon) stopExercise(c *gin.Context) {
