@@ -377,7 +377,7 @@ func (d *daemon) startExerciseInLab(c *gin.Context) {
 	log.Debug().Int("runningCount", runningCount).Msg("exercises currently running in lab")
 
 	if runningCount >= 5 && !replacementFound {
-		c.JSON(http.StatusBadRequest, APIResponse{Status: "exercise cap reached, provide replacement"})
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "cap on running exercise reached, stop another exercise before starting a new one"})
 		return
 	}
 
@@ -541,7 +541,7 @@ func (d *daemon) resetExercise(c *gin.Context) {
 		}
 		log.Debug().Int("runningCount", runningCount).Msg("exercises currently running in lab")
 		if runningCount >= 5 && chalToResetStatus == "stopped" {
-			c.JSON(http.StatusBadRequest, APIResponse{Status: "resetting challenge would breach container cap"})
+			c.JSON(http.StatusBadRequest, APIResponse{Status: "resetting challenge would breach running exercise cap"})
 			return
 		}
 	}
