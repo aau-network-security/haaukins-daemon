@@ -336,8 +336,9 @@ func (d *daemon) startExerciseInLab(c *gin.Context) {
 		return
 	}
 	team.Status = RunningExerciseCommand
-	defer func (team *Team) {
+	defer func(team *Team) {
 		team.Status = Idle
+		sendCommandToTeam(team, updateTeam)
 	}(team)
 	sendCommandToTeam(team, updateTeam)
 
@@ -350,7 +351,6 @@ func (d *daemon) startExerciseInLab(c *gin.Context) {
 	existsButStopped := false
 	replacementFound := false // Only used if there are more than 5 exercises running in a lab
 	runningCount := 0
-	
 
 	for _, exercise := range team.Lab.LabInfo.Exercises {
 		running := false
@@ -366,7 +366,7 @@ func (d *daemon) startExerciseInLab(c *gin.Context) {
 		if exerciseToReplace == exercise.Tag && running {
 			replacementFound = true
 		}
-		if exercise.Tag == exerciseTag && running{
+		if exercise.Tag == exerciseTag && running {
 			c.JSON(http.StatusBadRequest, APIResponse{Status: "exercise already running in lab"})
 			return
 		} else if exercise.Tag == exerciseTag && !running {
@@ -375,7 +375,7 @@ func (d *daemon) startExerciseInLab(c *gin.Context) {
 	}
 
 	log.Debug().Int("runningCount", runningCount).Msg("exercises currently running in lab")
-	
+
 	if runningCount >= 5 && !replacementFound {
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "exercise cap reached, provide replacement"})
 		return
@@ -388,7 +388,7 @@ func (d *daemon) startExerciseInLab(c *gin.Context) {
 		// In case a replacement is needed, stop the exercise the new exercise replaces
 		if replacementFound {
 			agentReq := &aproto.ExerciseRequest{
-				LabTag: team.Lab.LabInfo.Tag,
+				LabTag:   team.Lab.LabInfo.Tag,
 				Exercise: exerciseToReplace,
 			}
 			if _, err := agentClient.StopExerciseInLab(ctx, agentReq); err != nil {
@@ -400,7 +400,7 @@ func (d *daemon) startExerciseInLab(c *gin.Context) {
 		// If exercise is just stopped, just start it
 		if existsButStopped {
 			agentReq := &aproto.ExerciseRequest{
-				LabTag: team.Lab.LabInfo.Tag,
+				LabTag:   team.Lab.LabInfo.Tag,
 				Exercise: exerciseTag,
 			}
 			if _, err := agentClient.StartExerciseInLab(ctx, agentReq); err != nil {
@@ -414,7 +414,7 @@ func (d *daemon) startExerciseInLab(c *gin.Context) {
 		}
 		// If the exercise has not yet been added to the lab, add and start it
 		agentReq := &aproto.ExerciseRequest{
-			LabTag: team.Lab.LabInfo.Tag,
+			LabTag:    team.Lab.LabInfo.Tag,
 			Exercises: []string{exerciseTag},
 		}
 		if _, err := agentClient.AddExercisesToLab(ctx, agentReq); err != nil {
@@ -422,7 +422,6 @@ func (d *daemon) startExerciseInLab(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 			return
 		}
-		sendCommandToTeam(team, updateTeam)
 		c.JSON(http.StatusOK, APIResponse{Status: "ok"})
 		return
 	}
@@ -430,16 +429,60 @@ func (d *daemon) startExerciseInLab(c *gin.Context) {
 	c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 }
 
-// Starts an exercise which is currently stopped in a lab
-// Only a specific amount of exercises can be started at a time
-// Will stop an arbitrary exercise if team has not explicitly requested a specific exercise to be replaced with
-// func (d *daemon) startExercise(c *gin.Context) {
-
-// }
-
 // Will stop a requested exercise for a team
 func (d *daemon) stopExercise(c *gin.Context) {
+	teamClaims := unpackTeamClaims(c)
 
+	exerciseTag := c.Param("exerciseTag")
+
+	event, err := d.eventpool.GetEvent(teamClaims.EventTag)
+	if err != nil {
+		log.Error().Err(err).Msg("could not find event in event pool")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "event for team is not currently running"})
+		return
+	}
+
+	team, err := event.GetTeam(teamClaims.Username)
+	if err != nil {
+		log.Error().Err(err).Msg("could not find team for event")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "could not find team for event"})
+		return
+	}
+
+	if team.Status == RunningExerciseCommand {
+		c.JSON(http.StatusTooManyRequests, APIResponse{Status: "too many requests", Message: "wait for existing request to finish"})
+		return
+	}
+	team.Status = RunningExerciseCommand
+	defer func(team *Team) {
+		team.Status = Idle
+		sendCommandToTeam(team, updateTeam)
+	}(team)
+	sendCommandToTeam(team, updateTeam)
+
+	if team.Lab == nil {
+		log.Debug().Str("team", team.Username).Msg("no lab configured for team")
+		c.JSON(http.StatusNotFound, APIResponse{Status: "lab not found"})
+		return
+	}
+
+	if team.Lab.Conn != nil {
+		ctx := context.Background()
+		agentClient := aproto.NewAgentClient(team.Lab.Conn)
+		agentReq := &aproto.ExerciseRequest{
+			LabTag:   team.Lab.LabInfo.Tag,
+			Exercise: exerciseTag,
+		}
+		if _, err := agentClient.StopExerciseInLab(ctx, agentReq); err != nil {
+			log.Error().Err(err).Msg("error resetting exercise")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
+			return
+		}
+		c.JSON(http.StatusOK, APIResponse{Status: "ok"})
+		return
+	}
+	log.Error().Msg("error resetting exercise config: lab conn is nil")
+	c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 }
 
 // Used by teams to reset specific exercise containers
@@ -467,8 +510,9 @@ func (d *daemon) resetExercise(c *gin.Context) {
 		return
 	}
 	team.Status = RunningExerciseCommand
-	defer func (team *Team) {
+	defer func(team *Team) {
 		team.Status = Idle
+		sendCommandToTeam(team, updateTeam)
 	}(team)
 	sendCommandToTeam(team, updateTeam)
 
@@ -478,11 +522,36 @@ func (d *daemon) resetExercise(c *gin.Context) {
 		return
 	}
 
+	if event.Config.Type == int32(TypeAdvanced) {
+		runningCount := 0
+		chalToResetStatus := "stopped"
+		for _, exercise := range team.Lab.LabInfo.Exercises {
+			running := false
+			for _, machine := range exercise.Machines {
+				if machine.Status == "running" {
+					running = true
+				}
+				if exerciseTag == exercise.Tag && machine.Status == "running" {
+					chalToResetStatus = "running"
+				}
+			}
+			if running {
+				runningCount += 1
+			}
+		}
+		log.Debug().Int("runningCount", runningCount).Msg("exercises currently running in lab")
+		if runningCount >= 5 && chalToResetStatus == "stopped" {
+			c.JSON(http.StatusBadRequest, APIResponse{Status: "resetting challenge would breach container cap"})
+			return
+		}
+	}
+	
+
 	if team.Lab.Conn != nil {
 		ctx := context.Background()
 		agentClient := aproto.NewAgentClient(team.Lab.Conn)
 		agentReq := &aproto.ExerciseRequest{
-			LabTag: team.Lab.LabInfo.Tag,
+			LabTag:   team.Lab.LabInfo.Tag,
 			Exercise: exerciseTag,
 		}
 		if _, err := agentClient.ResetExerciseInLab(ctx, agentReq); err != nil {
@@ -490,7 +559,6 @@ func (d *daemon) resetExercise(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 			return
 		}
-		sendCommandToTeam(team, updateTeam)
 		c.JSON(http.StatusOK, APIResponse{Status: "ok"})
 		return
 	}

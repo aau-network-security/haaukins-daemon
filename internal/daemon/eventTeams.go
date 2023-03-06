@@ -29,7 +29,7 @@ func (status TeamStatus) String() string {
 	case InQueue:
 		return "inLabQueue"
 	case RunningExerciseCommand:
-		return "RunningExCommand"
+		return "runningExCommand"
 	case Idle:
 		return "idle"
 	default:
