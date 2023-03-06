@@ -13,6 +13,29 @@ import (
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
 )
+type TeamStatus uint8
+
+const (
+	WaitingForLab TeamStatus = iota
+	InQueue
+	RunningExerciseCommand
+	Idle
+)
+
+func (status TeamStatus) String() string {
+	switch status {
+	case WaitingForLab:
+		return "waitingForLab"
+	case InQueue:
+		return "inLabQueue"
+	case RunningExerciseCommand:
+		return "RunningExCommand"
+	case Idle:
+		return "idle"
+	default:
+		return "unknown"
+	}
+}
 
 func (d *daemon) eventTeamSubrouter(r *gin.RouterGroup) {
 	team := r.Group("/teams")
@@ -218,7 +241,6 @@ func (d *daemon) teamSignup(c *gin.Context) {
 		Status:                     Idle,
 		Lab:                        nil,
 		ActiveWebsocketConnections: make(map[string]*websocket.Conn),
-		LastHeavyRequest: time.Now().AddDate(0, 0, -1),
 	}
 	event.AddTeam(team)
 

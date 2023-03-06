@@ -9,30 +9,6 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-type TeamStatus uint8
-
-const (
-	WaitingForLab TeamStatus = iota
-	InQueue
-	RunningExerciseCommand
-	Idle
-)
-
-func (status TeamStatus) String() string {
-	switch status {
-	case WaitingForLab:
-		return "waiting for lab"
-	case InQueue:
-		return "in lab queue"
-	case RunningExerciseCommand:
-		return "running exercise command"
-	case Idle:
-		return "idle"
-	default:
-		return "unknown"
-	}
-}
-
 func (d *daemon) eventLabsSubrouter(r *gin.RouterGroup) {
 	labs := r.Group("/labs")
 

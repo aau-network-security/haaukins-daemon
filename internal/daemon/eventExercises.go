@@ -330,12 +330,16 @@ func (d *daemon) startExerciseInLab(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "could not find team for event"})
 		return
 	}
-	
-	if time.Now().Sub(team.LastHeavyRequest).Seconds() < 30  {
-		log.Debug().Msg("team has already made a heavy request short time ago, aborting...")
-		c.JSON(http.StatusTooManyRequests, APIResponse{Status: "too many requests"})
+
+	if team.Status == RunningExerciseCommand {
+		c.JSON(http.StatusTooManyRequests, APIResponse{Status: "too many requests", Message: "wait for existing request to finish"})
 		return
 	}
+	team.Status = RunningExerciseCommand
+	defer func (team *Team) {
+		team.Status = Idle
+	}(team)
+	sendCommandToTeam(team, updateTeam)
 
 	if team.Lab == nil {
 		log.Debug().Str("team", team.Username).Msg("no lab configured for team")
@@ -378,7 +382,6 @@ func (d *daemon) startExerciseInLab(c *gin.Context) {
 	}
 
 	if team.Lab.Conn != nil {
-		team.LastHeavyRequest = time.Now()
 		ctx := context.Background()
 		agentClient := aproto.NewAgentClient(team.Lab.Conn)
 
@@ -458,12 +461,16 @@ func (d *daemon) resetExercise(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "could not find team for event"})
 		return
 	}
-	
-	if time.Now().Sub(team.LastHeavyRequest).Seconds() < 10  {
-		log.Debug().Msg("team has already made a heavy request short time ago, aborting...")
-		c.JSON(http.StatusTooManyRequests, APIResponse{Status: "too many requests"})
+
+	if team.Status == RunningExerciseCommand {
+		c.JSON(http.StatusTooManyRequests, APIResponse{Status: "too many requests", Message: "wait for existing request to finish"})
 		return
 	}
+	team.Status = RunningExerciseCommand
+	defer func (team *Team) {
+		team.Status = Idle
+	}(team)
+	sendCommandToTeam(team, updateTeam)
 
 	if team.Lab == nil {
 		log.Debug().Str("team", team.Username).Msg("no lab configured for team")
@@ -472,7 +479,6 @@ func (d *daemon) resetExercise(c *gin.Context) {
 	}
 
 	if team.Lab.Conn != nil {
-		team.LastHeavyRequest = time.Now()
 		ctx := context.Background()
 		agentClient := aproto.NewAgentClient(team.Lab.Conn)
 		agentReq := &aproto.ExerciseRequest{

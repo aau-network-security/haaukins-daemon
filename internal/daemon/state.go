@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/rs/zerolog/log"
 )
@@ -68,7 +67,6 @@ func resumeState(statePath string) (*EventPool, error) {
 			event.Labs = make(map[string]*AgentLab)
 		}
 
-
 		// Put unassigned labs into queue for beginner type events
 		if EventType(event.Config.Type) == TypeBeginner {
 			if len(event.Labs) > len(event.Teams) { // unassigned labs
@@ -90,9 +88,7 @@ func resumeState(statePath string) (*EventPool, error) {
 			}
 		}
 
-		
 		for _, team := range event.Teams {
-			team.LastHeavyRequest = time.Now().AddDate(0, 0, -1)
 			if team.Lab != nil {
 				event.Labs[team.Lab.LabInfo.Tag] = team.Lab
 			}
