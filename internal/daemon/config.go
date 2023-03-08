@@ -7,17 +7,18 @@ import (
 )
 
 type Config struct {
-	Host            string        `yaml:"host"`
-	Port            uint          `yaml:"port"`
-	AuditLog        Logging       `yaml:"auditLog"`
-	Database        db.DbConfig   `yaml:"db-config,omitempty"`
-	ExerciseService ServiceConfig `yaml:"exercise-service"`
-	Production      bool          `yaml:"prodmode,omitempty"`
-	JwtSecret       string        `yaml:"jwtSecret,omitempty"`
-	Rechaptcha      string        `yaml:"recaptcha-key,omitempty"`
-	APICreds        APICreds      `yaml:"api-creds,omitempty"`
-	StatePath       string        `yaml:"state-path,omitempty"`
-	TestDelay       TestDelay     `yaml:"test-delay,omitempty"`
+	Host              string        `yaml:"host"`
+	Port              uint          `yaml:"port"`
+	AuditLog          Logging       `yaml:"auditLog"`
+	Database          db.DbConfig   `yaml:"db-config,omitempty"`
+	ExerciseService   ServiceConfig `yaml:"exercise-service"`
+	Production        bool          `yaml:"prodmode,omitempty"`
+	JwtSecret         string        `yaml:"jwtSecret,omitempty"`
+	Rechaptcha        string        `yaml:"recaptcha-key,omitempty"`
+	APICreds          APICreds      `yaml:"api-creds,omitempty"`
+	StatePath         string        `yaml:"state-path,omitempty"`
+	TestDelay         TestDelay     `yaml:"test-delay,omitempty"`
+	LabExpiryDuration time.Duration `yaml:"lab-expiry-duration,omitempty"`
 }
 
 type Logging struct {
@@ -41,6 +42,6 @@ type ServiceConfig struct {
 }
 
 type TestDelay struct {
-	Enabled bool `yaml:"enabled"`
+	Enabled        bool          `yaml:"enabled"`
 	DelayInSeconds time.Duration `yaml:"delay-seconds"`
 }

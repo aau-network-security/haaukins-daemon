@@ -97,7 +97,7 @@ func (event *Event) IsMaxLabsReached() bool {
 	// First get amount of teams waiting for labs
 	currentNumberOfLabs := event.TeamsWaitingForBrowserLabs.Len() + event.TeamsWaitingForVpnLabs.Len()
 	for _, team := range event.Teams {
-		if team.Status == WaitingForLab {
+		if team.Status == WaitingForLab || team.Status == InQueue{
 			currentNumberOfLabs += 1
 		}
 	}
@@ -121,14 +121,14 @@ func (event *Event) IsMaxLabsReached() bool {
 // When a labs enters the unassigned lab queue, it will assign the lab to the team previously pulled
 // Relies heavily on the blocking functionality of channels
 /* TODO: Queue handlers currently use a linked list in case and element needs to be removed from the queue
-	This had the unfortunate effect of spending 1 core on the CPU per event created...
-	Short minded fix is currently inserting a 1 milisecond delay...
+This had the unfortunate effect of spending 1 core on the CPU per event created...
+Short minded fix is currently inserting a 1 milisecond delay...
 */
-func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string) {
+func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string, labExpiry time.Duration ) {
 	browserQueueHandler := func() {
 		log.Debug().Msg("Waiting for teams to enter browser lab queue")
 		for {
-			time.Sleep(1*time.Millisecond)
+			time.Sleep(1 * time.Millisecond)
 			e := event.TeamsWaitingForBrowserLabs.Front()
 			if e == nil {
 				continue
@@ -153,6 +153,7 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string) {
 
 			team.M.Lock()
 			lab.IsAssigned = true
+			lab.ExpiresAtTime = time.Now().Add(labExpiry * time.Minute)
 			team.Lab = lab
 			team.Status = Idle
 			team.M.Unlock()
@@ -166,7 +167,7 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string) {
 	vpnQueueHandler := func() {
 		log.Debug().Msg("Waiting for team to enter vpn lab queue")
 		for {
-			time.Sleep(1*time.Millisecond)
+			time.Sleep(1 * time.Millisecond)
 			e := event.TeamsWaitingForVpnLabs.Front()
 			if e == nil {
 				continue
@@ -179,7 +180,7 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string) {
 			team.Status = WaitingForLab
 			team.M.Unlock()
 
-			lab, ok := <- event.UnassignedVpnLabs
+			lab, ok := <-event.UnassignedVpnLabs
 			if ok {
 				log.Debug().Msgf("pulled lab from vpn queue: %v", lab)
 			} else {
@@ -189,6 +190,7 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string) {
 
 			team.M.Lock()
 			lab.IsAssigned = true
+			lab.ExpiresAtTime = time.Now().Add(labExpiry * time.Minute)
 			team.Lab = lab
 			team.Status = Idle
 			team.M.Unlock()

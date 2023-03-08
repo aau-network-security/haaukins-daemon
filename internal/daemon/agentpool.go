@@ -661,3 +661,14 @@ func (agentLab *AgentLab) updateLabInfo() {
 
 	agentLab.LabInfo = labInfo.Lab
 }
+
+func (agentLab *AgentLab) close() error {
+	ctx := context.Background()
+	agentClient := aproto.NewAgentClient(agentLab.Conn)
+	_, err := agentClient.CloseLab(ctx, &aproto.CloseLabRequest{LabTag: agentLab.LabInfo.Tag})
+	if err != nil {
+		log.Error().Err(err).Msg("error updating lab info")
+		return err
+	}
+	return nil
+}

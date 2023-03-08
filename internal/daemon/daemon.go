@@ -126,6 +126,10 @@ func NewConfigFromFile(path string) (*Config, error) {
 		c.Database.EventRetention = 30 // Default to 30 days of retention
 	}
 
+	if c.LabExpiryDuration == 0 {
+		c.LabExpiryDuration = 60*5 // Default 5 hour duration
+	}
+
 	return &c, nil
 }
 
@@ -155,7 +159,7 @@ func New(conf *Config) (*daemon, error) {
 
 	}
 
-	eventPool, err := resumeState(conf.StatePath)
+	eventPool, err := resumeState(conf.StatePath, conf.LabExpiryDuration)
 	if err != nil {
 		eventPool = &EventPool{
 			M:      sync.RWMutex{},
@@ -322,6 +326,8 @@ func (d *daemon) Run() error {
 		r.Use(d.delayMiddleware())
 	}
 	d.setupRouters(r)
+
+	go d.labExpiryRoutine()
 	return r.Run(":8080")
 }
 
@@ -331,4 +337,47 @@ func (d *daemon) setupRouters(r *gin.Engine) {
 	
 	d.adminSubrouter(admin)
 	d.eventSubrouter(event)
+}
+
+func (d *daemon) labExpiryRoutine () {
+	for {
+		time.Sleep(1 * time.Second)
+		d.eventpool.M.RLock()
+		for _, event := range d.eventpool.Events {
+			var wg sync.WaitGroup
+			anyLabsClosed := false
+			for _, team := range event.Teams {
+				if team.Lab != nil {
+					if time.Now().After(team.Lab.ExpiresAtTime) {
+						if team.Lab.Conn != nil {
+							anyLabsClosed = true
+							wg.Add(1)
+							go func (team *Team, event *Event) {	
+								defer wg.Done()
+
+								log.Info().Str("Team", team.Username).Msg("closing lab due to expiry")
+								if err := team.Lab.close(); err != nil {
+									log.Error().Err(err).Msg("[lab expiry routine] error closing lab in ")
+									return
+								}
+
+								delete(event.Labs, team.Lab.LabInfo.Tag)
+								team.Lab = nil
+								saveState(d.eventpool, d.conf.StatePath)
+								sendCommandToTeam(team, updateTeam)								
+							}(team, event)
+						} else {
+							log.Warn().Msg("[lab expiry routine] lab had nil connection")
+						}
+					}
+				}
+			}
+			wg.Wait()
+			if anyLabsClosed {
+				event.IsMaxLabsReached()
+				broadCastCommandToEventTeams(event, updateEventInfo)
+			}
+		}
+		d.eventpool.M.RUnlock()
+	}
 }

@@ -159,6 +159,7 @@ type AgentLab struct {
 	Conn                 *grpc.ClientConn `json:"-"`
 	LabInfo              *aproto.Lab      `json:"labInfo,omitempty"`
 	IsAssigned           bool             `json:"isAssigned,omitempty"`
+	ExpiresAtTime        time.Time        `json:"expiresAtTime,omitempty"`
 }
 
 type Category struct {

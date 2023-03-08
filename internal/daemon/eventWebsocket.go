@@ -14,6 +14,7 @@ import (
 const (
 	updateChallenges = "updateChallenges"
 	updateTeam       = "updateTeam"
+	updateEventInfo  = "updateEventInfo"
 )
 
 func (d *daemon) eventWebsocket(c *gin.Context) {
@@ -84,5 +85,11 @@ func (d *daemon) eventWebsocket(c *gin.Context) {
 func sendCommandToTeam(team *Team, command string) {
 	for _, ws := range team.ActiveWebsocketConnections {
 		ws.WriteMessage(websocket.TextMessage, []byte(command))
+	}
+}
+
+func broadCastCommandToEventTeams(event *Event, command string) {
+	for _, team := range event.Teams {
+		sendCommandToTeam(team, command)
 	}
 }

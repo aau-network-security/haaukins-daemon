@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/rs/zerolog/log"
 )
@@ -32,7 +33,7 @@ func saveState(eventPool *EventPool, statePath string) error {
 	return nil
 }
 
-func resumeState(statePath string) (*EventPool, error) {
+func resumeState(statePath string, labExpiry time.Duration) (*EventPool, error) {
 	state := State{}
 
 	path := filepath.Join(statePath, "state.json")
@@ -94,7 +95,7 @@ func resumeState(statePath string) (*EventPool, error) {
 			}
 		}
 
-		event.startQueueHandlers(state.EventPool, statePath)
+		event.startQueueHandlers(state.EventPool, statePath, labExpiry)
 	}
 
 	log.Debug().Msgf("eventpool after return state: %v", state.EventPool)

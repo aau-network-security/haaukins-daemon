@@ -196,7 +196,7 @@ func (d *daemon) newEvent(c *gin.Context) {
 		}
 		d.eventpool.AddEvent(event)
 
-		event.startQueueHandlers(d.eventpool, d.conf.StatePath)
+		event.startQueueHandlers(d.eventpool, d.conf.StatePath, d.conf.LabExpiryDuration)
 
 		saveState(d.eventpool, d.conf.StatePath)
 

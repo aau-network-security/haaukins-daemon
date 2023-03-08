@@ -2,6 +2,8 @@ host: localhost
 port: 8080
 state-path: /path/to/state/dir
 
+lab-expiry-duration: 1 # In minutes
+
 auditLog: 
   directory: /path/to/log/dir
   fileName: AuditLog.log
