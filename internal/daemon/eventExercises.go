@@ -335,9 +335,11 @@ func (d *daemon) startExerciseInLab(c *gin.Context) {
 		c.JSON(http.StatusTooManyRequests, APIResponse{Status: "too many requests", Message: "wait for existing request to finish"})
 		return
 	}
+	team.M.Lock()
 	team.Status = RunningExerciseCommand
 	defer func(team *Team) {
 		team.Status = Idle
+		team.M.Unlock()
 		sendCommandToTeam(team, updateTeam)
 	}(team)
 	sendCommandToTeam(team, updateTeam)
@@ -453,9 +455,11 @@ func (d *daemon) stopExercise(c *gin.Context) {
 		c.JSON(http.StatusTooManyRequests, APIResponse{Status: "too many requests", Message: "wait for existing request to finish"})
 		return
 	}
+	team.M.Lock()
 	team.Status = RunningExerciseCommand
 	defer func(team *Team) {
 		team.Status = Idle
+		team.M.Unlock()
 		sendCommandToTeam(team, updateTeam)
 	}(team)
 	sendCommandToTeam(team, updateTeam)
@@ -509,9 +513,11 @@ func (d *daemon) resetExercise(c *gin.Context) {
 		c.JSON(http.StatusTooManyRequests, APIResponse{Status: "too many requests", Message: "wait for existing request to finish"})
 		return
 	}
+	team.M.Lock()
 	team.Status = RunningExerciseCommand
 	defer func(team *Team) {
 		team.Status = Idle
+		team.M.Unlock()
 		sendCommandToTeam(team, updateTeam)
 	}(team)
 	sendCommandToTeam(team, updateTeam)
