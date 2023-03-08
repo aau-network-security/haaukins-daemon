@@ -106,6 +106,9 @@ func (d *daemon) configureLab(c *gin.Context) {
 	//Add team to queue
 	if req.IsVpn {
 		team.Status = InQueue
+		if event.IsMaxLabsReached() {
+			broadCastCommandToEventTeams(event, updateEventInfo)
+		}
 		log.Info().Str("username", team.Username).Msg("putting team into queue for vpn lab")
 		queueElement := event.TeamsWaitingForVpnLabs.PushBack(team)
 		team.QueueElement = queueElement
@@ -114,6 +117,9 @@ func (d *daemon) configureLab(c *gin.Context) {
 		return
 	}
 	team.Status = InQueue
+	if event.IsMaxLabsReached() {
+		broadCastCommandToEventTeams(event, updateEventInfo)
+	}
 	log.Info().Str("username", team.Username).Msg("putting team into queue for vpn lab")
 	queueElement := event.TeamsWaitingForBrowserLabs.PushBack(team)
 	team.QueueElement = queueElement
