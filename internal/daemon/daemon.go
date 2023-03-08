@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -127,7 +128,7 @@ func NewConfigFromFile(path string) (*Config, error) {
 	}
 
 	if c.LabExpiryDuration == 0 {
-		c.LabExpiryDuration = 60*5 // Default 5 hour duration
+		c.LabExpiryDuration = 60 * 5 // Default 5 hour duration
 	}
 
 	return &c, nil
@@ -172,7 +173,6 @@ func New(conf *Config) (*daemon, error) {
 			Events: make(map[string]*Event),
 		}
 	}
-	
 
 	// Connecting to all haaukins agents
 	log.Info().Msg("Connecting to haaukins agents...")
@@ -185,7 +185,7 @@ func New(conf *Config) (*daemon, error) {
 		M:            sync.RWMutex{},
 		AgentWeights: make(map[string]float64),
 	}
-	
+
 	var wg sync.WaitGroup
 	var m sync.Mutex
 	for _, a := range agentsInDb {
@@ -328,18 +328,20 @@ func (d *daemon) Run() error {
 	d.setupRouters(r)
 
 	go d.labExpiryRoutine()
-	return r.Run(":8080")
+
+	listeningAddress := fmt.Sprintf("%s:%d", d.conf.ListeningIp, d.conf.Port)
+	return r.Run(listeningAddress)
 }
 
 func (d *daemon) setupRouters(r *gin.Engine) {
 	admin := r.Group("/v1/admin")
 	event := r.Group("/v1/event")
-	
+
 	d.adminSubrouter(admin)
 	d.eventSubrouter(event)
 }
 
-func (d *daemon) labExpiryRoutine () {
+func (d *daemon) labExpiryRoutine() {
 	for {
 		time.Sleep(1 * time.Second)
 		d.eventpool.M.RLock()
@@ -352,7 +354,7 @@ func (d *daemon) labExpiryRoutine () {
 						if team.Lab.Conn != nil {
 							anyLabsClosed = true
 							wg.Add(1)
-							go func (team *Team, event *Event) {	
+							go func(team *Team, event *Event) {
 								defer wg.Done()
 
 								log.Info().Str("Team", team.Username).Msg("closing lab due to expiry")
@@ -364,7 +366,7 @@ func (d *daemon) labExpiryRoutine () {
 								delete(event.Labs, team.Lab.LabInfo.Tag)
 								team.Lab = nil
 								saveState(d.eventpool, d.conf.StatePath)
-								sendCommandToTeam(team, updateTeam)								
+								sendCommandToTeam(team, updateTeam)
 							}(team, event)
 						} else {
 							log.Warn().Msg("[lab expiry routine] lab had nil connection")

@@ -9,6 +9,7 @@ import (
 type Config struct {
 	Host              string        `yaml:"host"`
 	Port              uint          `yaml:"port"`
+	ListeningIp       string        `yaml:"listening-ip,omitempty"`
 	AuditLog          Logging       `yaml:"auditLog"`
 	Database          db.DbConfig   `yaml:"db-config,omitempty"`
 	ExerciseService   ServiceConfig `yaml:"exercise-service"`
