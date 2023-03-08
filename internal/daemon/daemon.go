@@ -183,7 +183,6 @@ func New(conf *Config) (*daemon, error) {
 	agents := make(map[string]*Agent)
 	agentPool := &AgentPool{
 		M:            sync.RWMutex{},
-		AgentWeights: make(map[string]float64),
 	}
 
 	var wg sync.WaitGroup

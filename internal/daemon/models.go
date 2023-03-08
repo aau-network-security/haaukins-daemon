@@ -76,7 +76,6 @@ type EventConfig struct {
 	Name                  string    `json:"name" binding:"required"`
 	Tag                   string    `json:"tag" binding:"required"`
 	TeamSize              int32     `json:"teamSize" binding:"required"`
-	InitialLabs           int32     `json:"initialLabs,omitempty"` // TODO Remove as this should no longre be used
 	MaxLabs               int32     `json:"maxLabs" binding:"required"`
 	VmName                string    `json:"vmName,omitempty"`
 	ExerciseTags          []string  `json:"exerciseTags" binding:"required"`
@@ -112,7 +111,6 @@ type ExerciseProfile struct {
 type AgentPool struct {
 	M                 sync.RWMutex
 	Agents            map[string]*Agent
-	AgentWeights      map[string]float64
 	TotalMemInstalled uint64
 }
 

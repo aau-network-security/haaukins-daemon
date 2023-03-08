@@ -198,7 +198,7 @@ func (ap *AgentPool) updateAgentMetrics(name string, msg *aproto.MonitorResponse
 	ap.Agents[name].QueuedTasks = msg.QueuedTasks
 	ap.M.Unlock()
 	//log.Debug().Msg("calculating weights")
-	ap.calculateWeightsAndTotalMemoryInstalled()
+	ap.calculateTotalMemoryInstalled()
 
 	return ap.Agents[name], nil
 }
@@ -598,41 +598,24 @@ func (ap *AgentPool) resetRequestsLeft() {
 	}
 }
 
-// Calculates initial lab weights based on remaining memory available on each agent
-// (Only relevant for beginner type events)
-func (ap *AgentPool) calculateWeightsAndTotalMemoryInstalled() {
+// Calculates total available memory for the whole platform
+func (ap *AgentPool) calculateTotalMemoryInstalled() {
 	ap.M.Lock()
 	defer ap.M.Unlock()
 	var totalMemoryAvailable uint64 //
 	var totalMemoryInstalled uint64
-	var availableAgents []*Agent
 	for _, agent := range ap.Agents {
-		// Exclude ag
-		// TODO Use a memory threshold instead of percentage
 		//log.Debug().Str("agent", agent.Name).Uint64("memInstalled", agent.Resources.MemoryInstalled).Msg("memory installed on agent")
 		if agent.StateLock {
-			ap.AgentWeights[agent.Name] = 0
 			continue
 		}
 		totalMemoryAvailable += agent.Resources.MemoryAvailable
 		totalMemoryInstalled += agent.Resources.MemoryInstalled
-		availableAgents = append(availableAgents, agent)
 	}
 	ap.TotalMemInstalled = totalMemoryInstalled
 	//log.Debug().Uint64("TotalMemInstalled", ap.TotalMemInstalled).Msg("total memory installed")
 	//log.Debug().Uint64("totalMemoryAvailable", totalMemoryAvailable).Msg("total memory available")
 
-	for _, agent := range availableAgents {
-		if agent.StateLock {
-			continue
-		}
-		weight := float64(agent.Resources.MemoryAvailable) / float64(totalMemoryAvailable)
-		if math.IsNaN(weight) || weight <= 0 {
-			weight = 0
-		}
-		ap.AgentWeights[agent.Name] = weight
-		//log.Debug().Float64("calculated weight", ap.AgentWeights[agent.Name]).Msgf("weight for agent: %s", agent.Name)
-	}
 }
 
 // Agent

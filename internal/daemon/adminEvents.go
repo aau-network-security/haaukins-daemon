@@ -89,7 +89,6 @@ func (d *daemon) newEvent(c *gin.Context) {
 			return
 		}
 		// TODO Check user quota
-		// TODO Check if initial labs is less or equal than maxlabs
 
 		uniqueExercisesList := removeDuplicates(req.ExerciseTags)
 
@@ -155,7 +154,6 @@ func (d *daemon) newEvent(c *gin.Context) {
 			Type:                  req.Type,
 			Name:                  req.Name,
 			Organization:          admin.Organization,
-			InitialLabs:           req.InitialLabs,
 			MaxLabs:               req.MaxLabs,
 			Frontend:              req.VmName,
 			Status:                StatusRunning,
