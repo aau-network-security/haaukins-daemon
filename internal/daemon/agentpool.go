@@ -636,13 +636,13 @@ func (agent *Agent) calculateCurrentEstimatedMemConsumption(eventPool *EventPool
 func (agentLab *AgentLab) updateLabInfo() {
 	ctx := context.Background()
 	agentClient := aproto.NewAgentClient(agentLab.Conn)
-	labInfo, err := agentClient.GetLab(ctx, &aproto.GetLabRequest{LabTag: agentLab.LabInfo.Tag})
+	agentResp, err := agentClient.GetLab(ctx, &aproto.GetLabRequest{LabTag: agentLab.LabInfo.Tag})
 	if err != nil {
 		log.Error().Err(err).Msg("error updating lab info")
 		return
 	}
 
-	agentLab.LabInfo = labInfo.Lab
+	agentLab.LabInfo = agentResp.Lab
 }
 
 func (agentLab *AgentLab) close() error {
