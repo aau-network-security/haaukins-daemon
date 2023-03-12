@@ -4,6 +4,7 @@ listening-ip: "127.0.0.1"
 state-path: /path/to/state/dir
 
 lab-expiry-duration: 1 # In minutes
+lab-expiry-extension: 1 # In minutes
 
 auditLog: 
   directory: /path/to/log/dir

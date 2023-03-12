@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"time"
 
 	aproto "github.com/aau-network-security/haaukins-agent/pkg/proto"
 	"github.com/gin-gonic/gin"
@@ -15,6 +16,7 @@ func (d *daemon) eventLabsSubrouter(r *gin.RouterGroup) {
 
 	labs.Use(d.eventAuthMiddleware())
 	labs.POST("", d.configureLab)
+	labs.PATCH("/extend", d.extendLabExpiry)
 	labs.GET("", d.getLabInfo)
 	labs.GET("/vpnconf/:id", d.getVpnConf)
 	labs.GET("/resetlab", d.resetLab)
@@ -36,6 +38,7 @@ type Lab struct {
 	ExercisesStatus map[string]ExerciseStatus `json:"exercisesStatus"`
 	IsVpn           bool                      `json:"isVpn"`
 	GuacCreds       *aproto.GuacCreds         `json:"guacCreds"`
+	ExpiresAtTime   time.Time                 `json:"expiresAtTime,omitempty"`
 }
 
 type ExerciseStatus struct {
@@ -186,12 +189,48 @@ func (d *daemon) getVpnConf(c *gin.Context) {
 	}
 
 	vpnConfId, _ := strconv.Atoi(c.Param("id"))
-	if vpnConfId >=0 && vpnConfId<len(team.Lab.LabInfo.VpnConfs) {
+	if vpnConfId >= 0 && vpnConfId < len(team.Lab.LabInfo.VpnConfs) {
 		c.JSON(http.StatusOK, APIResponse{Status: "OK", Message: team.Lab.LabInfo.VpnConfs[vpnConfId]})
 	} else {
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "vpnconf with that id does not exist"})
 	}
-	
+
+}
+
+func (d *daemon) extendLabExpiry(c *gin.Context) {
+	teamClaims := unpackTeamClaims(c)
+
+	event, err := d.eventpool.GetEvent(teamClaims.EventTag)
+	if err != nil {
+		log.Error().Err(err).Msg("could not find event in event pool")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "event for team is not currently running"})
+		return
+	}
+
+	team, err := event.GetTeam(teamClaims.Username)
+	if err != nil {
+		log.Error().Err(err).Msg("could not find team for event")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "could not find team for event"})
+		return
+	}
+
+	if team.Lab == nil {
+		log.Debug().Str("team", team.Username).Msg("lab not found for team")
+		c.JSON(http.StatusNotFound, APIResponse{Status: "lab not found"})
+		return
+	}
+	log.Debug().Time("time of expiry", team.Lab.ExpiresAtTime).Dur("Time left", team.Lab.ExpiresAtTime.Sub(time.Now())).Msg("Current lab times")
+	if team.Lab.ExpiresAtTime.Sub(time.Now()) < 1*time.Hour {
+		team.ExtendLabExpiry(d.conf.LabExpiryExtension)
+		sendCommandToTeam(team, updateTeam)
+		log.Debug().Time("time of expiry", team.Lab.ExpiresAtTime).Dur("Time left", team.Lab.ExpiresAtTime.Sub(time.Now())).Msg("New lab times after extend")
+		saveState(d.eventpool, d.conf.StatePath)
+		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+		return
+	} else {
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "you still have more than an hour left in your lab"})
+		return
+	}
 }
 
 // Can be used by teams to completely reset their lab
@@ -232,6 +271,7 @@ func assembleLabResponse(teamLab *AgentLab) *LabResponse {
 			ExercisesStatus: exercisesStatus,
 			IsVpn:           teamLab.LabInfo.IsVPN,
 			GuacCreds:       teamLab.LabInfo.GuacCreds,
+			ExpiresAtTime:   teamLab.ExpiresAtTime,
 		},
 	}
 	return labResponse

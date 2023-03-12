@@ -182,7 +182,7 @@ func New(conf *Config) (*daemon, error) {
 	}
 	agents := make(map[string]*Agent)
 	agentPool := &AgentPool{
-		M:            sync.RWMutex{},
+		M: sync.RWMutex{},
 	}
 
 	var wg sync.WaitGroup
@@ -313,7 +313,7 @@ func (d *daemon) Run() error {
 	// Setting up CORS
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"*"},
-		AllowMethods:     []string{"POST", "GET", "OPTIONS", "PUT", "DELETE"},
+		AllowMethods:     []string{"POST", "GET", "OPTIONS", "PUT", "DELETE", "PATCH"},
 		AllowHeaders:     []string{"Content-Type", "Content-Length", "Accept-Encoding", "X-CSRF-Token", "Authorization", "Accept", "Origin", "Cache-Control", "X-Requested-With"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,

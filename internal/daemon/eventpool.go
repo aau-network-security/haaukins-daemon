@@ -208,10 +208,16 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string, l
 
 // Team
 
-func (team *Team) AddLab(lab *AgentLab) error {
+func (team *Team) AddLab(lab *AgentLab) {
 	team.M.Lock()
 	defer team.M.Unlock()
 
 	team.Lab = lab
-	return nil
+}
+
+func (team *Team) ExtendLabExpiry(extendDuration time.Duration) {
+	team.M.Lock()
+	defer team.M.Unlock()
+
+	team.Lab.ExpiresAtTime = team.Lab.ExpiresAtTime.Add(extendDuration * time.Minute)
 }
