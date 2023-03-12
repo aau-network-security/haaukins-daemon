@@ -375,7 +375,6 @@ func (d *daemon) labExpiryRoutine() {
 			}
 			wg.Wait()
 			if anyLabsClosed {
-				event.IsMaxLabsReached()
 				broadCastCommandToEventTeams(event, updateEventInfo)
 			}
 		}
