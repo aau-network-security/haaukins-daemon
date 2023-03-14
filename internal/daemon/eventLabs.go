@@ -18,6 +18,7 @@ func (d *daemon) eventLabsSubrouter(r *gin.RouterGroup) {
 	labs.POST("", d.configureLab)
 	labs.PATCH("/extend", d.extendLabExpiry)
 	labs.GET("", d.getLabInfo)
+	labs.GET("/hosts", d.getHostsInLab)
 	labs.GET("/vpnconf/:id", d.getVpnConf)
 	labs.GET("/resetlab", d.resetLab)
 	labs.GET("/resetvm", d.resetVm)
@@ -157,6 +158,48 @@ func (d *daemon) getLabInfo(c *gin.Context) {
 	labResponse := assembleLabResponse(team.Lab)
 
 	c.JSON(http.StatusOK, APIResponse{Status: "OK", TeamLab: labResponse})
+}
+
+func (d *daemon) getHostsInLab(c *gin.Context) {
+	teamClaims := unpackTeamClaims(c)
+
+	event, err := d.eventpool.GetEvent(teamClaims.EventTag)
+	if err != nil {
+		log.Error().Err(err).Msg("could not find event in event pool")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "event for team is not currently running"})
+		return
+	}
+
+	team, err := event.GetTeam(teamClaims.Username)
+	if err != nil {
+		log.Error().Err(err).Msg("could not find team for event")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "could not find team for event"})
+		return
+	}
+
+	if team.Lab == nil {
+		log.Debug().Str("team", team.Username).Msg("lab not found for team")
+		c.JSON(http.StatusNotFound, APIResponse{Status: "lab not found"})
+		return
+	}
+
+	if team.Lab.Conn != nil {
+		ctx := context.Background()
+		agentClient := aproto.NewAgentClient(team.Lab.Conn)
+		agentReq := &aproto.GetHostsRequest{
+			LabTag: team.Lab.LabInfo.Tag,
+		}
+		agentResp, err := agentClient.GetHostsInLab(ctx, agentReq)
+		if err != nil {
+			log.Error().Err(err).Msg("error getting labhosts")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
+			return
+		}
+		c.JSON(http.StatusOK, APIResponse{Status: "OK", LabHosts: agentResp.Hosts})
+		return
+	}
+	log.Error().Msg("error getting hosts in lab: lab conn is nil")
+	c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 }
 
 func (d *daemon) getVpnConf(c *gin.Context) {

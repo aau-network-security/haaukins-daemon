@@ -46,6 +46,7 @@ type APIResponse struct {
 	Events         []db.Event                              `json:"events,omitempty"`
 	TeamInfo       *TeamResponse                           `json:"teaminfo,omitempty"`
 	EventInfo      *EventInfoResponse                      `json:"eventinfo,omitempty"`
+	LabHosts       []string                                `json:"labHosts,omitempty"`
 }
 
 type EventPool struct {

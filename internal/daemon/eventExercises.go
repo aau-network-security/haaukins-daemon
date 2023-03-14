@@ -411,7 +411,7 @@ func (d *daemon) startExerciseInLab(c *gin.Context) {
 				return
 			}
 			sendCommandToTeam(team, updateTeam)
-			c.JSON(http.StatusOK, APIResponse{Status: "ok"})
+			c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 			return
 		}
 		// If the exercise has not yet been added to the lab, add and start it
@@ -424,7 +424,7 @@ func (d *daemon) startExerciseInLab(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 			return
 		}
-		c.JSON(http.StatusOK, APIResponse{Status: "ok"})
+		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 		return
 	}
 	log.Error().Msg("error resetting exercise config: lab conn is nil")
@@ -482,7 +482,7 @@ func (d *daemon) stopExercise(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 			return
 		}
-		c.JSON(http.StatusOK, APIResponse{Status: "ok"})
+		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 		return
 	}
 	log.Error().Msg("error resetting exercise config: lab conn is nil")
@@ -564,7 +564,7 @@ func (d *daemon) resetExercise(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 			return
 		}
-		c.JSON(http.StatusOK, APIResponse{Status: "ok"})
+		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 		return
 	}
 	log.Error().Msg("error resetting exercise config: lab conn is nil")
