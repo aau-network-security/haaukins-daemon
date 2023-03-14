@@ -287,10 +287,10 @@ func (d *daemon) solveExercise(c *gin.Context) {
 				}
 			}
 		}
-		c.JSON(http.StatusBadRequest, APIResponse{Status: "exercise not added to lab"})
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "Start exercise to solve this challenge"})
 		return
 	}
-	c.JSON(http.StatusBadRequest, APIResponse{Status: "lab not yet configured"})
+	c.JSON(http.StatusBadRequest, APIResponse{Status: "Click \"Get a lab\" before solving this challenge"})
 }
 
 // Adds the exercise to the lab (creates and starts containers) or starts a stopped container
@@ -379,7 +379,7 @@ func (d *daemon) startExerciseInLab(c *gin.Context) {
 	log.Debug().Int("runningCount", runningCount).Msg("exercises currently running in lab")
 
 	if runningCount >= 5 && !replacementFound {
-		c.JSON(http.StatusBadRequest, APIResponse{Status: "cap on running exercise reached, stop another exercise before starting a new one"})
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "Limit on running challenges reached, stop another challenge before starting a new one"})
 		return
 	}
 
@@ -547,11 +547,10 @@ func (d *daemon) resetExercise(c *gin.Context) {
 		}
 		log.Debug().Int("runningCount", runningCount).Msg("exercises currently running in lab")
 		if runningCount >= 5 && chalToResetStatus == "stopped" {
-			c.JSON(http.StatusBadRequest, APIResponse{Status: "resetting challenge would breach running exercise cap"})
+			c.JSON(http.StatusBadRequest, APIResponse{Status: "Limit on running challenges reached, stop another challenge before resetting"})
 			return
 		}
 	}
-	
 
 	if team.Lab.Conn != nil {
 		ctx := context.Background()
