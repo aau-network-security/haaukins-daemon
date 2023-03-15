@@ -17,11 +17,11 @@ func (d *daemon) eventLabsSubrouter(r *gin.RouterGroup) {
 	labs.Use(d.eventAuthMiddleware())
 	labs.POST("", d.configureLab)
 	labs.PATCH("/extend", d.extendLabExpiry)
+	labs.PUT("/resetvm/:connectionIdentifier", d.resetVm)
 	labs.GET("", d.getLabInfo)
 	labs.GET("/hosts", d.getHostsInLab)
 	labs.GET("/vpnconf/:id", d.getVpnConf)
 	labs.GET("/resetlab", d.resetLab)
-	labs.GET("/resetvm", d.resetVm)
 }
 
 type LabRequest struct {
@@ -283,7 +283,46 @@ func (d *daemon) resetLab(c *gin.Context) {
 
 // Resets the connected VM in a teams lab in case of problems like freezing etc.
 func (d *daemon) resetVm(c *gin.Context) {
+	teamClaims := unpackTeamClaims(c)
 
+	event, err := d.eventpool.GetEvent(teamClaims.EventTag)
+	if err != nil {
+		log.Error().Err(err).Msg("could not find event in event pool")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "event for team is not currently running"})
+		return
+	}
+
+	team, err := event.GetTeam(teamClaims.Username)
+	if err != nil {
+		log.Error().Err(err).Msg("could not find team for event")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "could not find team for event"})
+		return
+	}
+
+	if team.Lab == nil {
+		log.Debug().Str("team", team.Username).Msg("lab not found for team")
+		c.JSON(http.StatusNotFound, APIResponse{Status: "lab not found"})
+		return
+	}
+
+	if team.Lab.Conn != nil {
+		ctx := context.Background()
+		agentClient := aproto.NewAgentClient(team.Lab.Conn)
+		agentReq := &aproto.VmRequest{
+			LabTag: team.Lab.LabInfo.Tag,
+			ConnectionIdentifier: c.Param("connectionIdentifier"),
+		}
+		_, err := agentClient.ResetVmInLab(ctx, agentReq)
+		if err != nil {
+			log.Error().Err(err).Msg("error resetting vm")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
+			return
+		}
+		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+		return
+	}
+	log.Error().Msg("error getting hosts in lab: lab conn is nil")
+	c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 }
 
 func assembleLabResponse(teamLab *AgentLab) *LabResponse {
