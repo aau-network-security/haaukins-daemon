@@ -305,11 +305,22 @@ func (d *daemon) resetVm(c *gin.Context) {
 		return
 	}
 
+	team.M.Lock()
+	team.Status = RunningVmCommand
+	defer func(team *Team) {
+		team.Status = Idle
+		team.M.Unlock()
+		sendCommandToTeam(team, updateTeam)
+	}(team)
+	sendCommandToTeam(team, updateTeam)
+
+	time.Sleep(200 * time.Millisecond) // Purely for usability on the frontend
+
 	if team.Lab.Conn != nil {
 		ctx := context.Background()
 		agentClient := aproto.NewAgentClient(team.Lab.Conn)
 		agentReq := &aproto.VmRequest{
-			LabTag: team.Lab.LabInfo.Tag,
+			LabTag:               team.Lab.LabInfo.Tag,
 			ConnectionIdentifier: c.Param("connectionIdentifier"),
 		}
 		_, err := agentClient.ResetVmInLab(ctx, agentReq)

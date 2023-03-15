@@ -13,12 +13,14 @@ import (
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
 )
+
 type TeamStatus uint8
 
 const (
 	WaitingForLab TeamStatus = iota
 	InQueue
 	RunningExerciseCommand
+	RunningVmCommand
 	Idle
 )
 
@@ -30,6 +32,8 @@ func (status TeamStatus) String() string {
 		return "inLabQueue"
 	case RunningExerciseCommand:
 		return "runningExCommand"
+	case RunningVmCommand:
+		return "runningVmCommand"
 	case Idle:
 		return "idle"
 	default:
