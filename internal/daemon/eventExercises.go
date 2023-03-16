@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"sort"
 	"strings"
@@ -231,6 +232,13 @@ func (d *daemon) solveExercise(c *gin.Context) {
 		return
 	}
 
+	teamSolves, err := d.db.GetTeamSolvesMap(ctx, dbTeam.ID)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting team solves from database")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
+		return
+	}
+
 	if exClientResp.Exercises[0].Static {
 		log.Debug().Msg("static challenge found")
 		for _, instance := range exClientResp.Exercises[0].Instance {
@@ -278,6 +286,10 @@ func (d *daemon) solveExercise(c *gin.Context) {
 							return
 						}
 						sendCommandToTeam(team, updateChallenges)
+						teamSolves[req.Tag] = true
+						if err := stopExerciseIfAllChildrenSolved(team, teamSolves, exClientResp.Exercises[0].Instance, req.ParentTag); err != nil {
+							log.Error().Err(err).Msg("error stopping exercise after all challenges has been solved")
+						}
 						c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 						return
 					} else {
@@ -580,4 +592,37 @@ func sortCategories(categories []*proto.GetCategoriesResponse_Category) {
 			categories[0], categories[i] = categories[i], categories[0]
 		}
 	}
+}
+
+func stopExerciseIfAllChildrenSolved(team *Team, teamSolvesMap map[string]bool, exerciseInstances []*proto.ExerciseInstance, parentTag string) error {
+	for _, exerciseInstance := range exerciseInstances {
+		for _, childExercise := range exerciseInstance.Children {
+			log.Debug().Str("child tag", childExercise.Tag).Msg("checking if child is solved")
+			if _, ok := teamSolvesMap[childExercise.Tag]; !ok {
+				log.Debug().Msg("all children not solved... continueing without stopping exercise.")
+				return nil
+			}
+		}
+	}
+
+	log.Debug().Msg("all children solved... stopping exercise")
+	if team.Lab != nil {
+		if team.Lab.Conn != nil {
+			ctx := context.Background()
+			agentClient := aproto.NewAgentClient(team.Lab.Conn)
+			agentReq := &aproto.ExerciseRequest{
+				LabTag:   team.Lab.LabInfo.Tag,
+				Exercise: parentTag,
+			}
+			if _, err := agentClient.StopExerciseInLab(ctx, agentReq); err != nil {
+				log.Error().Err(err).Msg("error stopping exercise")
+				return err
+			}
+			sendCommandToTeam(team, updateTeam)
+			return nil
+		}
+	}
+
+	log.Error().Msg("error resetting exercise config: lab conn is nil")
+	return errors.New("error error resetting exercise config: lab conn is nil")
 }
