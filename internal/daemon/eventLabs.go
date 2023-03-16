@@ -54,7 +54,6 @@ type Machine struct {
 }
 
 // Used by teams who have not yet configured their lab lab (advanced events only)
-// TODO Check if event has reached maximum number of labs for event
 func (d *daemon) configureLab(c *gin.Context) {
 	ctx := context.Background()
 	var req LabRequest
@@ -111,6 +110,7 @@ func (d *daemon) configureLab(c *gin.Context) {
 	//Add team to queue
 	if req.IsVpn {
 		team.Status = InQueue
+		// Make all teams aware that event has reached maximum lab capacity
 		if event.IsMaxLabsReached() {
 			broadCastCommandToEventTeams(event, updateEventInfo)
 		}
@@ -160,6 +160,8 @@ func (d *daemon) getLabInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Status: "OK", TeamLab: labResponse})
 }
 
+// Returns current hosts running in their lab
+// It is returned as a list of string in format "<IP> \t <DNS>"
 func (d *daemon) getHostsInLab(c *gin.Context) {
 	teamClaims := unpackTeamClaims(c)
 
@@ -202,6 +204,7 @@ func (d *daemon) getHostsInLab(c *gin.Context) {
 	c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 }
 
+// Returns the vpn config specified by index in the url
 func (d *daemon) getVpnConf(c *gin.Context) {
 	teamClaims := unpackTeamClaims(c)
 
@@ -240,6 +243,8 @@ func (d *daemon) getVpnConf(c *gin.Context) {
 
 }
 
+// Extends time remaining in lab by an integer amount
+// specified in the config. The amount is in minutes
 func (d *daemon) extendLabExpiry(c *gin.Context) {
 	teamClaims := unpackTeamClaims(c)
 
@@ -336,6 +341,10 @@ func (d *daemon) resetVm(c *gin.Context) {
 	c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 }
 
+// Converts *AgentLab to LabResponse
+// This is done because we cannot redact flags etc.
+// from the *AgentLab type without overwriting important
+// data used internally by the daemon
 func assembleLabResponse(teamLab *AgentLab) *LabResponse {
 	exercisesStatus := make(map[string]ExerciseStatus)
 	for _, exercise := range teamLab.LabInfo.Exercises {

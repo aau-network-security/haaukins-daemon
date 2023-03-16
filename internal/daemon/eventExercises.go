@@ -101,11 +101,11 @@ func (d *daemon) getEventExercises(c *gin.Context) {
 		return
 	}
 
-	// TODO return amount of solves of challenge as well
 	eventExercisesResponse := &EventExercisesResponse{
 		Categories: []Category{},
 	}
 
+	// Populate each category with exercises
 	for _, exServiceCategory := range categoriesFromExService.Categories {
 		var exercises []Exercise
 		for _, exServiceExercise := range exercisesFromExService.Exercises {
@@ -116,6 +116,7 @@ func (d *daemon) getEventExercises(c *gin.Context) {
 						continue Inner
 					}
 
+					// Puts all solves for specific challenge into slice
 					solves := []Solve{}
 					for _, dbSolve := range solvesMap[childExercise.Tag] {
 						solve := Solve{
@@ -125,16 +126,20 @@ func (d *daemon) getEventExercises(c *gin.Context) {
 						solves = append(solves, solve)
 					}
 
+					// Is the challenge solved or not by the requesting team?
 					solvedByTeam, ok := teamSolves[childExercise.Tag]
 					if !ok {
 						solvedByTeam = false
 					}
 
+					// Points are either from the config, or dynamic scoring
 					var points int = int(childExercise.Points)
 					if event.Config.DynamicScoring {
 						points = calculateScore(event.Config, float64(len(solvesMap[childExercise.Tag])))
 					}
 
+					// Since exercise description may hold markdown and pure html
+					// Sanitize the exercise description
 					safeHtml, err := sanitizeUnsafeMarkdown([]byte(childExercise.TeamDescription))
 					if err != nil {
 						log.Error().Msgf("Error converting to commonmark: %s", err)
@@ -155,6 +160,8 @@ func (d *daemon) getEventExercises(c *gin.Context) {
 				}
 			}
 		}
+		// If no exercises were found for the category
+		// Dont add the category to response
 		if len(exercises) == 0 {
 			continue
 		}
@@ -239,6 +246,7 @@ func (d *daemon) solveExercise(c *gin.Context) {
 		return
 	}
 
+	// If the challenge to solve is static, lab is not required
 	if exClientResp.Exercises[0].Static {
 		log.Debug().Msg("static challenge found")
 		for _, instance := range exClientResp.Exercises[0].Instance {
@@ -266,7 +274,8 @@ func (d *daemon) solveExercise(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "Unknown flag"})
 		return
 	}
-
+	// If the challenge is a docker challenge
+	// Lab is required for the most part to solve the challenge
 	if team.Lab != nil {
 		for _, exercise := range team.Lab.LabInfo.Exercises {
 			for _, childExercise := range exercise.ChildExercises {
@@ -286,6 +295,8 @@ func (d *daemon) solveExercise(c *gin.Context) {
 							return
 						}
 						sendCommandToTeam(team, updateChallenges)
+						// Add the new solve to the solves map
+						// And stop exercise if all children are solved
 						teamSolves[req.Tag] = true
 						if err := stopExerciseIfAllChildrenSolved(team, teamSolves, exClientResp.Exercises[0].Instance, req.ParentTag); err != nil {
 							log.Error().Err(err).Msg("error stopping exercise after all challenges has been solved")
@@ -362,10 +373,12 @@ func (d *daemon) startExerciseInLab(c *gin.Context) {
 		return
 	}
 
-	existsButStopped := false
+	existsButStopped := false // Determines if we should run StartExerciseInLab or AddExercisesToLab
 	replacementFound := false // Only used if there are more than 5 exercises running in a lab
 	runningCount := 0
 
+	// Get the running count, find replacement.
+	// And And determine if challenge has already been added to the lab, but is just stopped.
 	for _, exercise := range team.Lab.LabInfo.Exercises {
 		running := false
 		for _, machine := range exercise.Machines {
@@ -418,7 +431,7 @@ func (d *daemon) startExerciseInLab(c *gin.Context) {
 				Exercise: exerciseTag,
 			}
 			if _, err := agentClient.StartExerciseInLab(ctx, agentReq); err != nil {
-				log.Error().Err(err).Msg("error stopping exercise to replace")
+				log.Error().Err(err).Msg("error starting exercise")
 				c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 				return
 			}
@@ -439,7 +452,7 @@ func (d *daemon) startExerciseInLab(c *gin.Context) {
 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 		return
 	}
-	log.Error().Msg("error resetting exercise config: lab conn is nil")
+	log.Error().Msg("error starting exercise config: lab conn is nil")
 	c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 }
 
@@ -490,14 +503,14 @@ func (d *daemon) stopExercise(c *gin.Context) {
 			Exercise: exerciseTag,
 		}
 		if _, err := agentClient.StopExerciseInLab(ctx, agentReq); err != nil {
-			log.Error().Err(err).Msg("error resetting exercise")
+			log.Error().Err(err).Msg("error stopping exercise")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 			return
 		}
 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 		return
 	}
-	log.Error().Msg("error resetting exercise config: lab conn is nil")
+	log.Error().Msg("error stopping exercise: lab conn is nil")
 	c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 }
 
@@ -579,10 +592,11 @@ func (d *daemon) resetExercise(c *gin.Context) {
 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 		return
 	}
-	log.Error().Msg("error resetting exercise config: lab conn is nil")
+	log.Error().Msg("error resetting exercise: lab conn is nil")
 	c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 }
 
+// Sort categories to be alphabetic order
 func sortCategories(categories []*proto.GetCategoriesResponse_Category) {
 	sort.Slice(categories, func(p, q int) bool {
 		return categories[p].Name < categories[q].Name
@@ -594,7 +608,12 @@ func sortCategories(categories []*proto.GetCategoriesResponse_Category) {
 	}
 }
 
+/* Stops a docker exercise if all children challenges for that
+exercise has been solved*/
 func stopExerciseIfAllChildrenSolved(team *Team, teamSolvesMap map[string]bool, exerciseInstances []*proto.ExerciseInstance, parentTag string) error {
+	// Run through all children exercises
+	// Check if each child exercise exists in the solves map
+	// If not just continue.
 	for _, exerciseInstance := range exerciseInstances {
 		for _, childExercise := range exerciseInstance.Children {
 			log.Debug().Str("child tag", childExercise.Tag).Msg("checking if child is solved")
