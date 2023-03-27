@@ -135,7 +135,11 @@ func (d *daemon) getEventExercises(c *gin.Context) {
 					// Points are either from the config, or dynamic scoring
 					var points int = int(childExercise.Points)
 					if event.Config.DynamicScoring {
-						points = calculateScore(event.Config, float64(len(solvesMap[childExercise.Tag])))
+						if solvedByTeam {
+							points = calculateScore(event.Config, float64(len(solvesMap[childExercise.Tag])-1))
+						} else {
+							points = calculateScore(event.Config, float64(len(solvesMap[childExercise.Tag])))
+						}
 					}
 
 					// Since exercise description may hold markdown and pure html
