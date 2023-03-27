@@ -382,6 +382,11 @@ func (ap *AgentPool) calculateLabDistribution(agentsAvailable []*Agent, eventPoo
 						continue Inner
 					}
 				}
+				// Edge case
+				if labsRemainingToBeDistributed > 0 && agentInitialLabs == 0 {
+					agentInitialLabs = labsRemainingToBeDistributed
+					labsRemainingToBeDistributed = 0
+				}
 				log.Debug().Int32("labsRemaining", labsRemainingToBeDistributed).Msg("Labs remaining")
 				log.Debug().Str("agentName", agent.Name).Int32("initialLabs", agentInitialLabs).Msg("InitialLabs for agent")
 
