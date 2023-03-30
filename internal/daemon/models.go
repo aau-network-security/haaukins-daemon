@@ -43,7 +43,7 @@ type APIResponse struct {
 	Categories     []*proto.GetCategoriesResponse_Category `json:"categories,omitempty"`
 	Orgs           []db.Organization                       `json:"orgs,omitempty"`
 	Agents         []AgentResponse                         `json:"agents,omitempty"`
-	Events         []db.Event                              `json:"events,omitempty"`
+	Events         []EventResponse                         `json:"events,omitempty"`
 	TeamInfo       *TeamResponse                           `json:"teaminfo,omitempty"`
 	EventInfo      *EventInfoResponse                      `json:"eventinfo,omitempty"`
 	LabHosts       []string                                `json:"labHosts,omitempty"`

@@ -1222,31 +1222,15 @@ func (q *Queries) GetProfiles(ctx context.Context) ([]Profile, error) {
 	return items, nil
 }
 
-const getTeamCount = `-- name: GetTeamCount :many
+const getTeamCount = `-- name: GetTeamCount :one
 SELECT count(teams.id) FROM teams WHERE teams.event_id=$1
 `
 
-func (q *Queries) GetTeamCount(ctx context.Context, eventID int32) ([]int64, error) {
-	rows, err := q.db.QueryContext(ctx, getTeamCount, eventID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []int64
-	for rows.Next() {
-		var count int64
-		if err := rows.Scan(&count); err != nil {
-			return nil, err
-		}
-		items = append(items, count)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) GetTeamCount(ctx context.Context, eventID int32) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getTeamCount, eventID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const getTeamFromEventByUsername = `-- name: GetTeamFromEventByUsername :one

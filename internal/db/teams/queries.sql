@@ -19,5 +19,5 @@ UPDATE teams SET password = $1 WHERE tag = $2 and event_id = $3;
 -- name: GetTeamsForEvent :many
 SELECT * FROM teams WHERE event_id=$1;
 
--- name: GetTeamCount :many
+-- name: GetTeamCount :one
 SELECT count(teams.id) FROM teams WHERE teams.event_id=$1;
