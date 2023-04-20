@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"sort"
 
+	"github.com/aau-network-security/haaukins-exercises/proto"
 	"github.com/gin-gonic/gin"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/yuin/goldmark"
@@ -64,4 +66,16 @@ func sanitizeUnsafeMarkdown(md []byte) ([]byte, error) {
 
 	html := bluemonday.UGCPolicy().SanitizeBytes(unsafeHtml)
 	return html, nil
+}
+
+// Sort categories to be alphabetic order
+func sortCategories(categories []*proto.GetCategoriesResponse_Category) {
+	sort.Slice(categories, func(p, q int) bool {
+		return categories[p].Name < categories[q].Name
+	})
+	for i, category := range categories {
+		if category.Name == "Starters" {
+			categories[0], categories[i] = categories[i], categories[0]
+		}
+	}
 }

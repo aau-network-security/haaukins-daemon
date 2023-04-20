@@ -129,6 +129,8 @@ func (d *daemon) getExerciseCategories(c *gin.Context) {
 			category.CatDesc = string(html)
 		}
 
+		sortCategories(exClientResp.Categories)
+
 		c.JSON(http.StatusOK, APIResponse{Status: "OK", Categories: exClientResp.Categories})
 		return
 	}

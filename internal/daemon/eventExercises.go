@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 
@@ -600,20 +599,11 @@ func (d *daemon) resetExercise(c *gin.Context) {
 	c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 }
 
-// Sort categories to be alphabetic order
-func sortCategories(categories []*proto.GetCategoriesResponse_Category) {
-	sort.Slice(categories, func(p, q int) bool {
-		return categories[p].Name < categories[q].Name
-	})
-	for i, category := range categories {
-		if category.Name == "Starters" {
-			categories[0], categories[i] = categories[i], categories[0]
-		}
-	}
-}
+/*
+	Stops a docker exercise if all children challenges for that
 
-/* Stops a docker exercise if all children challenges for that
-exercise has been solved*/
+exercise has been solved
+*/
 func stopExerciseIfAllChildrenSolved(team *Team, teamSolvesMap map[string]bool, exerciseInstances []*proto.ExerciseInstance, parentTag string) error {
 	// Run through all children exercises
 	// Check if each child exercise exists in the solves map
