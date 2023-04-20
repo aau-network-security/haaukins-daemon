@@ -79,3 +79,10 @@ func sortCategories(categories []*proto.GetCategoriesResponse_Category) {
 		}
 	}
 }
+
+// Sort exercises into alphabetical order
+func sortExercises(exercises []*proto.Exercise) {
+	sort.Slice(exercises, func(p, q int) bool {
+		return exercises[p].Name < exercises[q].Name
+	})
+}

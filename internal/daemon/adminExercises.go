@@ -97,6 +97,8 @@ func (d *daemon) getExercises(c *gin.Context) {
 			exercises = append(exercises, exercise)
 		}
 
+		sortExercises(exercises)
+
 		c.JSON(http.StatusOK, APIResponse{Status: "OK", Exercises: exercises})
 		return
 	}
