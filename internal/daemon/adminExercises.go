@@ -19,6 +19,7 @@ func (d *daemon) adminExerciseSubrouter(r *gin.RouterGroup) {
 
 	exercises.Use(d.adminAuthMiddleware())
 	exercises.GET("", d.getExercises)
+	exercises.GET("/:category", d.getExercises)
 	exercises.GET("/categories", d.getExerciseCategories)
 
 	// Exercise profiles
@@ -51,12 +52,22 @@ func (d *daemon) getExercises(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
 		}
-
-		exClientResp, err := d.exClient.GetExercises(ctx, &proto.Empty{})
-		if err != nil {
-			log.Error().Err(err).Msg("error while retrieving exercises from exercise service")
-			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
-			return
+		category := c.Param("category")
+		var exClientResp *proto.GetExercisesResponse
+		if category == "" {
+			exClientResp, err = d.exClient.GetExercises(ctx, &proto.Empty{})
+			if err != nil {
+				log.Error().Err(err).Msg("error while retrieving exercises from exercise service")
+				c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+				return
+			}
+		} else {
+			exClientResp, err = d.exClient.GetExerciseByCategory(ctx, &proto.GetExerciseByCategoryRequest{Category: category})
+			if err != nil {
+				log.Error().Err(err).Msg("error while retrieving exercises from exercise service")
+				c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+				return
+			}
 		}
 
 		var exercises []*proto.Exercise
