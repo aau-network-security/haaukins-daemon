@@ -25,12 +25,12 @@ func (d *daemon) adminEventTeamsSubrouter(r *gin.RouterGroup) {
 
 func (d *daemon) getTeams(c *gin.Context) {
 	type GetTeamsResponse struct {
-		Tag        string
-		Email      string
-		Username   string
-		Status     string
-		CreatedAt  time.Time
-		LastAccess time.Time
+		Tag        string    `json:"tag"`
+		Email      string    `json:"email"`
+		Username   string    `json:"username"`
+		Status     string    `json:"status"`
+		CreatedAt  time.Time `json:"createdAt"`
+		LastAccess time.Time `json:"lastAccess"`
 	}
 
 	ctx := context.Background()
