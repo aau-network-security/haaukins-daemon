@@ -2,11 +2,13 @@ package daemon
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -123,8 +125,8 @@ func NewConfigFromFile(path string) (*Config, error) {
 	if c.Database.Username == "" {
 		c.Database.Password = "haaukins"
 	}
-	if c.Database.EventRetention == 0 {
-		c.Database.EventRetention = 30 // Default to 30 days of retention
+	if c.EventRetention == 0 {
+		c.EventRetention = 30 // Default to 30 days of retention
 	}
 
 	if c.LabExpiryDuration == 0 {
@@ -328,6 +330,9 @@ func (d *daemon) Run() error {
 
 	go d.labExpiryRoutine()
 
+	ticker := time.NewTicker(10 * time.Second)
+	go d.eventRetentionRoutine(ticker)
+
 	listeningAddress := fmt.Sprintf("%s:%d", d.conf.ListeningIp, d.conf.Port)
 	return r.Run(listeningAddress)
 }
@@ -341,6 +346,7 @@ func (d *daemon) setupRouters(r *gin.Engine) {
 }
 
 func (d *daemon) labExpiryRoutine() {
+	log.Info().Msg("[lab-expiry-routine] starting routine")
 	for {
 		time.Sleep(1 * time.Second)
 		d.eventpool.M.RLock()
@@ -356,9 +362,9 @@ func (d *daemon) labExpiryRoutine() {
 							go func(team *Team, event *Event) {
 								defer wg.Done()
 
-								log.Info().Str("Team", team.Username).Msg("closing lab due to expiry")
+								log.Info().Str("Team", team.Username).Msg("[lab-expiry-routine] closing lab due to expiry")
 								if err := team.Lab.close(); err != nil {
-									log.Error().Err(err).Msg("[lab expiry routine] error closing lab in ")
+									log.Error().Err(err).Msg("[lab-expiry-routine] error closing lab in ")
 									return
 								}
 
@@ -368,7 +374,7 @@ func (d *daemon) labExpiryRoutine() {
 								sendCommandToTeam(team, updateTeam)
 							}(team, event)
 						} else {
-							log.Warn().Msg("[lab expiry routine] lab had nil connection")
+							log.Warn().Msg("[lab-expiry-routine] lab had nil connection")
 						}
 					}
 				}
@@ -379,5 +385,63 @@ func (d *daemon) labExpiryRoutine() {
 			}
 		}
 		d.eventpool.M.RUnlock()
+	}
+}
+
+// This routine handles the deletion of events that has been closed for more than a set time
+// Using database relations deleting just the event will trigger a cascade delete for all related data for that event
+// It also closes running events if they have passed their expected finish time.
+func (d *daemon) eventRetentionRoutine(ticker *time.Ticker) {
+	log.Info().Msg("[event-retention-routine] starting routine")
+	for {
+		select {
+		case <-ticker.C:
+			ctx := context.Background()
+			events, err := d.db.GetAllEvents(ctx)
+			if err != nil {
+				log.Warn().Err(err).Msg("[event-retention-routine] error getting events for")
+				continue
+			}
+			for _, event := range events {
+				if event.Status == StatusRunning {
+					if time.Now().After(event.FinishExpected) {
+						log.Debug().Str("eventTag", event.Tag).Msg("[event-retention-routine] Closing event")
+						if err := d.agentPool.closeEnvironmentOnAllAgents(ctx, event.Tag); err != nil {
+							log.Warn().Err(err).Msg("[event-retention-routine] error closing environments on agents")
+							continue
+						}
+
+						newEventTag := event.Tag + "-" + strconv.Itoa(int(time.Now().Unix()))
+						closeEventParams := db.CloseEventParams{
+							Newtag: newEventTag,
+							Oldtag: event.Tag,
+							Finishedat: sql.NullTime{
+								Time:  time.Now(),
+								Valid: true,
+							},
+							Newstatus: StatusClosed,
+						}
+
+						if err := d.db.CloseEvent(ctx, closeEventParams); err != nil {
+							log.Warn().Err(err).Msg("[event-retention-routine] error updating event db status to closed")
+						}
+
+						if err := d.eventpool.RemoveEvent(event.Tag); err != nil {
+							log.Warn().Err(err).Msg("[event-retention-routine] event not found in event pool, something else has removed")
+						}
+
+						saveState(d.eventpool, d.conf.StatePath)
+					}
+				} else if event.Status == StatusClosed {
+					if time.Now().After(event.FinishedAt.Time.AddDate(0, 0, int(d.conf.EventRetention))) {
+						log.Debug().Str("eventTag", event.Tag).Msg("[event-retention-routine] deleting event and related data from db")
+						if err := d.db.DeleteEventById(ctx, event.ID); err != nil {
+							log.Warn().Str("eventTag", event.Tag).Err(err).Msg("[event-retention-routine] error deleting event from database")
+							continue
+						}
+					}
+				}
+			}
+		}
 	}
 }

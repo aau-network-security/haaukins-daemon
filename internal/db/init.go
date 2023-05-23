@@ -14,7 +14,6 @@ type DbConfig struct {
 	DbName         string `yaml:"dbName"`
 	Username       string `yaml:"username"`
 	Password       string `yaml:"password"`
-	EventRetention uint16 `yaml:"eventRetention"`
 }
 
 func (conf *DbConfig) InitConn() (*Queries, *gorm.DB, error) {
