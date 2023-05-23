@@ -5,6 +5,7 @@ state-path: /path/to/state/dir
 
 lab-expiry-duration: 1 # In minutes
 lab-expiry-extension: 1 # In minutes
+eventRetention: 30 #Amount of days before stopped events are removed including teams related to that event
 
 auditLog: 
   directory: /path/to/log/dir
@@ -19,7 +20,7 @@ db-config:
   db_name: haaukins
   username: haaukins
   password: haaukins
-  eventRetention: 30 #Amount of days before stopped events are removed including teams related to that event
+  
 
 exercise-service:
   grpc: localhost
