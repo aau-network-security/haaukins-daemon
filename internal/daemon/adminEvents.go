@@ -4,12 +4,14 @@ import (
 	"container/list"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	aproto "github.com/aau-network-security/haaukins-agent/pkg/proto"
 	"github.com/aau-network-security/haaukins-daemon/internal/db"
 	eproto "github.com/aau-network-security/haaukins-exercises/proto"
 	"github.com/gin-gonic/gin"
@@ -149,6 +151,20 @@ func (d *daemon) newEvent(c *gin.Context) {
 			EstimatedMemUsagePerLab: estimatedMemUsagePerLab,
 			EstimatedMemorySpent:    estimatedMemSpent,
 		}
+
+		var exerConfs []*aproto.ExerciseConfig
+		for _, e := range exClientResp.Exercises {
+			ex, err := protobufToJson(e)
+			if err != nil {
+				log.Error().Err(err).Msg("error parsing protobuf to json")
+				c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
+				return
+			}
+			estruct := &aproto.ExerciseConfig{}
+			json.Unmarshal([]byte(ex), &estruct)
+			exerConfs = append(exerConfs, estruct)
+		}
+		req.ExerciseConfigs = exerConfs
 
 		if err := d.agentPool.createNewEnvOnAvailableAgents(ctx, d.eventpool, req, resourceEstimates); err != nil {
 			if err == AllAgentsReturnedErr {

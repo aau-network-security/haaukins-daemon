@@ -276,9 +276,9 @@ func (ap *AgentPool) createNewEnvOnAvailableAgents(ctx context.Context, eventPoo
 						MemoryMB: 4096,
 						Cpu:      0,
 					},
-					InitialLabs: distributionMap[availableAgent.Name].initialLabs,
-					Exercises:   eventConfig.ExerciseTags,
-					TeamSize:    eventConfig.TeamSize,
+					InitialLabs:     distributionMap[availableAgent.Name].initialLabs,
+					ExerciseConfigs: eventConfig.ExerciseConfigs,
+					TeamSize:        eventConfig.TeamSize,
 				}
 				wg.Add(1)
 				go func(conf *aproto.CreatEnvRequest, a *Agent) {

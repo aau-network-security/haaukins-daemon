@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -438,14 +439,32 @@ func (d *daemon) startExerciseInLab(c *gin.Context) {
 				c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 				return
 			}
-			sendCommandToTeam(team, updateTeam)
 			c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 			return
 		}
 		// If the exercise has not yet been added to the lab, add and start it
+		exerciseConfig, err := d.exClient.GetExerciseByTags(ctx, &proto.GetExerciseByTagsRequest{Tag: []string{exerciseTag}})
+		if err != nil {
+			log.Error().Err(err).Msg("error getting exercise by tag from exDb")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
+			return
+		}
+		// Unpack into exercise slice
+		var exerConfs []*aproto.ExerciseConfig
+		for _, e := range exerciseConfig.Exercises {
+			ex, err := protobufToJson(e)
+			if err != nil {
+				log.Error().Err(err).Msg("error parsing protobuf to json")
+				c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
+				return
+			}
+			estruct := &aproto.ExerciseConfig{}
+			json.Unmarshal([]byte(ex), &estruct)
+			exerConfs = append(exerConfs, estruct)
+		}
 		agentReq := &aproto.ExerciseRequest{
-			LabTag:    team.Lab.LabInfo.Tag,
-			Exercises: []string{exerciseTag},
+			LabTag:          team.Lab.LabInfo.Tag,
+			ExerciseConfigs: exerConfs,
 		}
 		if _, err := agentClient.AddExercisesToLab(ctx, agentReq); err != nil {
 			log.Error().Err(err).Msg("error adding exercise")
