@@ -6,8 +6,10 @@ import (
 	"regexp"
 	"sort"
 
-	"github.com/aau-network-security/haaukins-exercises/proto"
+	eproto "github.com/aau-network-security/haaukins-exercises/proto"
 	"github.com/gin-gonic/gin"
+	"github.com/gogo/protobuf/jsonpb"
+	"github.com/golang/protobuf/proto"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/renderer/html"
@@ -69,7 +71,7 @@ func sanitizeUnsafeMarkdown(md []byte) ([]byte, error) {
 }
 
 // Sort categories to be alphabetic order
-func sortCategories(categories []*proto.GetCategoriesResponse_Category) {
+func sortCategories(categories []*eproto.GetCategoriesResponse_Category) {
 	sort.Slice(categories, func(p, q int) bool {
 		return categories[p].Name < categories[q].Name
 	})
@@ -81,8 +83,18 @@ func sortCategories(categories []*proto.GetCategoriesResponse_Category) {
 }
 
 // Sort exercises into alphabetical order
-func sortExercises(exercises []*proto.Exercise) {
+func sortExercises(exercises []*eproto.Exercise) {
 	sort.Slice(exercises, func(p, q int) bool {
 		return exercises[p].Name < exercises[q].Name
 	})
+}
+
+func protobufToJson(message proto.Message) (string, error) {
+	marshaler := jsonpb.Marshaler{
+		EnumsAsInts:  false,
+		EmitDefaults: false,
+		Indent:       "  ",
+	}
+
+	return marshaler.MarshalToString(message)
 }

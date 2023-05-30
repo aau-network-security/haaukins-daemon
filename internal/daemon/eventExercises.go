@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -69,7 +70,7 @@ func (d *daemon) getEventExercises(c *gin.Context) {
 		return
 	}
 
-	exercisesFromExService, err := d.exClient.GetExerciseByTags(ctx, &proto.GetExerciseByTagsRequest{Tag: event.Config.ExerciseTags})
+	exClientResp, err := d.exClient.GetExerciseByTags(ctx, &proto.GetExerciseByTagsRequest{Tag: event.Config.ExerciseTags})
 	if err != nil {
 		log.Error().Err(err).Msg("error getting exercise by tags from exercise service")
 		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
@@ -107,7 +108,7 @@ func (d *daemon) getEventExercises(c *gin.Context) {
 	// Populate each category with exercises
 	for _, exServiceCategory := range categoriesFromExService.Categories {
 		var exercises []Exercise
-		for _, exServiceExercise := range exercisesFromExService.Exercises {
+		for _, exServiceExercise := range exClientResp.Exercises {
 			for _, instance := range exServiceExercise.Instance {
 			Inner:
 				for _, childExercise := range instance.Children {
@@ -438,14 +439,32 @@ func (d *daemon) startExerciseInLab(c *gin.Context) {
 				c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 				return
 			}
-			sendCommandToTeam(team, updateTeam)
 			c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 			return
 		}
 		// If the exercise has not yet been added to the lab, add and start it
+		exClientResp, err := d.exClient.GetExerciseByTags(ctx, &proto.GetExerciseByTagsRequest{Tag: []string{exerciseTag}})
+		if err != nil {
+			log.Error().Err(err).Msg("error getting exercise by tag from exDb")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
+			return
+		}
+		// Unpack into exercise slice
+		var exerConfs []*aproto.ExerciseConfig
+		for _, e := range exClientResp.Exercises {
+			ex, err := protobufToJson(e)
+			if err != nil {
+				log.Error().Err(err).Msg("error parsing protobuf to json")
+				c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
+				return
+			}
+			estruct := &aproto.ExerciseConfig{}
+			json.Unmarshal([]byte(ex), &estruct)
+			exerConfs = append(exerConfs, estruct)
+		}
 		agentReq := &aproto.ExerciseRequest{
-			LabTag:    team.Lab.LabInfo.Tag,
-			Exercises: []string{exerciseTag},
+			LabTag:          team.Lab.LabInfo.Tag,
+			ExerciseConfigs: exerConfs,
 		}
 		if _, err := agentClient.AddExercisesToLab(ctx, agentReq); err != nil {
 			log.Error().Err(err).Msg("error adding exercise")

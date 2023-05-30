@@ -87,6 +87,7 @@ type EventConfig struct {
 	DynamicMax            int32     `json:"dynamicMax,omitempty"`
 	DynamicMin            int32     `json:"dynamicMin,omitempty"`
 	DynamicSolveThreshold int32     `json:"dynamicSolveThreshold,omitempty"`
+	ExerciseConfigs       []*aproto.ExerciseConfig
 }
 
 type Team struct {
