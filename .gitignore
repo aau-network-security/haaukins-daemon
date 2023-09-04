@@ -10,3 +10,6 @@ casbin.md
 .data
 .logs
 state/state.json
+log.log
+tmp
+pid

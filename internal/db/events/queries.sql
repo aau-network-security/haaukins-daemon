@@ -52,5 +52,8 @@ SELECT finish_expected FROM events WHERE tag=$1;
 -- name: DeleteEventByTag :exec
 DELETE FROM events WHERE tag=$1;
 
+-- name: DeleteEventById :exec
+DELETE FROM events WHERE id=$1;
+
 -- name: DeleteEventOlderThan :exec
 DELETE FROM events WHERE finished_at < GETDATE() - @numberOfDays and status = @closedStatus;
