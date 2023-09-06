@@ -443,7 +443,7 @@ func (ap *AgentPool) closeEnvironmentOnAllAgents(ctx context.Context, eventTag s
 
 // Creates a lab for a specified event with a specified type
 func (ap *AgentPool) createLabForEvent(ctx context.Context, isVpn bool, event *Event, eventPool *EventPool) error {
-	agentForLab, err := ap.selectAgentForLab(event.EstimatedMemoryUsagePerLab, eventPool)
+	agentForLab, err := ap.selectAgentForLab(ctx, event.EstimatedMemoryUsagePerLab, eventPool, event)
 	if err != nil {
 		return errors.New("no suitable agent found")
 	}
@@ -461,9 +461,22 @@ func (ap *AgentPool) createLabForEvent(ctx context.Context, isVpn bool, event *E
 	return nil
 }
 
-func (ap *AgentPool) selectAgentForLab(estimatedMemUsagePerLab uint64, eventPool *EventPool) (*Agent, error) {
+func (ap *AgentPool) selectAgentForLab(ctx context.Context, estimatedMemUsagePerLab uint64, eventPool *EventPool, event *Event) (*Agent, error) {
 	var availableAgents []*Agent
 	for _, agent := range ap.Agents {
+		client := aproto.NewAgentClient(agent.Conn)
+		// Retrieve a list of environments, if the environment for this event is not running, skip the agent
+		listEnvResp, err := client.ListEnvironments(ctx, &aproto.Empty{})
+		if err != nil {
+			log.Error().Err(err).Str("agent", agent.Name).Msg("error listing environments for agent")
+			continue
+		}
+		ok := listEnvResp.EventTags[event.Config.Tag]
+		if !ok {
+			log.Info().Str("agent", agent.Name).Msg("Agent cannot be selected for lab because of missing environment")
+			continue
+		}
+		// Environment exists continue with calculations
 		currentEstimatedMemConsumption := agent.calculateCurrentEstimatedMemConsumption(eventPool)
 		memConsumptionAfterNewLab := currentEstimatedMemConsumption + estimatedMemUsagePerLab
 		if agent.StateLock || memConsumptionAfterNewLab > agent.Resources.MemoryInstalled ||
@@ -537,6 +550,8 @@ func (ap *AgentPool) calculateTotalMemoryInstalled() {
 
 // Agent
 
+// Calculates the currently estimated resource usage of an agent
+// TODO We might need to look into also taking into consideration the teams that are in queue since they are actively still waiting for a lab
 func (agent *Agent) calculateCurrentEstimatedMemConsumption(eventPool *EventPool) uint64 {
 	// Get all labs for a specific agent including their estimated resource usage
 	agentLabs := eventPool.GetAllAgentLabsForAgent(agent.Name)

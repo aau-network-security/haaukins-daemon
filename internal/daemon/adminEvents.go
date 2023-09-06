@@ -585,7 +585,7 @@ func calculateEstimatedEventMemUsage(exercises []*eproto.Exercise, teamSize, max
 	containerCountPerLab := 0
 	if eventType == TypeBeginner {
 		for _, exercise := range exercises {
-			for _ = range exercise.Instance {
+			for range exercise.Instance {
 				containerCountPerLab += 1
 			}
 		}

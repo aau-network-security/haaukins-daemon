@@ -446,7 +446,6 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
-// TODO Find a better way to authenticate users than sending jwt as get query parameter
 func (d *daemon) agentWebsocket(c *gin.Context) {
 	agentName := c.Param("agent")
 
