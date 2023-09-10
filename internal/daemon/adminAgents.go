@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/aau-network-security/haaukins-daemon/internal/db"
@@ -118,6 +119,7 @@ func (d *daemon) newAgent(c *gin.Context) {
 
 		streamCtx, cancel := context.WithCancel(context.Background())
 		agentForPool := &Agent{
+			M:            sync.RWMutex{},
 			Name:         req.Name,
 			Url:          req.Url,
 			Tls:          req.Tls,
@@ -339,6 +341,7 @@ func (d *daemon) reconnectAgent(c *gin.Context) {
 
 		streamCtx, cancel := context.WithCancel(context.Background())
 		agentForPool := &Agent{
+			M:            sync.RWMutex{},
 			Name:         dbAgent.Name,
 			Url:          dbAgent.Url,
 			Tls:          dbAgent.Tls,

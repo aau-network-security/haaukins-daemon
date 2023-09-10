@@ -216,6 +216,13 @@ func (ap *AgentPool) getAgent(name string) (*Agent, error) {
 	return agent, nil
 }
 
+func (ap *AgentPool) GetAllAgents() map[string]*Agent {
+	ap.M.RLock()
+	defer ap.M.RUnlock()
+
+	return ap.Agents
+}
+
 func (ap *AgentPool) createNewEnvOnAvailableAgents(ctx context.Context, eventPool *EventPool, eventConfig EventConfig, resourceEstimates ResourceEstimates) error {
 	ap.M.RLock()
 
@@ -471,8 +478,10 @@ func (ap *AgentPool) selectAgentForLab(ctx context.Context, estimatedMemUsagePer
 			log.Error().Err(err).Str("agent", agent.Name).Msg("error listing environments for agent")
 			continue
 		}
-		ok := listEnvResp.EventTags[event.Config.Tag]
-		if !ok {
+		envExists := listEnvResp.EventTags[event.Config.Tag]
+		starting := listEnvResp.StartingEventTags[event.Config.Tag]
+		closing := listEnvResp.ClosingEventTags[event.Config.Tag]
+		if !envExists || starting || closing {
 			log.Info().Str("agent", agent.Name).Msg("Agent cannot be selected for lab because of missing environment")
 			continue
 		}
@@ -586,4 +595,79 @@ func (agentLab *AgentLab) close() error {
 		return err
 	}
 	return nil
+}
+
+// TODO Get more info from agent related to config to make sure that an older event with same tag is not used by the daemon.
+func (d *daemon) agentSyncRoutine(ticker *time.Ticker) {
+	log.Info().Msg("[agent-syncronisation-routine] starting routine")
+	for {
+		select {
+		case <-ticker.C:
+			ctx := context.Background()
+			agents := d.agentPool.GetAllAgents()
+			events := d.eventpool.GetAllEvents()
+
+			for _, agent := range agents {
+				client := aproto.NewAgentClient(agent.Conn)
+				listEnvResp, err := client.ListEnvironments(ctx, &aproto.Empty{})
+				if err != nil {
+					log.Error().Err(err).Str("agent", agent.Name).Msg("[agent-syncronisation-routine] error listing environments on agent")
+					continue
+				}
+				// If an event is running in the daemon but not on the agent, start it up
+				for _, event := range events {
+					eventConfig := event.GetConfig()
+					envExists := listEnvResp.EventTags[eventConfig.Tag]
+					starting := listEnvResp.StartingEventTags[eventConfig.Tag]
+					if !envExists && !starting {
+						log.Debug().Str("agent", agent.GetName()).Str("eventTag", eventConfig.Tag).Msg("[agent-syncronisation-routine] found daemon event not running on agent, starting the environment...")
+						envConfig := aproto.CreatEnvRequest{
+							EventTag: eventConfig.Tag,
+							EnvType:  eventConfig.Type,
+							// TODO Just temporarily using hardcoded vm config
+							Vm: &aproto.VmConfig{
+								Image:    eventConfig.VmName,
+								MemoryMB: 4096,
+								Cpu:      0,
+							},
+							InitialLabs:     0,
+							ExerciseConfigs: eventConfig.ExerciseConfigs,
+							TeamSize:        eventConfig.TeamSize,
+						}
+						go func(conf *aproto.CreatEnvRequest, client aproto.AgentClient) {
+							if _, err := client.CreateEnvironment(ctx, conf); err != nil {
+								log.Error().Err(err).Str("agentName", agent.GetName()).Msg("[agent-syncronisation-routine] error creating environment for agent")
+								return
+							}
+						}(&envConfig, client)
+					}
+				}
+				// If an event is running on the agent but not in the daemon, close it down
+				for envTag := range listEnvResp.EventTags {
+					_, err := d.eventpool.GetEvent(envTag)
+					if err != nil {
+						closing := listEnvResp.ClosingEventTags[envTag]
+						if closing {
+							continue
+						}
+						log.Debug().Str("agent", agent.GetName()).Str("envTag", envTag).Msg("[agent-syncronisation-routine] found agent environment not running in daemon, closing the environment...")
+						go func(client aproto.AgentClient) {
+							if _, err := client.CloseEnvironment(ctx, &aproto.CloseEnvRequest{EventTag: envTag}); err != nil {
+								log.Error().Err(err).Str("agentName", agent.GetName()).Msg("[agent-syncronisation-routine] error closing environment for agent")
+								return
+							}
+						}(client)
+					}
+					
+				}
+			}
+		}
+	}
+}
+
+func (agent *Agent) GetName() string {
+	agent.M.RLock()
+	defer agent.M.RUnlock()
+
+	return agent.Name
 }
