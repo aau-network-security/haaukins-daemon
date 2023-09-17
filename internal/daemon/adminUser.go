@@ -152,6 +152,11 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, APIResponse{Status: passwordTooShortError})
 			return
 		}
+		// Validate username
+		if req.Username == "" || strings.Trim(req.Username, " ") == "" {
+			c.JSON(http.StatusBadRequest, APIResponse{Status: "Invalid username"})
+			return
+		}
 		// Create new user if it does not already exist
 		org := admin.Organization
 		if authorized[0] { // Superadmin
