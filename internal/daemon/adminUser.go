@@ -506,9 +506,9 @@ func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUser
 		if err := d.db.UpdateAdminPassword(ctx, newPw); err != nil {
 			return fmt.Errorf("Error updating password: %s", err)
 		}
-	} else if !verifyPassword(currUser.Password, updatedUser.Password) && updatedUser.Password != "" && !match {
+	} else if updatedUser.Password != "" && !match {
 		return errors.New("Wrong password")
-	}
+	} 
 
 	// Update email if changed
 	if updatedUser.Email != currUser.Email && updatedUser.Email != "" {
