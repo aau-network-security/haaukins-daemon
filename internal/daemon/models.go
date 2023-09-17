@@ -123,6 +123,7 @@ type ResourceEstimates struct {
 }
 
 type Agent struct {
+	M            sync.RWMutex `json:"-"`
 	Name         string
 	Url          string
 	Tls          bool

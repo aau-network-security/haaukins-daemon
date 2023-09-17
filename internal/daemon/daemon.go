@@ -205,6 +205,7 @@ func New(conf *Config) (*daemon, error) {
 			} else {
 				streamCtx, cancel := context.WithCancel(context.Background())
 				var agentToAdd = &Agent{
+					M:            sync.RWMutex{},
 					Name:         a.Name,
 					Url:          a.Url,
 					Tls:          a.Tls,
@@ -330,8 +331,11 @@ func (d *daemon) Run() error {
 
 	go d.labExpiryRoutine()
 
-	ticker := time.NewTicker(10 * time.Second)
-	go d.eventRetentionRoutine(ticker)
+	eventRoutineTicker := time.NewTicker(10 * time.Second)
+	go d.eventRetentionRoutine(eventRoutineTicker)
+
+	agentSyncRoutineTicker := time.NewTicker(30 * time.Second)
+	go d.agentSyncRoutine(agentSyncRoutineTicker)
 
 	listeningAddress := fmt.Sprintf("%s:%d", d.conf.ListeningIp, d.conf.Port)
 	return r.Run(listeningAddress)
