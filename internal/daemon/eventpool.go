@@ -50,6 +50,13 @@ func (ep *EventPool) GetEvent(eventTag string) (*Event, error) {
 	return event, nil
 }
 
+func (ep *EventPool) GetAllEvents() (map[string]*Event) {
+	ep.M.RLock()
+	defer ep.M.RUnlock()
+
+	return ep.Events
+}
+
 func (ep *EventPool) GetAllAgentLabsForAgent(agentName string) []*AgentLab {
 	ep.M.RLock()
 	defer ep.M.RUnlock()
@@ -83,6 +90,13 @@ func (event *Event) GetTeam(username string) (*Team, error) {
 	}
 
 	return team, nil
+}
+
+func (event *Event) GetConfig() EventConfig {
+	event.M.RLock()
+	defer event.M.RUnlock()
+
+	return event.Config
 }
 
 func (event *Event) AddTeam(team *Team) {
