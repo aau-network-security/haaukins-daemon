@@ -152,6 +152,11 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, APIResponse{Status: passwordTooShortError})
 			return
 		}
+		// Validate username
+		if req.Username == "" || strings.Trim(req.Username, " ") == "" {
+			c.JSON(http.StatusBadRequest, APIResponse{Status: "Invalid username"})
+			return
+		}
 		// Create new user if it does not already exist
 		org := admin.Organization
 		if authorized[0] { // Superadmin
@@ -477,13 +482,11 @@ func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUser
 	if err != nil {
 		return err
 	}
+	
+	// When changing password we want to make sure that the user knows the current password
 	match := verifyPassword(adminInfo.Password, updatedUser.VerifyAdminPassword)
-	if !match {
-		return errors.New("Admin verification failed, password did not match")
-	}
-
 	// Update password if changed
-	if !verifyPassword(currUser.Password, updatedUser.Password) && updatedUser.Password != "" {
+	if !verifyPassword(currUser.Password, updatedUser.Password) && updatedUser.Password != "" && match{
 		log.Debug().Msg("Updating password")
 		// Password should be longer than 8 characters
 		if len(updatedUser.Password) < 8 {
@@ -503,7 +506,9 @@ func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUser
 		if err := d.db.UpdateAdminPassword(ctx, newPw); err != nil {
 			return fmt.Errorf("Error updating password: %s", err)
 		}
-	}
+	} else if updatedUser.Password != "" && !match {
+		return errors.New("Wrong password")
+	} 
 
 	// Update email if changed
 	if updatedUser.Email != currUser.Email && updatedUser.Email != "" {
