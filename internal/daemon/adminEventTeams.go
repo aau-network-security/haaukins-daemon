@@ -110,10 +110,8 @@ func (d *daemon) getTeams(c *gin.Context) {
 					if poolTeam.Lab != nil {
 						exercisesResp := []ExerciseResp{}
 						for _, exercise := range poolTeam.Lab.LabInfo.Exercises {
-							log.Debug().Str("Exercise", exercise.Tag).Msg("Assembling exercise")
 							for _, exConfig := range eventConfig.ExerciseConfigs {
 								if exercise.Tag == exConfig.Tag {
-									log.Debug().Str("Exercise", exercise.Tag).Msg("Found parent in exercise configs")
 									childExercisesResp := []ChildExerciseResp{}
 									for _, childExercise := range exercise.ChildExercises {
 										log.Debug().Str("ChildExercise", childExercise.Tag).Msg("Trying to assemble children")
@@ -135,7 +133,6 @@ func (d *daemon) getTeams(c *gin.Context) {
 										Machines:       exercise.Machines,
 										ChildExercises: childExercisesResp,
 									}
-									log.Debug().Msgf("appending exerciseResp: %v", exerciseResp)
 									exercisesResp = append(exercisesResp, exerciseResp)
 								}
 							}
