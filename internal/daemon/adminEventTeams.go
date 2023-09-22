@@ -2,11 +2,13 @@ package daemon
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"time"
 
 	aproto "github.com/aau-network-security/haaukins-agent/pkg/proto"
+	"github.com/aau-network-security/haaukins-daemon/internal/db"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
@@ -22,6 +24,7 @@ func (d *daemon) adminEventTeamsSubrouter(r *gin.RouterGroup) {
 
 	// Additional routes
 	teams.PUT("", d.updateTeam)
+	teams.POST("/solve", d.forceSolveExercise)
 }
 
 func (d *daemon) getTeams(c *gin.Context) {
@@ -109,41 +112,48 @@ func (d *daemon) getTeams(c *gin.Context) {
 			if poolTeam != nil {
 				poolTeam.LockForFunc(func() {
 					teamStatus = poolTeam.Status.String()
-					labInfo.Tag = poolTeam.Lab.LabInfo.Tag
 					if poolTeam.Lab != nil {
+						labInfo.Tag = poolTeam.Lab.LabInfo.Tag
 						exercisesResp := []ExerciseResp{}
-						for _, exercise := range poolTeam.Lab.LabInfo.Exercises {
-							for _, exConfig := range eventConfig.ExerciseConfigs {
+						for _, exConfig := range eventConfig.ExerciseConfigs {
+							exerciseResp := ExerciseResp{
+								Tag:            exConfig.Tag,
+								Machines:       []*aproto.Machine{},
+								ChildExercises: []ChildExerciseResp{},
+							}
+							for _, exercise := range poolTeam.Lab.LabInfo.Exercises {
 								if exercise.Tag == exConfig.Tag {
-									childExercisesResp := []ChildExerciseResp{}
-									for _, childExercise := range exercise.ChildExercises {
-										for _, instance := range exConfig.Instance {
-											for _, childExConfig := range instance.Children {
-												if childExercise.Tag == childExConfig.Tag {
-													childExerciseResp := ChildExerciseResp{
-														Name:   childExConfig.Name,
-														Tag:    childExConfig.Tag,
-														Flag:   childExercise.Flag,
-														Solved: false,
-													}
-													for _, solve := range solves[childExercise.Tag] {
-														if solve.Username == poolTeam.Username {
-															childExerciseResp.Solved = true
-														}
-													}
-													childExercisesResp = append(childExercisesResp, childExerciseResp)
+									exerciseResp.Machines = exercise.Machines
+								}
+							}
+							for _, instance := range exConfig.Instance {
+								for _, child := range instance.Children {
+									childExerciseResp := ChildExerciseResp{
+										Name:   child.Name,
+										Tag:    child.Tag,
+										Flag:   "Challenge has not yet been started",
+										Solved: false,
+									}
+									for _, solve := range solves[child.Tag] {
+										if solve.Username == poolTeam.Username {
+											childExerciseResp.Solved = true
+										}
+									}
+									if child.Static != "" {
+										childExerciseResp.Flag = child.Static
+									} else {
+										for _, exercise := range poolTeam.Lab.LabInfo.Exercises {
+											for _, childExercise := range exercise.ChildExercises {
+												if childExercise.Tag == child.Tag {
+													childExerciseResp.Flag = childExercise.Flag
 												}
 											}
 										}
 									}
-									exerciseResp := ExerciseResp{
-										Tag:            exercise.Tag,
-										Machines:       exercise.Machines,
-										ChildExercises: childExercisesResp,
-									}
-									exercisesResp = append(exercisesResp, exerciseResp)
+									exerciseResp.ChildExercises = append(exerciseResp.ChildExercises, childExerciseResp)
 								}
 							}
+							exercisesResp = append(exercisesResp, exerciseResp)
 						}
 						labInfo.Exercises = exercisesResp
 					}
@@ -176,4 +186,106 @@ func (d *daemon) deleteTeam(c *gin.Context) {
 
 func (d *daemon) updateTeam(c *gin.Context) {
 
+}
+
+func (d *daemon) forceSolveExercise(c *gin.Context) {
+	type ForceSolveParams struct {
+		EventTag    string `json:"eventTag"`
+		ExerciseTag string `json:"exerciseTag"`
+		TeamName    string `json:"teamName"`
+	}
+
+	var req ForceSolveParams
+	if err := c.BindJSON(&req); err != nil {
+		log.Error().Err(err).Msg("Error parsing request data: ")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "error parsing request"})
+		return
+	}
+
+	admin := unpackAdminClaims(c)
+	d.auditLogger.Info().
+		Time("UTC", time.Now().UTC()).
+		Str("AdminUser", admin.Username).
+		Str("AdminEmail", admin.Email).
+		Str("EventTag", req.EventTag).
+		Msg("AdminUser is trying to get teams for event")
+
+	dbEvent, err := d.db.GetEventByTag(c, req.EventTag)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting event from event pool")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
+		return
+	}
+
+	var casbinRequests = [][]interface{}{
+		{admin.Username, admin.Organization, "events::Admins", "write"},
+		{admin.Username, admin.Organization, fmt.Sprintf("events::%s", dbEvent.Organization), "write"},
+		{admin.Username, admin.Organization, fmt.Sprintf("notOwnedEvents::%s", dbEvent.Organization), "write"},
+	}
+
+	if authorized, err := d.enforcer.BatchEnforce(casbinRequests); authorized[0] || authorized[1] || err != nil {
+		if !authorized[2] {
+			if dbEvent.Createdby != admin.Username {
+				c.JSON(http.StatusForbidden, gin.H{"status": "Forbidden"})
+				return
+			}
+		}
+		team, err := d.db.GetTeamFromEventByUsername(c, db.GetTeamFromEventByUsernameParams{
+			Username: req.TeamName,
+			Eventid:  dbEvent.ID,
+		})
+		if err != nil {
+			log.Error().Err(err).Str("event", dbEvent.Tag).Msg("error getting team for event from db")
+			if err == sql.ErrNoRows {
+				c.JSON(http.StatusNotFound, gin.H{"status": "Team not found"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "Internal server error"})
+			return
+		}
+
+		teamSolves, err := d.db.GetTeamSolvesMap(c, team.ID)
+		if _, ok := teamSolves[req.ExerciseTag]; ok {
+			c.JSON(http.StatusBadRequest, gin.H{"status": "Bad request, already solved"})
+			return
+		}
+
+		event, err := d.eventpool.GetEvent(req.EventTag)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "Internal server error"})
+			return
+		}
+
+		eventConfig := event.GetConfig()
+		exerciseExists := false
+	Outer:
+		for _, exerciseConfig := range eventConfig.ExerciseConfigs {
+			for _, instance := range exerciseConfig.Instance {
+				for _, child := range instance.Children {
+					if child.Tag == req.ExerciseTag {
+						exerciseExists = true
+						break Outer
+					}
+				}
+			}
+		}
+		if !exerciseExists {
+			c.JSON(http.StatusBadRequest, gin.H{"status": "Bad request, exercise does not exist in event"})
+		}
+
+		addSolveParams := db.AddSolveForTeamInEventParams{
+			Tag:      req.ExerciseTag,
+			Eventid:  dbEvent.ID,
+			Teamid:   team.ID,
+			Solvedat: time.Now(),
+		}
+		if err := d.db.AddSolveForTeamInEvent(c, addSolveParams); err != nil {
+			log.Error().Err(err).Msg("error adding forced solve")
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "Internal server error"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "OK"})
+		return
+	}
+	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 }
