@@ -235,3 +235,20 @@ func (team *Team) ExtendLabExpiry(extendDuration time.Duration) {
 
 	team.Lab.ExpiresAtTime = team.Lab.ExpiresAtTime.Add(extendDuration * time.Minute)
 }
+
+func (team *Team) GetLab() *AgentLab {
+	team.M.RLock()
+	defer team.M.RUnlock()
+
+	return team.Lab
+}
+
+func (team *Team) LockForFunc(function func()) {
+	team.M.Lock()
+	defer team.M.Unlock()
+
+	function()
+}
+
+// Lab
+

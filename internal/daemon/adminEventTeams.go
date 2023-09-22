@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	aproto "github.com/aau-network-security/haaukins-agent/pkg/proto"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
@@ -24,13 +25,31 @@ func (d *daemon) adminEventTeamsSubrouter(r *gin.RouterGroup) {
 }
 
 func (d *daemon) getTeams(c *gin.Context) {
+	type ChildExerciseResp struct {
+		Name string `json:"name"`
+		Tag  string `json:"tag"`
+		Flag string `json:"flag"`
+	}
+
+	type ExerciseResp struct {
+		Tag            string              `json:"tag"`
+		Machines       []*aproto.Machine   `json:"machines"`
+		ChildExercises []ChildExerciseResp `json:"childExercises"`
+	}
+
+	type LabInfoResp struct {
+		Tag       string         `json:"tag"`
+		Exercises []ExerciseResp `json:"exercises"`
+	}
+
 	type GetTeamsResponse struct {
-		Tag        string    `json:"tag"`
-		Email      string    `json:"email"`
-		Username   string    `json:"username"`
-		Status     string    `json:"status"`
-		CreatedAt  time.Time `json:"createdAt"`
-		LastAccess time.Time `json:"lastAccess"`
+		Tag        string      `json:"tag"`
+		Email      string      `json:"email"`
+		Username   string      `json:"username"`
+		Status     string      `json:"status"`
+		CreatedAt  time.Time   `json:"createdAt"`
+		LastAccess time.Time   `json:"lastAccess"`
+		LabInfo    LabInfoResp `json:"labInfo"`
 	}
 
 	ctx := context.Background()
@@ -67,6 +86,7 @@ func (d *daemon) getTeams(c *gin.Context) {
 		}
 
 		event, _ := d.eventpool.GetEvent(eventTag) // Only to get team status
+		eventConfig := event.GetConfig()
 
 		dbTeams, err := d.db.GetTeamsForEvent(ctx, dbEvent.ID)
 		if err != nil {
@@ -78,11 +98,51 @@ func (d *daemon) getTeams(c *gin.Context) {
 		teams := []GetTeamsResponse{}
 		for _, dbTeam := range dbTeams {
 			teamStatus := "N/A"
+			labInfo := LabInfoResp{}
+			var poolTeam *Team
 			if event != nil {
-				poolTeam, _ := event.GetTeam(dbTeam.Username)
-				if poolTeam != nil {
+				poolTeam, _ = event.GetTeam(dbTeam.Username)
+			}
+			if poolTeam != nil {
+				poolTeam.LockForFunc(func() {
 					teamStatus = poolTeam.Status.String()
-				}
+					labInfo.Tag = poolTeam.Lab.LabInfo.Tag
+					if poolTeam.Lab != nil {
+						exercisesResp := []ExerciseResp{}
+						for _, exercise := range poolTeam.Lab.LabInfo.Exercises {
+							log.Debug().Str("Exercise", exercise.Tag).Msg("Assembling exercise")
+							for _, exConfig := range eventConfig.ExerciseConfigs {
+								if exercise.Tag == exConfig.Tag {
+									log.Debug().Str("Exercise", exercise.Tag).Msg("Found parent in exercise configs")
+									childExercisesResp := []ChildExerciseResp{}
+									for _, childExercise := range exercise.ChildExercises {
+										log.Debug().Str("ChildExercise", childExercise.Tag).Msg("Trying to assemble children")
+										for _, instance := range exConfig.Instance {
+											for _, childExConfig := range instance.Children {
+												if childExercise.Tag == childExConfig.Tag {
+													childExerciseResp := ChildExerciseResp{
+														Name: childExConfig.Name,
+														Tag:  childExConfig.Tag,
+														Flag: childExercise.Flag,
+													}
+													childExercisesResp = append(childExercisesResp, childExerciseResp)
+												}
+											}
+										}
+									}
+									exerciseResp := ExerciseResp{
+										Tag:            exercise.Tag,
+										Machines:       exercise.Machines,
+										ChildExercises: childExercisesResp,
+									}
+									log.Debug().Msgf("appending exerciseResp: %v", exerciseResp)
+									exercisesResp = append(exercisesResp, exerciseResp)
+								}
+							}
+						}
+						labInfo.Exercises = exercisesResp
+					}
+				})
 			}
 
 			team := GetTeamsResponse{
@@ -92,6 +152,7 @@ func (d *daemon) getTeams(c *gin.Context) {
 				Status:     teamStatus,
 				CreatedAt:  dbTeam.CreatedAt,
 				LastAccess: dbTeam.LastAccess.Time,
+				LabInfo:    labInfo,
 			}
 			teams = append(teams, team)
 		}
