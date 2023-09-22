@@ -26,9 +26,10 @@ func (d *daemon) adminEventTeamsSubrouter(r *gin.RouterGroup) {
 
 func (d *daemon) getTeams(c *gin.Context) {
 	type ChildExerciseResp struct {
-		Name string `json:"name"`
-		Tag  string `json:"tag"`
-		Flag string `json:"flag"`
+		Name   string `json:"name"`
+		Tag    string `json:"tag"`
+		Flag   string `json:"flag"`
+		Solved bool   `json:"solved"`
 	}
 
 	type ExerciseResp struct {
@@ -95,6 +96,8 @@ func (d *daemon) getTeams(c *gin.Context) {
 			return
 		}
 
+		solves, err := d.db.GetEventSolvesMap(ctx, event.DbId)
+
 		teams := []GetTeamsResponse{}
 		for _, dbTeam := range dbTeams {
 			teamStatus := "N/A"
@@ -114,14 +117,19 @@ func (d *daemon) getTeams(c *gin.Context) {
 								if exercise.Tag == exConfig.Tag {
 									childExercisesResp := []ChildExerciseResp{}
 									for _, childExercise := range exercise.ChildExercises {
-										log.Debug().Str("ChildExercise", childExercise.Tag).Msg("Trying to assemble children")
 										for _, instance := range exConfig.Instance {
 											for _, childExConfig := range instance.Children {
 												if childExercise.Tag == childExConfig.Tag {
 													childExerciseResp := ChildExerciseResp{
-														Name: childExConfig.Name,
-														Tag:  childExConfig.Tag,
-														Flag: childExercise.Flag,
+														Name:   childExConfig.Name,
+														Tag:    childExConfig.Tag,
+														Flag:   childExercise.Flag,
+														Solved: false,
+													}
+													for _, solve := range solves[childExercise.Tag] {
+														if solve.Username == poolTeam.Username {
+															childExerciseResp.Solved = true
+														}
 													}
 													childExercisesResp = append(childExercisesResp, childExerciseResp)
 												}
