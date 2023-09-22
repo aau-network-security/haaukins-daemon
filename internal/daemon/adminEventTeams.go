@@ -90,7 +90,6 @@ func (d *daemon) getTeams(c *gin.Context) {
 		}
 
 		event, _ := d.eventpool.GetEvent(eventTag) // Only to get team status
-		eventConfig := event.GetConfig()
 
 		dbTeams, err := d.db.GetTeamsForEvent(ctx, dbEvent.ID)
 		if err != nil {
@@ -98,8 +97,6 @@ func (d *daemon) getTeams(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
 			return
 		}
-
-		solves, err := d.db.GetEventSolvesMap(ctx, event.DbId)
 
 		teams := []GetTeamsResponse{}
 		for _, dbTeam := range dbTeams {
@@ -110,6 +107,13 @@ func (d *daemon) getTeams(c *gin.Context) {
 				poolTeam, _ = event.GetTeam(dbTeam.Username)
 			}
 			if poolTeam != nil {
+				eventConfig := event.GetConfig()
+				solves, err := d.db.GetEventSolvesMap(ctx, event.DbId)
+				if err != nil {
+					log.Error().Err(err).Str("eventTag", event.Config.Tag).Msg("error getting solves for event")
+					c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
+					return
+				}
 				poolTeam.LockForFunc(func() {
 					teamStatus = poolTeam.Status.String()
 					if poolTeam.Lab != nil {
