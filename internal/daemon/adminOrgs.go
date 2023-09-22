@@ -48,7 +48,6 @@ var orgCreationPolicies = [][]string{
 	{"role::npuser", "", "challengeProfiles::", "read"},
 }
 
-//
 // g2 policies
 var orgCreationGroupPolicies = [][]string{
 	{"events::", "objects::"},
@@ -75,6 +74,12 @@ func (d *daemon) newOrganization(c *gin.Context) {
 	if err := c.BindJSON(&req); err != nil {
 		log.Error().Err(err).Msg("Error parsing request data: ")
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "Error"})
+		return
+	}
+
+	// Validate username
+	if req.OrgName == "" || strings.Trim(req.OrgName, " ") == "" {
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "Invalid orgname"})
 		return
 	}
 
