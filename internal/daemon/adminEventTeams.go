@@ -20,7 +20,6 @@ func (d *daemon) adminEventTeamsSubrouter(r *gin.RouterGroup) {
 	// CRUD
 
 	teams.GET("/:eventTag", d.getTeams)
-	teams.DELETE("/:teamname", d.deleteTeam)
 
 	// Additional routes
 	teams.PUT("", d.updateTeam)
@@ -182,10 +181,6 @@ func (d *daemon) getTeams(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
-}
-
-func (d *daemon) deleteTeam(c *gin.Context) {
-
 }
 
 func (d *daemon) updateTeam(c *gin.Context) {
