@@ -24,6 +24,7 @@ func (d *daemon) adminEventTeamsSubrouter(r *gin.RouterGroup) {
 	// Additional routes
 	teams.PUT("", d.updateTeam)
 	teams.POST("/solve", d.forceSolveExercise)
+	teams.PUT("/:eventTag/:teamName/resetlab", d.resetTeamLab)
 }
 
 func (d *daemon) getTeams(c *gin.Context) {
@@ -207,7 +208,9 @@ func (d *daemon) forceSolveExercise(c *gin.Context) {
 		Str("AdminUser", admin.Username).
 		Str("AdminEmail", admin.Email).
 		Str("EventTag", req.EventTag).
-		Msg("AdminUser is trying to get teams for event")
+		Str("ExerciseTag", req.ExerciseTag).
+		Str("TeamName", req.TeamName).
+		Msg("AdminUser is trying to solve challenge for team")
 
 	dbEvent, err := d.db.GetEventByTag(c, req.EventTag)
 	if err != nil {
@@ -287,4 +290,69 @@ func (d *daemon) forceSolveExercise(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
+}
+
+func (d *daemon) resetTeamLab(c *gin.Context) {
+	teamName := c.Param("teamName")
+	eventTag := c.Param("eventTag")
+	admin := unpackAdminClaims(c)
+	d.auditLogger.Info().
+		Time("UTC", time.Now().UTC()).
+		Str("AdminUser", admin.Username).
+		Str("AdminEmail", admin.Email).
+		Str("TeamName", teamName).
+		Msg("AdminUser is trying to reset lab for team")
+
+	dbEvent, err := d.db.GetEventByTag(c, eventTag)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting event from event pool")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "internal server error"})
+		return
+	}
+
+	var casbinRequests = [][]interface{}{
+		{admin.Username, admin.Organization, "events::Admins", "write"},
+		{admin.Username, admin.Organization, fmt.Sprintf("events::%s", dbEvent.Organization), "write"},
+		{admin.Username, admin.Organization, fmt.Sprintf("notOwnedEvents::%s", dbEvent.Organization), "write"},
+	}
+
+	if authorized, err := d.enforcer.BatchEnforce(casbinRequests); authorized[0] || authorized[1] || err != nil {
+		if !authorized[2] {
+			if dbEvent.Createdby != admin.Username {
+				c.JSON(http.StatusForbidden, gin.H{"status": "Forbidden"})
+				return
+			}
+		}
+		poolEvent, err := d.eventpool.GetEvent(eventTag)
+		if err != nil {
+			log.Error().Err(err).Str("eventTag", eventTag).Msg("error getting event from eventPool")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+			return
+		}
+		team, err := poolEvent.GetTeam(teamName)
+		if err != nil {
+			log.Error().Err(err).Str("team", teamName).Msg("error getting team from poolEvent")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+			return
+		}
+		lab := team.GetLab()
+		if lab == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"status": "Team currently has no lab"})
+			return
+		}
+		team.LockForFunc(func() {
+			agentClient := aproto.NewAgentClient(lab.Conn)
+			request := &aproto.ResetLabRequest{
+				LabTag: lab.LabInfo.Tag,
+			}
+			if _, err := agentClient.ResetLab(c, request); err != nil {
+				log.Error().Err(err).Str("agent", lab.ParentAgent.Name).Msg("error running resetting lab on agent")
+				c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+				return
+			}
+		})
+		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+		return
+	}
+	c.JSON(http.StatusUnauthorized, gin.H{"status": "Unauthorized"})
 }
