@@ -250,6 +250,7 @@ func (d *daemon) teamSignup(c *gin.Context) {
 
 	saveState(d.eventpool, d.conf.StatePath)
 
+	// TODO fix bug in isMaxLabsReached, Teams are not getting thrown into queue if it is a beginner event and the amount of labs plus queue is larger than max labs
 	if EventType(dbEvent.Type) == TypeBeginner && !event.IsMaxLabsReached() {
 		team.Status = InQueue
 		log.Info().Str("username", team.Username).Msg("putting team into queue for beginner lab")
