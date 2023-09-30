@@ -146,6 +146,12 @@ func (d *daemon) newEvent(c *gin.Context) {
 			return
 		}
 
+		if err := d.validateQuota(admin, req.MaxLabs); err != nil {
+			log.Error().Err(err).Msg("error validating quota")
+			c.JSON(http.StatusForbidden, APIResponse{Status: fmt.Sprintf("Quota error: %s", err.Error())})
+			return
+		}
+
 		var estimatedMemSpent uint64 // Current resources spent on running labs
 		for _, event := range d.eventpool.Events {
 			estimatedMemSpent += event.EstimatedMemoryUsage
@@ -622,4 +628,15 @@ func calculateEstimatedEventMemUsage(exercises []*eproto.Exercise, teamSize, max
 	log.Debug().Uint64("estimatedMemUsage", estimatedMemUsage).Msg("estimated memory usage for event")
 
 	return estimatedMemUsage, estimatedMemUsagePerLab
+}
+
+// TODO write validateQuota function
+// TODO in relation to this, let users within organization see all events running under their own org
+func (d *daemon) validateQuota(admin AdminClaims, labsToAdd int32) error {
+	// Get labs running in organization
+
+	// Get organization fromdb
+
+	// Check if user or org quota is being breached
+	return nil
 }
