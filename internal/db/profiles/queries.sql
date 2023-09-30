@@ -1,5 +1,5 @@
 -- name: AddProfile :one
-INSERT INTO profiles (name, secret, organization) VALUES (@profileName, @secret, @orgName) RETURNING id;
+INSERT INTO profiles (name, secret, organization, description, public) VALUES (@profileName, @secret, @orgName, @description, @public) RETURNING id;
 
 -- name: AddProfileChallenge :exec
 INSERT INTO profile_challenges (tag, name, profile_id) VALUES (@tag, @name, @profileId);
@@ -7,11 +7,17 @@ INSERT INTO profile_challenges (tag, name, profile_id) VALUES (@tag, @name, @pro
 -- name: GetProfiles :many
 SELECT * FROM profiles;
 
+-- name: GetAllPublicProfiles :many
+SELECT * FROM profiles WHERE public = TRUE;
+
+-- name: GetNonSecretPublicProfiles :many
+SELECT * FROM profiles WHERE secret = FALSE AND public = TRUE;
+
 -- name: GetAllProfilesInOrg :many
-SELECT * FROM profiles WHERE lower(organization) = lower(@orgName);
+SELECT * FROM profiles WHERE lower(organization) = lower(@orgName) AND public = FALSE;
 
 -- name: GetNonSecretProfilesInOrg :many
-SELECT * FROM profiles WHERE lower(organization) = lower(@orgName) and secret = FALSE;
+SELECT * FROM profiles WHERE lower(organization) = lower(@orgName) and secret = FALSE AND public = FALSE;
 
 -- name: GetProfileByNameAndOrgName :one
 SELECT * FROM profiles WHERE lower(name) = @profileName AND lower(organization) = lower(@orgName);

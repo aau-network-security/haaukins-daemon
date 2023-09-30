@@ -105,6 +105,8 @@ type ExerciseProfile struct {
 	Name         string                        `json:"name"`
 	Secret       bool                          `json:"secret"`
 	Organization string                        `json:"organization"`
+	Public       bool                        `json:"public"`
+	Description  string                        `json:"description"`
 	Exercises    []db.GetExercisesInProfileRow `json:"exercises,omitempty"`
 }
 

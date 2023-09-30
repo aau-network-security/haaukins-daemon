@@ -59,6 +59,7 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
                 name varchar (255) NOT NULL,
                 owner_user varchar(255) NOT NULL,
                 owner_email varchar(255) NOT NULL,
+                lab_quota integer,
                 UNIQUE(name)
         );
         CREATE UNIQUE INDEX orgname_lower_index ON organizations (LOWER(name));
@@ -66,7 +67,9 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
         CREATE TABLE IF NOT EXISTS profiles (
                 id serial primary key, 
                 name varchar (255) NOT NULL, 
-                secret boolean NOT NULL, 
+                secret boolean NOT NULL,
+                description text NOT NULL,
+                public boolean NOT NULL,
                 organization varchar(255) NOT NULL REFERENCES organizations (name) ON DELETE CASCADE
         );        
         CREATE UNIQUE INDEX profilename_lower_index ON profiles (LOWER(name), LOWER(organization));
@@ -86,6 +89,7 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
                 full_name varchar (255) NOT NULL,
                 email varchar (255) NOT NULL,
                 role varchar (255) NOT NULL,
+                lab_quota integer,
                 organization varchar (255) NOT NULL REFERENCES organizations (name) ON DELETE CASCADE
         );
         CREATE UNIQUE INDEX username_lower_index ON Admin_users (LOWER(username));
@@ -110,6 +114,8 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
                 memoryMB integer
         );
         CREATE UNIQUE INDEX frontendname_lower_index ON frontends (LOWER(name));
+
+
 
         -- Setting up an administrative account with password admin
         INSERT INTO organizations (name, owner_user, owner_email) VALUES ('Admins', 'admin', 'cyber@es.aau.dk');

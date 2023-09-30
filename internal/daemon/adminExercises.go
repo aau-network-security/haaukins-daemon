@@ -153,6 +153,8 @@ func (d *daemon) getExerciseCategories(c *gin.Context) {
 type ExerciseProfileRequest struct {
 	Name         string   `json:"name"`
 	ExerciseTags []string `json:"exerciseTags"`
+	Description  string   `json:"description"`
+	Public       bool     `json:"public"`
 }
 
 // Adds a profile for the organization of the requesting admin to the database
@@ -226,6 +228,8 @@ func (d *daemon) addProfile(c *gin.Context) {
 			Profilename: req.Name,
 			Secret:      secret,
 			Orgname:     admin.Organization,
+			Description: req.Description,
+			Public:      req.Public,
 		}
 		profileId, err := d.db.AddProfile(ctx, dbProfileParams)
 		if err != nil {
@@ -342,12 +346,20 @@ func (d *daemon) getProfiles(c *gin.Context) {
 		}
 
 		if authorized[1] {
-			profiles, err := d.db.GetAllProfilesInOrg(ctx, admin.Organization)
+			publicProfiles, err := d.db.GetAllPublicProfiles(ctx)
+			if err != nil {
+				log.Error().Err(err).Msg("error getting all public profiles")
+				c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+				return
+			}
+			orgProfiles, err := d.db.GetAllProfilesInOrg(ctx, admin.Organization)
 			if err != nil {
 				log.Error().Err(err).Msg("error getting all profiles in organization")
 				c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 				return
 			}
+
+			profiles := append(orgProfiles, publicProfiles...)
 
 			profilesToReturn, err := d.populateProfiles(ctx, profiles, admin)
 			if err != nil {
@@ -360,12 +372,21 @@ func (d *daemon) getProfiles(c *gin.Context) {
 			return
 		}
 
-		profiles, err := d.db.GetNonSecretProfilesInOrg(ctx, admin.Organization)
+		publicProfiles, err := d.db.GetNonSecretPublicProfiles(ctx)
+		if err != nil {
+			log.Error().Err(err).Msg("error getting all non secret public profiles")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+
+		orgProfiles, err := d.db.GetNonSecretProfilesInOrg(ctx, admin.Organization)
 		if err != nil {
 			log.Error().Err(err).Msg("error getting non secret profiles in organization")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
 		}
+
+		profiles := append(orgProfiles, publicProfiles...)
 
 		profilesToReturn, err := d.populateProfiles(ctx, profiles, admin)
 		if err != nil {
@@ -396,6 +417,8 @@ func (d *daemon) populateProfiles(ctx context.Context, profiles []db.Profile, ad
 			Id:           profile.ID,
 			Name:         profile.Name,
 			Organization: profile.Organization,
+			Public:       profile.Public,
+			Description:  profile.Description,
 			Secret:       profile.Secret,
 			Exercises:    exercises,
 		}

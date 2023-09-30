@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS organizations (
         name varchar (255) NOT NULL,
         owner_user varchar(255) NOT NULL,
         owner_email varchar(255) NOT NULL,
+        lab_quota integer,
         UNIQUE(name)
 );
 CREATE UNIQUE INDEX orgname_lower_index ON organizations (LOWER(name));
@@ -55,7 +56,9 @@ CREATE UNIQUE INDEX orgname_lower_index ON organizations (LOWER(name));
 CREATE TABLE IF NOT EXISTS profiles (
         id serial primary key, 
         name varchar (255) NOT NULL, 
-        secret boolean NOT NULL, 
+        secret boolean NOT NULL,
+        description text NOT NULL,
+        public boolean NOT NULL,
         organization varchar(255) NOT NULL REFERENCES organizations (name) ON DELETE CASCADE
 );        
 CREATE UNIQUE INDEX profilename_lower_index ON profiles (LOWER(name), LOWER(organization));
@@ -75,6 +78,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
         full_name varchar (255) NOT NULL,
         email varchar (255) NOT NULL,
         role varchar (255) NOT NULL,
+        lab_quota integer,
         organization varchar (255) NOT NULL REFERENCES organizations (name) ON DELETE CASCADE
 );
 CREATE UNIQUE INDEX username_lower_index ON Admin_users (LOWER(username));
