@@ -72,7 +72,8 @@ CREATE TABLE IF NOT EXISTS profile_challenges (
 CREATE UNIQUE INDEX profile_challenges_duplicate_index ON profile_challenges (tag, profile_id);
 
 CREATE TABLE IF NOT EXISTS admin_users (
-        id serial primary key, 
+        id serial primary key,
+        sid uuid NOT NULL DEFAULT uuid_generate_v4(),
         username varchar (255) NOT NULL, 
         password varchar (255) NOT NULL,
         full_name varchar (255) NOT NULL,

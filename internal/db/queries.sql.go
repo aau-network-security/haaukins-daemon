@@ -63,17 +63,23 @@ func (q *Queries) AddEvent(ctx context.Context, arg AddEventParams) (int32, erro
 }
 
 const addOrganization = `-- name: AddOrganization :exec
-INSERT INTO organizations (name, owner_user, owner_email) VALUES ($1, $2, $3)
+INSERT INTO organizations (name, owner_user, owner_email, lab_quota) VALUES ($1, $2, $3, $4)
 `
 
 type AddOrganizationParams struct {
 	Org           string
 	Ownerusername string
 	Owneremail    string
+	Labquota      sql.NullInt32
 }
 
 func (q *Queries) AddOrganization(ctx context.Context, arg AddOrganizationParams) error {
-	_, err := q.db.ExecContext(ctx, addOrganization, arg.Org, arg.Ownerusername, arg.Owneremail)
+	_, err := q.db.ExecContext(ctx, addOrganization,
+		arg.Org,
+		arg.Ownerusername,
+		arg.Owneremail,
+		arg.Labquota,
+	)
 	return err
 }
 
@@ -290,7 +296,7 @@ func (q *Queries) CloseEvent(ctx context.Context, arg CloseEventParams) error {
 }
 
 const createAdminUser = `-- name: CreateAdminUser :exec
-INSERT INTO admin_users (username, password, full_name, email, role, organization) VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO admin_users (username, password, full_name, email, role, organization, lab_quota) VALUES ($1, $2, $3, $4, $5, $6, $7)
 `
 
 type CreateAdminUserParams struct {
@@ -300,6 +306,7 @@ type CreateAdminUserParams struct {
 	Email        string
 	Role         string
 	Organization string
+	LabQuota     sql.NullInt32
 }
 
 func (q *Queries) CreateAdminUser(ctx context.Context, arg CreateAdminUserParams) error {
@@ -310,6 +317,7 @@ func (q *Queries) CreateAdminUser(ctx context.Context, arg CreateAdminUserParams
 		arg.Email,
 		arg.Role,
 		arg.Organization,
+		arg.LabQuota,
 	)
 	return err
 }
@@ -401,8 +409,29 @@ func (q *Queries) DeleteTeam(ctx context.Context, arg DeleteTeamParams) error {
 	return err
 }
 
+const getAdminUserBySid = `-- name: GetAdminUserBySid :one
+SELECT id, sid, username, password, full_name, email, role, lab_quota, organization from admin_users where sid::text = $1::text
+`
+
+func (q *Queries) GetAdminUserBySid(ctx context.Context, sid string) (AdminUser, error) {
+	row := q.db.QueryRowContext(ctx, getAdminUserBySid, sid)
+	var i AdminUser
+	err := row.Scan(
+		&i.ID,
+		&i.Sid,
+		&i.Username,
+		&i.Password,
+		&i.FullName,
+		&i.Email,
+		&i.Role,
+		&i.LabQuota,
+		&i.Organization,
+	)
+	return i, err
+}
+
 const getAdminUserByUsername = `-- name: GetAdminUserByUsername :one
-SELECT id, username, password, full_name, email, role, lab_quota, organization FROM admin_users WHERE LOWER(username)=LOWER($1)
+SELECT id, sid, username, password, full_name, email, role, lab_quota, organization FROM admin_users WHERE LOWER(username)=LOWER($1)
 `
 
 func (q *Queries) GetAdminUserByUsername(ctx context.Context, username string) (AdminUser, error) {
@@ -410,6 +439,7 @@ func (q *Queries) GetAdminUserByUsername(ctx context.Context, username string) (
 	var i AdminUser
 	err := row.Scan(
 		&i.ID,
+		&i.Sid,
 		&i.Username,
 		&i.Password,
 		&i.FullName,
@@ -422,7 +452,7 @@ func (q *Queries) GetAdminUserByUsername(ctx context.Context, username string) (
 }
 
 const getAdminUserNoPwByUsername = `-- name: GetAdminUserNoPwByUsername :one
-SELECT username, full_name, email, role, organization FROM admin_users WHERE LOWER(username)=LOWER($1)
+SELECT username, full_name, email, role, organization, lab_quota FROM admin_users WHERE LOWER(username)=LOWER($1)
 `
 
 type GetAdminUserNoPwByUsernameRow struct {
@@ -431,6 +461,7 @@ type GetAdminUserNoPwByUsernameRow struct {
 	Email        string
 	Role         string
 	Organization string
+	LabQuota     sql.NullInt32
 }
 
 func (q *Queries) GetAdminUserNoPwByUsername(ctx context.Context, lower string) (GetAdminUserNoPwByUsernameRow, error) {
@@ -442,12 +473,13 @@ func (q *Queries) GetAdminUserNoPwByUsername(ctx context.Context, lower string) 
 		&i.Email,
 		&i.Role,
 		&i.Organization,
+		&i.LabQuota,
 	)
 	return i, err
 }
 
 const getAdminUsers = `-- name: GetAdminUsers :many
-SELECT username, full_name, email, role, organization FROM admin_users WHERE LOWER(organization) = CASE WHEN $1='' THEN LOWER(organization) ELSE LOWER($1) END
+SELECT username, full_name, email, role, organization, lab_quota FROM admin_users WHERE LOWER(organization) = CASE WHEN $1='' THEN LOWER(organization) ELSE LOWER($1) END
 `
 
 type GetAdminUsersRow struct {
@@ -456,6 +488,7 @@ type GetAdminUsersRow struct {
 	Email        string
 	Role         string
 	Organization string
+	LabQuota     sql.NullInt32
 }
 
 func (q *Queries) GetAdminUsers(ctx context.Context, organization interface{}) ([]GetAdminUsersRow, error) {
@@ -473,6 +506,7 @@ func (q *Queries) GetAdminUsers(ctx context.Context, organization interface{}) (
 			&i.Email,
 			&i.Role,
 			&i.Organization,
+			&i.LabQuota,
 		); err != nil {
 			return nil, err
 		}
@@ -1445,6 +1479,20 @@ func (q *Queries) UpdateAdminEmail(ctx context.Context, arg UpdateAdminEmailPara
 	return err
 }
 
+const updateAdminLabQuota = `-- name: UpdateAdminLabQuota :exec
+UPDATE admin_users SET lab_quota = $1 WHERE username = $2
+`
+
+type UpdateAdminLabQuotaParams struct {
+	Labquota sql.NullInt32
+	Username string
+}
+
+func (q *Queries) UpdateAdminLabQuota(ctx context.Context, arg UpdateAdminLabQuotaParams) error {
+	_, err := q.db.ExecContext(ctx, updateAdminLabQuota, arg.Labquota, arg.Username)
+	return err
+}
+
 const updateAdminPassword = `-- name: UpdateAdminPassword :exec
 UPDATE admin_users SET password = $1 WHERE username = $2
 `
@@ -1490,17 +1538,23 @@ func (q *Queries) UpdateExercises(ctx context.Context, arg UpdateExercisesParams
 }
 
 const updateOrganization = `-- name: UpdateOrganization :exec
-UPDATE organizations SET owner_user = $1, owner_email = $2 WHERE lower(name) = lower($3)
+UPDATE organizations SET owner_user = $1, owner_email = $2, lab_quota = $3 WHERE lower(name) = lower($4)
 `
 
 type UpdateOrganizationParams struct {
 	Ownerusername string
 	Owneremail    string
+	Labquota      sql.NullInt32
 	Orgname       string
 }
 
 func (q *Queries) UpdateOrganization(ctx context.Context, arg UpdateOrganizationParams) error {
-	_, err := q.db.ExecContext(ctx, updateOrganization, arg.Ownerusername, arg.Owneremail, arg.Orgname)
+	_, err := q.db.ExecContext(ctx, updateOrganization,
+		arg.Ownerusername,
+		arg.Owneremail,
+		arg.Labquota,
+		arg.Orgname,
+	)
 	return err
 }
 

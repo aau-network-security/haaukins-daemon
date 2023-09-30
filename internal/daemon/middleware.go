@@ -39,10 +39,17 @@ func (d *daemon) createAdminToken(ctx context.Context, user db.AdminUser) (strin
 	atClaims["exp"] = time.Now().Add(time.Hour * 24).Unix()
 	atClaims["jti"] = uuid.New()
 	atClaims["sub"] = user.Username
+	atClaims["sid"] = user.Sid.String()
 	atClaims["participant"] = false
 	atClaims["email"] = user.Email
 	atClaims["organization"] = user.Organization
 	atClaims["role"] = user.Role
+	if !user.LabQuota.Valid {
+		// Null value is unlimited quota
+		atClaims["labQuota"] = -1
+	} else {
+		atClaims["labQuota"] = user.LabQuota.Int32
+	}
 
 	at := jwt.NewWithClaims(jwt.SigningMethodHS256, atClaims)
 	token, err := at.SignedString([]byte(d.conf.JwtSecret))
@@ -126,10 +133,7 @@ func (d *daemon) adminAuthMiddleware() gin.HandlerFunc {
 		// Passing jwt claims to next handler function in the gin context
 		c.Set("jti", claims["jti"])
 		c.Set("exp", claims["exp"])
-		c.Set("sub", claims["sub"])
-		c.Set("email", claims["email"])
-		c.Set("organization", claims["organization"])
-		c.Set("role", claims["role"])
+		c.Set("sid", claims["sid"])
 		c.Next()
 	}
 }

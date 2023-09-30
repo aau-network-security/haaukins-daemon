@@ -88,7 +88,12 @@ func (d *daemon) newEvent(c *gin.Context) {
 		return
 	}
 
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -255,7 +260,12 @@ func (d *daemon) getEvents(c *gin.Context) {
 		}
 	}
 
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -394,7 +404,12 @@ func (d *daemon) deleteEvent(c *gin.Context) {
 	ctx := context.Background()
 
 	eventTag := c.Param("eventTag")
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -449,7 +464,12 @@ func (d *daemon) closeEvent(c *gin.Context) {
 	ctx := context.Background()
 
 	eventTag := c.Param("eventTag")
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).

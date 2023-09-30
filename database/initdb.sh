@@ -9,6 +9,7 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
 EOSQL
 
 PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_USER" --dbname "$HAAUKINSDB_NAME" <<-EOSQL
+        CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
         CREATE TABLE IF NOT EXISTS events ( 
                 id serial primary key, 
                 tag varchar (255) NOT NULL,
@@ -83,7 +84,8 @@ PGPASSWORD=$HAAUKINSDB_PASSWORD psql -v ON_ERROR_STOP=1 --username "$HAAUKINSDB_
         CREATE UNIQUE INDEX profile_challenges_duplicate_index ON profile_challenges (tag, profile_id);
 
         CREATE TABLE IF NOT EXISTS admin_users (
-                id serial primary key, 
+                id serial primary key,
+                sid uuid NOT NULL DEFAULT uuid_generate_v4(),
                 username varchar (255) NOT NULL, 
                 password varchar (255) NOT NULL,
                 full_name varchar (255) NOT NULL,

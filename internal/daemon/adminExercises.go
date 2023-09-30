@@ -35,7 +35,12 @@ func (d *daemon) adminExerciseSubrouter(r *gin.RouterGroup) {
 func (d *daemon) getExercises(c *gin.Context) {
 	ctx := context.Background()
 
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+			log.Error().Err(err).Msg("error getting user from gin context")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+			return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -109,7 +114,12 @@ func (d *daemon) getExercises(c *gin.Context) {
 func (d *daemon) getExerciseCategories(c *gin.Context) {
 	ctx := context.Background()
 
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -161,7 +171,12 @@ type ExerciseProfileRequest struct {
 func (d *daemon) addProfile(c *gin.Context) {
 	ctx := context.Background()
 
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -265,7 +280,12 @@ func (d *daemon) updateProfile(c *gin.Context) {
 func (d *daemon) deleteProfile(c *gin.Context) {
 	ctx := context.Background()
 
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -327,7 +347,12 @@ func (d *daemon) deleteProfile(c *gin.Context) {
 func (d *daemon) getProfiles(c *gin.Context) {
 	ctx := context.Background()
 
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).

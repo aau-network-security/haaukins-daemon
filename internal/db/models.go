@@ -7,10 +7,13 @@ package db
 import (
 	"database/sql"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type AdminUser struct {
 	ID           int32
+	Sid          uuid.UUID
 	Username     string
 	Password     string
 	FullName     string
