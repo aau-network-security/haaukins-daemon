@@ -19,6 +19,7 @@ func (d *daemon) adminExerciseSubrouter(r *gin.RouterGroup) {
 
 	exercises.Use(d.adminAuthMiddleware())
 	exercises.GET("", d.getExercises)
+	exercises.POST("/getbytags", d.getExercisesByTags)
 	exercises.GET("/:category", d.getExercises)
 	exercises.GET("/categories", d.getExerciseCategories)
 
@@ -37,9 +38,9 @@ func (d *daemon) getExercises(c *gin.Context) {
 
 	admin, err := d.getUserFromGinContext(c)
 	if err != nil {
-			log.Error().Err(err).Msg("error getting user from gin context")
-			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
-			return
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
 	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
@@ -104,6 +105,85 @@ func (d *daemon) getExercises(c *gin.Context) {
 
 		sortExercises(exercises)
 
+		c.JSON(http.StatusOK, APIResponse{Status: "OK", Exercises: exercises})
+		return
+	}
+	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
+}
+
+func (d *daemon) getExercisesByTags(c *gin.Context) {
+	ctx := context.Background()
+	type GetExercisesByTagsRequest struct {
+		Tags []string `json:"tags"`
+	}
+
+	var req GetExercisesByTagsRequest
+	if err := c.BindJSON(&req); err != nil {
+		log.Error().Err(err).Msg("Error parsing request data: ")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "error parsing request"})
+		return
+	}
+
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
+	d.auditLogger.Info().
+		Time("UTC", time.Now().UTC()).
+		Str("AdminUser", admin.Username).
+		Str("AdminEmail", admin.Email).
+		Msg("AdminUser is trying get all exercises")
+
+	var casbinRequests = [][]interface{}{
+		{admin.Username, admin.Organization, fmt.Sprintf("exercises::%s", admin.Organization), "read"},
+		{admin.Username, admin.Organization, fmt.Sprintf("secretchals::%s", admin.Organization), "read"},
+	}
+	if authorized, err := d.enforcer.BatchEnforce(casbinRequests); authorized[0] || err != nil {
+		if err != nil {
+			log.Error().Err(err).Msgf("Encountered an error while authorizing listing exercises")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+
+		exClientReq := &proto.GetExerciseByTagsRequest{
+			Tag: req.Tags,
+		}
+		exClientResp, err := d.exClient.GetExerciseByTags(ctx, exClientReq)
+		if err != nil {
+			log.Error().Err(err).Msg("error while retrieving exercises from exercise service")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+
+		var exercises []*proto.Exercise
+		for _, exercise := range exClientResp.Exercises {
+			if exercise.Secret && !authorized[1] {
+				c.JSON(http.StatusForbidden, APIResponse{Status: "Access Denied"})
+				return
+			}
+
+			// Sanitice team descriptions
+			for _, instance := range exercise.Instance {
+				for _, childExercise := range instance.Children {
+					html, err := sanitizeUnsafeMarkdown([]byte(childExercise.TeamDescription))
+					if err != nil {
+						log.Error().Msgf("Error converting to commonmark: %s", err)
+					}
+					childExercise.TeamDescription = string(html)
+				}
+			}
+
+			// Sanitize organizer description
+			html, err := sanitizeUnsafeMarkdown([]byte(exercise.OrganizerDescription))
+			if err != nil {
+				log.Error().Msgf("Error converting to commonmark: %s", err)
+			}
+
+			exercise.OrganizerDescription = string(html)
+			exercises = append(exercises, exercise)
+		}
 		c.JSON(http.StatusOK, APIResponse{Status: "OK", Exercises: exercises})
 		return
 	}
