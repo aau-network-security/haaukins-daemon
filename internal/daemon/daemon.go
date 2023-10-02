@@ -27,6 +27,7 @@ import (
 type daemon struct {
 	conf        *Config
 	db          *db.Queries
+	dbConn      *sql.DB
 	exClient    eproto.ExerciseStoreClient
 	agentPool   *AgentPool
 	auditLogger *zerolog.Logger
@@ -149,7 +150,7 @@ func New(conf *Config) (*daemon, error) {
 	}
 	// TODO rewrte init function if filtered adapter is used
 	//Setting up database connection
-	dbConn, gormDb, err := conf.Database.InitConn()
+	queries, gormDb, dbConn, err := conf.Database.InitConn()
 	if err != nil {
 		log.Fatal().Err(err).Msg("[Haaukins-daemon] Failed to connect to database")
 	}
@@ -178,7 +179,7 @@ func New(conf *Config) (*daemon, error) {
 
 	// Connecting to all haaukins agents
 	log.Info().Msg("Connecting to haaukins agents...")
-	agentsInDb, err := dbConn.GetAgents(ctx)
+	agentsInDb, err := queries.GetAgents(ctx)
 	if err != nil {
 		log.Fatal().Err(err).Msg("could not get haaukins agents from database")
 	}
@@ -299,7 +300,8 @@ func New(conf *Config) (*daemon, error) {
 
 	d := &daemon{
 		conf:        conf,
-		db:          dbConn,
+		db:          queries,
+		dbConn:      dbConn,
 		exClient:    exClient,
 		agentPool:   agentPool,
 		auditLogger: &auditLogger,

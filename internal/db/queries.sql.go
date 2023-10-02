@@ -1296,7 +1296,7 @@ func (q *Queries) GetOrganizations(ctx context.Context) ([]Organization, error) 
 }
 
 const getProfileByNameAndOrgName = `-- name: GetProfileByNameAndOrgName :one
-SELECT id, name, secret, description, public, organization FROM profiles WHERE lower(name) = $1 AND lower(organization) = lower($2)
+SELECT id, name, secret, description, public, organization FROM profiles WHERE lower(name) = lower($1) AND lower(organization) = lower($2)
 `
 
 type GetProfileByNameAndOrgNameParams struct {

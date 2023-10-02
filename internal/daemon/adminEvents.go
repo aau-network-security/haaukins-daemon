@@ -104,7 +104,7 @@ func (d *daemon) newEvent(c *gin.Context) {
 	log.Debug().Msgf("new event request: %v", req)
 	var casbinRequests = [][]interface{}{
 		{admin.Username, admin.Organization, fmt.Sprintf("events::%s", admin.Organization), "write"},
-		{admin.Username, admin.Organization, fmt.Sprintf("secretchals::%s", admin.Organization), "write"},
+		{admin.Username, admin.Organization, fmt.Sprintf("secretchals::%s", admin.Organization), "read"},
 	}
 	if authorized, err := d.enforcer.BatchEnforce(casbinRequests); authorized[0] || err != nil {
 		if err != nil {

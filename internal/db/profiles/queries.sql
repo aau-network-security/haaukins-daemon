@@ -20,7 +20,7 @@ SELECT * FROM profiles WHERE lower(organization) = lower(@orgName) AND public = 
 SELECT * FROM profiles WHERE lower(organization) = lower(@orgName) and secret = FALSE AND public = FALSE;
 
 -- name: GetProfileByNameAndOrgName :one
-SELECT * FROM profiles WHERE lower(name) = @profileName AND lower(organization) = lower(@orgName);
+SELECT * FROM profiles WHERE lower(name) = lower(@profileName) AND lower(organization) = lower(@orgName);
 
 -- name: GetExercisesInProfile :many
 SELECT profile_challenges.id, profile_challenges.tag, profile_challenges.name  FROM profiles INNER JOIN profile_challenges ON profiles.id = profile_challenges.profile_id WHERE profiles.id = @profileId AND profiles.organization = @orgName ORDER BY profiles.id asc;

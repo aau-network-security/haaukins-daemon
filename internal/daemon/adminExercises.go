@@ -147,6 +147,7 @@ func (d *daemon) getExercisesByTags(c *gin.Context) {
 			return
 		}
 
+		req.Tags = removeDuplicates(req.Tags)
 		exClientReq := &proto.GetExerciseByTagsRequest{
 			Tag: req.Tags,
 		}
@@ -245,6 +246,7 @@ type ExerciseProfileRequest struct {
 	ExerciseTags []string `json:"exerciseTags"`
 	Description  string   `json:"description"`
 	Public       bool     `json:"public"`
+	Organization string   `json:"organization"`
 }
 
 // Adds a profile for the organization of the requesting admin to the database
@@ -348,12 +350,131 @@ func (d *daemon) addProfile(c *gin.Context) {
 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 		return
 	}
-	c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 }
 
-// TODO Finish update profile endpoint
+// Update profile is a full replacement of another profile in the same organization with the same name
 func (d *daemon) updateProfile(c *gin.Context) {
+	ctx := context.Background()
 
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
+	d.auditLogger.Info().
+		Time("UTC", time.Now().UTC()).
+		Str("AdminUser", admin.Username).
+		Str("AdminEmail", admin.Email).
+		Msg("AdminUser is trying add a profile")
+
+	var req ExerciseProfileRequest
+	if err := c.BindJSON(&req); err != nil {
+		log.Error().Err(err).Msg("Error parsing request data: ")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "error parsing request"})
+		return
+	}
+
+	var casbinRequests = [][]interface{}{
+		{admin.Username, admin.Organization, fmt.Sprintf("challengeProfiles::%s", admin.Organization), "write"},
+		{admin.Username, admin.Organization, fmt.Sprintf("secretchals::%s", admin.Organization), "write"},
+		{admin.Username, admin.Organization, "objects::Admins", "write"},
+	}
+	if authorized, err := d.enforcer.BatchEnforce(casbinRequests); authorized[0] || err != nil {
+		if err != nil {
+			log.Error().Err(err).Msgf("Encountered an error while authorizing event creation")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+
+		req.ExerciseTags = removeDuplicates(req.ExerciseTags)
+
+		exClientResp, err := d.exClient.GetExerciseByTags(ctx, &proto.GetExerciseByTagsRequest{Tag: req.ExerciseTags})
+		if err != nil {
+			log.Error().Err(err).Msg("error while retrieving exercises by tags")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+
+		// A superadmin can edit profiles in all organizations
+		organization := admin.Organization
+		if req.Organization != "" && authorized[2] {
+			organization = req.Organization
+		} else if req.Organization != "" && !authorized[2] {
+			c.JSON(http.StatusForbidden, APIResponse{Status: "Access denied"})
+			return
+		}
+
+		secret := false
+		for _, exercise := range exClientResp.Exercises {
+			if exercise.Secret && !authorized[1] {
+				log.Warn().Msg("admin user without secret rights tried creating an event with secret challenges")
+				c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
+				return
+			}
+
+			if exercise.Secret {
+				secret = true
+			}
+		}
+
+		tx, err := d.dbConn.Begin()
+		if err != nil {
+			log.Error().Err(err).Msg("error beginning db transaction")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+			return
+		}
+		defer tx.Rollback()
+
+		qtx := d.db.WithTx(tx)
+
+		log.Debug().Msg("deleting old profile")
+		deleteProfileParams := db.DeleteProfileParams{
+			Profilename: req.Name,
+			Orgname:     organization,
+		}
+		if err := qtx.DeleteProfile(ctx, deleteProfileParams); err != nil {
+			log.Error().Err(err).Msg("error deleting old profile")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+			return
+		}
+
+		log.Debug().Msg("adding new profile")
+		dbProfileParams := db.AddProfileParams{
+			Profilename: req.Name,
+			Secret:      secret,
+			Orgname:     organization,
+			Description: req.Description,
+			Public:      req.Public,
+		}
+		profileId, err := qtx.AddProfile(ctx, dbProfileParams)
+		if err != nil {
+			log.Error().Err(err).Msg("error adding profile to db")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+			return
+		}
+
+		for _, exercise := range exClientResp.Exercises {
+			dbProfileExercise := db.AddProfileChallengeParams{
+				Tag:       exercise.Tag,
+				Name:      exercise.Name,
+				Profileid: profileId,
+			}
+			if err := qtx.AddProfileChallenge(ctx, dbProfileExercise); err != nil {
+				log.Error().Err(err).Msg("error adding exercise to profile in database")
+				c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+				return
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			log.Error().Err(err).Msg("error committing transaction")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		}
+		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+		return
+	}
+	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 }
 
 // Delete a profile by name from the requesters organization
