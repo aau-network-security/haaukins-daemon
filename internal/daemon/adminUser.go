@@ -323,6 +323,11 @@ func (d *daemon) updateAdminUser(c *gin.Context) {
 		return
 	} else if admin.Username == currUser.Username { // if the user wants to update itself
 		// Update the current user
+		if admin.LabQuota.Valid {
+			req.LabQuota = &admin.LabQuota.Int32
+		} else {
+			req.LabQuota = nil
+		}
 		if err := d.updateAdminUserQuery(ctx, req, currUser, admin); err != nil {
 			log.Error().Err(err).Msg("Error updating user")
 			c.JSON(http.StatusBadRequest, APIResponse{Status: fmt.Sprintf("Could not update user: %s", err)})
@@ -526,6 +531,9 @@ func (d *daemon) createAdminUser(ctx context.Context, user adminUserRequest, org
 	labQuota := sql.NullInt32{Valid: false}
 	if user.LabQuota != nil {
 		labQuota = sql.NullInt32{Valid: true, Int32: *user.LabQuota}
+	}
+	if user.Role != "npuser" {
+		labQuota = sql.NullInt32{Valid: false}
 	}
 	// Passing request data to query param struct
 	newUser := db.CreateAdminUserParams{
