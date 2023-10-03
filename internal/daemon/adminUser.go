@@ -324,7 +324,8 @@ func (d *daemon) updateAdminUser(c *gin.Context) {
 	} else if admin.Username == currUser.Username { // if the user wants to update itself
 		// Update the current user
 		if admin.LabQuota.Valid {
-			req.LabQuota = &admin.LabQuota.Int32
+			labQuota := admin.LabQuota.Int32
+			req.LabQuota = &labQuota
 		} else {
 			req.LabQuota = nil
 		}
@@ -462,7 +463,8 @@ func (d *daemon) getAdminUsers(c *gin.Context) {
 				if !dbUser.LabQuota.Valid {
 					labQuota = nil
 				} else {
-					labQuota = &dbUser.LabQuota.Int32
+					quota := dbUser.LabQuota.Int32
+					labQuota = &quota
 				}
 				userToReturn := AdminUserReponse{
 					User: AdminUserNoPw{
@@ -498,7 +500,8 @@ func (d *daemon) getAdminUsers(c *gin.Context) {
 				if !dbUser.LabQuota.Valid {
 					labQuota = nil
 				} else {
-					labQuota = &dbUser.LabQuota.Int32
+					quota := dbUser.LabQuota.Int32
+					labQuota = &quota
 				}
 				userToReturn := AdminUserReponse{
 					User: AdminUserNoPw{

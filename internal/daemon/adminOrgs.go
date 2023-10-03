@@ -166,7 +166,8 @@ func (d *daemon) listOrganizations(c *gin.Context) {
 			if !dbOrg.LabQuota.Valid {
 				org.LabQuota = nil
 			} else {
-				org.LabQuota = &dbOrg.LabQuota.Int32
+				labQuota := dbOrg.LabQuota.Int32
+				org.LabQuota = &labQuota
 			}
 			orgs = append(orgs, org)
 		}
