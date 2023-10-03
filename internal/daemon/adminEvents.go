@@ -112,7 +112,6 @@ func (d *daemon) newEvent(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
 		}
-		// TODO Check user quota
 
 		uniqueExercisesList := removeDuplicates(req.ExerciseTags)
 
