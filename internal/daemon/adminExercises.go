@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/aau-network-security/haaukins-daemon/internal/db"
@@ -28,7 +29,7 @@ func (d *daemon) adminExerciseSubrouter(r *gin.RouterGroup) {
 
 	profiles.POST("", d.addProfile)
 	profiles.GET("", d.getProfiles)
-	profiles.PUT("", d.updateProfile)
+	profiles.PUT("/:profileId", d.updateProfile)
 	profiles.DELETE("/:profilename", d.deleteProfile)
 }
 
@@ -242,8 +243,8 @@ func (d *daemon) getExerciseCategories(c *gin.Context) {
 }
 
 type ExerciseProfileRequest struct {
-	Name         string   `json:"name"`
-	ExerciseTags []string `json:"exerciseTags"`
+	Name         string   `json:"name" binding:"required"`
+	ExerciseTags []string `json:"exerciseTags" binding:"required"`
 	Description  string   `json:"description"`
 	Public       bool     `json:"public"`
 	Organization string   `json:"organization"`
@@ -376,6 +377,26 @@ func (d *daemon) updateProfile(c *gin.Context) {
 		return
 	}
 
+	profileId, err := strconv.ParseInt(c.Param("profileId"), 10, 32)
+	if err != nil {
+		log.Error().Err(err).Msg("error parsing profile ID")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+		return
+	}
+	log.Debug().Int64("profileId", profileId).Msg("updating profile")
+
+	oldProfile, err := d.db.GetProfileById(ctx, int32(profileId))
+	if err != nil {
+		if err == sql.ErrNoRows {
+			log.Error().Int64("profileId", profileId).Msg("Profile not found")
+			c.JSON(http.StatusNotFound, APIResponse{Status: "profile not found"})
+			return
+		}
+		log.Error().Err(err).Msgf("Error getting old profile from db")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+		return
+	}
+
 	var casbinRequests = [][]interface{}{
 		{admin.Username, admin.Organization, fmt.Sprintf("challengeProfiles::%s", admin.Organization), "write"},
 		{admin.Username, admin.Organization, fmt.Sprintf("secretchals::%s", admin.Organization), "write"},
@@ -397,8 +418,13 @@ func (d *daemon) updateProfile(c *gin.Context) {
 			return
 		}
 
+		if oldProfile.Organization != admin.Organization && !authorized[2] {
+			c.JSON(http.StatusForbidden, APIResponse{Status: "Access denied"})
+			return
+		}
+
 		// A superadmin can edit profiles in all organizations
-		organization := admin.Organization
+		organization := oldProfile.Organization
 		if req.Organization != "" && authorized[2] {
 			organization = req.Organization
 		} else if req.Organization != "" && !authorized[2] {
@@ -429,28 +455,24 @@ func (d *daemon) updateProfile(c *gin.Context) {
 
 		qtx := d.db.WithTx(tx)
 
-		log.Debug().Msg("deleting old profile")
-		deleteProfileParams := db.DeleteProfileParams{
-			Profilename: req.Name,
-			Orgname:     organization,
-		}
-		if err := qtx.DeleteProfile(ctx, deleteProfileParams); err != nil {
-			log.Error().Err(err).Msg("error deleting old profile")
-			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
-			return
-		}
-
-		log.Debug().Msg("adding new profile")
-		dbProfileParams := db.AddProfileParams{
+		// Update the profile info
+		dbProfileParams := db.UpdateProfileParams{
+			ID:          int32(profileId),
 			Profilename: req.Name,
 			Secret:      secret,
 			Orgname:     organization,
 			Description: req.Description,
 			Public:      req.Public,
 		}
-		profileId, err := qtx.AddProfile(ctx, dbProfileParams)
-		if err != nil {
-			log.Error().Err(err).Msg("error adding profile to db")
+		if err := qtx.UpdateProfile(ctx, dbProfileParams); err != nil {
+			log.Error().Err(err).Msg("error updating profile")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+			return
+		}
+
+		// Update the profile challenges
+		if err := qtx.DeleteProfileChallenges(ctx, int32(profileId)); err != nil {
+			log.Error().Err(err).Msg("error deleting profile challenges")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
 			return
 		}
@@ -459,9 +481,9 @@ func (d *daemon) updateProfile(c *gin.Context) {
 			dbProfileExercise := db.AddProfileChallengeParams{
 				Tag:       exercise.Tag,
 				Name:      exercise.Name,
-				Profileid: profileId,
+				Profileid: int32(profileId),
 			}
-			if err := qtx.AddProfileChallenge(ctx, dbProfileExercise); err != nil {
+						if err := qtx.AddProfileChallenge(ctx, dbProfileExercise); err != nil {
 				log.Error().Err(err).Msg("error adding exercise to profile in database")
 				c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
 				return
@@ -470,6 +492,7 @@ func (d *daemon) updateProfile(c *gin.Context) {
 		if err := tx.Commit(); err != nil {
 			log.Error().Err(err).Msg("error committing transaction")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+			return
 		}
 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 		return

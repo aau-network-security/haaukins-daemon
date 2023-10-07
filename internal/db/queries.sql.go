@@ -395,6 +395,15 @@ func (q *Queries) DeleteProfile(ctx context.Context, arg DeleteProfileParams) er
 	return err
 }
 
+const deleteProfileChallenges = `-- name: DeleteProfileChallenges :exec
+DELETE FROM profile_challenges WHERE profile_id = $1
+`
+
+func (q *Queries) DeleteProfileChallenges(ctx context.Context, profileid int32) error {
+	_, err := q.db.ExecContext(ctx, deleteProfileChallenges, profileid)
+	return err
+}
+
 const deleteTeam = `-- name: DeleteTeam :exec
 DELETE FROM teams WHERE tag=$1 and event_id = $2
 `
@@ -1295,6 +1304,24 @@ func (q *Queries) GetOrganizations(ctx context.Context) ([]Organization, error) 
 	return items, nil
 }
 
+const getProfileById = `-- name: GetProfileById :one
+SELECT id, name, secret, description, public, organization FROM profiles WHERE id = $1
+`
+
+func (q *Queries) GetProfileById(ctx context.Context, id int32) (Profile, error) {
+	row := q.db.QueryRowContext(ctx, getProfileById, id)
+	var i Profile
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Secret,
+		&i.Description,
+		&i.Public,
+		&i.Organization,
+	)
+	return i, err
+}
+
 const getProfileByNameAndOrgName = `-- name: GetProfileByNameAndOrgName :one
 SELECT id, name, secret, description, public, organization FROM profiles WHERE lower(name) = lower($1) AND lower(organization) = lower($2)
 `
@@ -1554,6 +1581,31 @@ func (q *Queries) UpdateOrganization(ctx context.Context, arg UpdateOrganization
 		arg.Owneremail,
 		arg.Labquota,
 		arg.Orgname,
+	)
+	return err
+}
+
+const updateProfile = `-- name: UpdateProfile :exec
+UPDATE profiles SET name = $1, secret = $2, organization = $3, description = $4, public = $5 WHERE id = $6
+`
+
+type UpdateProfileParams struct {
+	Profilename string
+	Secret      bool
+	Orgname     string
+	Description string
+	Public      bool
+	ID          int32
+}
+
+func (q *Queries) UpdateProfile(ctx context.Context, arg UpdateProfileParams) error {
+	_, err := q.db.ExecContext(ctx, updateProfile,
+		arg.Profilename,
+		arg.Secret,
+		arg.Orgname,
+		arg.Description,
+		arg.Public,
+		arg.ID,
 	)
 	return err
 }

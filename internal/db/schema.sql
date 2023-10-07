@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 CREATE TABLE IF NOT EXISTS events ( 
         id serial primary key, 
         tag varchar (255) NOT NULL,

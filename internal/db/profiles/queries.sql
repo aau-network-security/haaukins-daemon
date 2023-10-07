@@ -1,6 +1,15 @@
 -- name: AddProfile :one
 INSERT INTO profiles (name, secret, organization, description, public) VALUES (@profileName, @secret, @orgName, @description, @public) RETURNING id;
 
+-- name: UpdateProfile :exec
+UPDATE profiles SET name = @profileName, secret = @secret, organization = @orgName, description = @description, public = @public WHERE id = @id; 
+
+-- name: GetProfileById :one
+SELECT * FROM profiles WHERE id = @id;
+
+-- name: DeleteProfileChallenges :exec
+DELETE FROM profile_challenges WHERE profile_id = @profileId;
+
 -- name: AddProfileChallenge :exec
 INSERT INTO profile_challenges (tag, name, profile_id) VALUES (@tag, @name, @profileId);
 
