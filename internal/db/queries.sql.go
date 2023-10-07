@@ -381,17 +381,26 @@ func (q *Queries) DeleteOrganization(ctx context.Context, orgname string) error 
 	return err
 }
 
-const deleteProfile = `-- name: DeleteProfile :exec
+const deleteProfileById = `-- name: DeleteProfileById :exec
+DELETE FROM profiles WHERE id = $1
+`
+
+func (q *Queries) DeleteProfileById(ctx context.Context, profileid int32) error {
+	_, err := q.db.ExecContext(ctx, deleteProfileById, profileid)
+	return err
+}
+
+const deleteProfileByName = `-- name: DeleteProfileByName :exec
 DELETE FROM profiles WHERE lower(name) = lower($1) AND lower(organization) = lower($2)
 `
 
-type DeleteProfileParams struct {
+type DeleteProfileByNameParams struct {
 	Profilename string
 	Orgname     string
 }
 
-func (q *Queries) DeleteProfile(ctx context.Context, arg DeleteProfileParams) error {
-	_, err := q.db.ExecContext(ctx, deleteProfile, arg.Profilename, arg.Orgname)
+func (q *Queries) DeleteProfileByName(ctx context.Context, arg DeleteProfileByNameParams) error {
+	_, err := q.db.ExecContext(ctx, deleteProfileByName, arg.Profilename, arg.Orgname)
 	return err
 }
 

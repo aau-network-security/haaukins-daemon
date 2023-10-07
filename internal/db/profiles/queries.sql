@@ -34,8 +34,11 @@ SELECT * FROM profiles WHERE lower(name) = lower(@profileName) AND lower(organiz
 -- name: GetExercisesInProfile :many
 SELECT profile_challenges.id, profile_challenges.tag, profile_challenges.name  FROM profiles INNER JOIN profile_challenges ON profiles.id = profile_challenges.profile_id WHERE profiles.id = @profileId AND profiles.organization = @orgName ORDER BY profiles.id asc;
 
--- name: DeleteProfile :exec
+-- name: DeleteProfileByName :exec
 DELETE FROM profiles WHERE lower(name) = lower(@profileName) AND lower(organization) = lower(@orgName);
+
+-- name: DeleteProfileById :exec
+DELETE FROM profiles WHERE id = @profileId;
 
 -- name: CheckIfProfileExists :one
 SELECT EXISTS(SELECT 1 FROM profiles WHERE lower(name) = lower(@profileName) AND lower(organization) = lower(@orgName));

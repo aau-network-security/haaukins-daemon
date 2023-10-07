@@ -30,7 +30,7 @@ func (d *daemon) adminExerciseSubrouter(r *gin.RouterGroup) {
 	profiles.POST("", d.addProfile)
 	profiles.GET("", d.getProfiles)
 	profiles.PUT("/:profileId", d.updateProfile)
-	profiles.DELETE("/:profilename", d.deleteProfile)
+	profiles.DELETE("/:profileId", d.deleteProfile)
 }
 
 // returns a list of exercises from the exercise service where the organizer descriptions and challenge descriptions has been sanitized
@@ -483,7 +483,7 @@ func (d *daemon) updateProfile(c *gin.Context) {
 				Name:      exercise.Name,
 				Profileid: int32(profileId),
 			}
-						if err := qtx.AddProfileChallenge(ctx, dbProfileExercise); err != nil {
+			if err := qtx.AddProfileChallenge(ctx, dbProfileExercise); err != nil {
 				log.Error().Err(err).Msg("error adding exercise to profile in database")
 				c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
 				return
@@ -516,11 +516,17 @@ func (d *daemon) deleteProfile(c *gin.Context) {
 		Str("AdminEmail", admin.Email).
 		Msg("AdminUser is trying delete a profile")
 
-	profileName := c.Param("profilename")
+	profileId, err := strconv.ParseInt(c.Param("profileId"), 10, 32)
+	if err != nil {
+		log.Error().Err(err).Msg("error parsing profile ID")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+		return
+	}
 
 	var casbinRequests = [][]interface{}{
 		{admin.Username, admin.Organization, fmt.Sprintf("challengeProfiles::%s", admin.Organization), "write"},
 		{admin.Username, admin.Organization, fmt.Sprintf("secretchals::%s", admin.Organization), "write"},
+		{admin.Username, admin.Organization, "objects::Admins", "write"},
 	}
 	if authorized, err := d.enforcer.BatchEnforce(casbinRequests); authorized[0] || err != nil {
 		if err != nil {
@@ -529,11 +535,7 @@ func (d *daemon) deleteProfile(c *gin.Context) {
 			return
 		}
 
-		getProfileParams := db.GetProfileByNameAndOrgNameParams{
-			Profilename: profileName,
-			Orgname:     admin.Organization,
-		}
-		profile, err := d.db.GetProfileByNameAndOrgName(ctx, getProfileParams)
+		profile, err := d.db.GetProfileById(ctx, int32(profileId))
 		if err != nil {
 			if err == sql.ErrNoRows {
 				log.Debug().Msg("profile not found")
@@ -551,11 +553,12 @@ func (d *daemon) deleteProfile(c *gin.Context) {
 			return
 		}
 
-		deleteProfileParams := db.DeleteProfileParams{
-			Profilename: profileName,
-			Orgname:     admin.Organization,
+		if profile.Organization != admin.Organization && !authorized[2] {
+			c.JSON(http.StatusForbidden, APIResponse{Status: "Access denied"})
+			return
 		}
-		if err := d.db.DeleteProfile(ctx, deleteProfileParams); err != nil {
+
+		if err := d.db.DeleteProfileById(ctx, profile.ID); err != nil {
 			log.Error().Err(err).Msg("error deleting profile")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
 			return
