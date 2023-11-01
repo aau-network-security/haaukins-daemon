@@ -943,13 +943,8 @@ func (q *Queries) GetEventsExeptClosed(ctx context.Context) ([]Event, error) {
 }
 
 const getExercisesInProfile = `-- name: GetExercisesInProfile :many
-SELECT profile_challenges.id, profile_challenges.tag, profile_challenges.name  FROM profiles INNER JOIN profile_challenges ON profiles.id = profile_challenges.profile_id WHERE profiles.id = $1 AND profiles.organization = $2 ORDER BY profiles.id asc
+SELECT profile_challenges.id, profile_challenges.tag, profile_challenges.name  FROM profiles INNER JOIN profile_challenges ON profiles.id = profile_challenges.profile_id WHERE profiles.id = $1 ORDER BY profiles.id asc
 `
-
-type GetExercisesInProfileParams struct {
-	Profileid int32
-	Orgname   string
-}
 
 type GetExercisesInProfileRow struct {
 	ID   int32
@@ -957,8 +952,8 @@ type GetExercisesInProfileRow struct {
 	Name string
 }
 
-func (q *Queries) GetExercisesInProfile(ctx context.Context, arg GetExercisesInProfileParams) ([]GetExercisesInProfileRow, error) {
-	rows, err := q.db.QueryContext(ctx, getExercisesInProfile, arg.Profileid, arg.Orgname)
+func (q *Queries) GetExercisesInProfile(ctx context.Context, profileid int32) ([]GetExercisesInProfileRow, error) {
+	rows, err := q.db.QueryContext(ctx, getExercisesInProfile, profileid)
 	if err != nil {
 		return nil, err
 	}

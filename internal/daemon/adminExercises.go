@@ -657,11 +657,7 @@ func (d *daemon) getProfiles(c *gin.Context) {
 func (d *daemon) populateProfiles(ctx context.Context, profiles []db.Profile, admin AdminClaims) ([]ExerciseProfile, error) {
 	var profilesToReturn []ExerciseProfile
 	for _, profile := range profiles {
-		getProfileExercisesParams := db.GetExercisesInProfileParams{
-			Profileid: profile.ID,
-			Orgname:   admin.Organization,
-		}
-		exercises, err := d.db.GetExercisesInProfile(ctx, getProfileExercisesParams)
+		exercises, err := d.db.GetExercisesInProfile(ctx, profile.ID)
 		if err != nil {
 			return nil, err
 		}

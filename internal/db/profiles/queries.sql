@@ -32,7 +32,7 @@ SELECT * FROM profiles WHERE lower(organization) = lower(@orgName) and secret = 
 SELECT * FROM profiles WHERE lower(name) = lower(@profileName) AND lower(organization) = lower(@orgName);
 
 -- name: GetExercisesInProfile :many
-SELECT profile_challenges.id, profile_challenges.tag, profile_challenges.name  FROM profiles INNER JOIN profile_challenges ON profiles.id = profile_challenges.profile_id WHERE profiles.id = @profileId AND profiles.organization = @orgName ORDER BY profiles.id asc;
+SELECT profile_challenges.id, profile_challenges.tag, profile_challenges.name  FROM profiles INNER JOIN profile_challenges ON profiles.id = profile_challenges.profile_id WHERE profiles.id = @profileId ORDER BY profiles.id asc;
 
 -- name: DeleteProfileByName :exec
 DELETE FROM profiles WHERE lower(name) = lower(@profileName) AND lower(organization) = lower(@orgName);
