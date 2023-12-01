@@ -33,7 +33,9 @@ func (d *daemon) eventWebsocket(c *gin.Context) {
 		// read the on open message
 		req := WsAuthRequest{}
 		if err := ws.ReadJSON(&req); err != nil {
-			log.Error().Err(err).Msg("error reading json from websocket connection")
+			if !websocket.IsUnexpectedCloseError(err, 1006) {
+				log.Error().Err(err).Msg("error reading json from websocket connection")
+			}
 			continue
 		}
 		// Validate the token
