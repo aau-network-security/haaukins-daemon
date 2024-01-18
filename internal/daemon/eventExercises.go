@@ -262,7 +262,7 @@ func (d *daemon) solveExercise(c *gin.Context) {
 						Tag:      req.Tag,
 						Eventid:  dbEvent.ID,
 						Teamid:   dbTeam.ID,
-						Solvedat: time.Now(),
+						Solvedat: time.Now().UTC(),
 					}
 					if err := d.db.AddSolveForTeamInEvent(ctx, addSolveParams); err != nil {
 						log.Error().Err(err).Msg("error adding solve to database")
@@ -291,7 +291,7 @@ func (d *daemon) solveExercise(c *gin.Context) {
 							Tag:      req.Tag,
 							Eventid:  dbEvent.ID,
 							Teamid:   dbTeam.ID,
-							Solvedat: time.Now(),
+							Solvedat: time.Now().UTC(),
 						}
 						if err := d.db.AddSolveForTeamInEvent(ctx, addSolveParams); err != nil {
 							log.Error().Err(err).Msg("error adding solve to database")
