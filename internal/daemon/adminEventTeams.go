@@ -289,7 +289,7 @@ func (d *daemon) forceSolveExercise(c *gin.Context) {
 			Tag:      req.ExerciseTag,
 			Eventid:  dbEvent.ID,
 			Teamid:   team.ID,
-			Solvedat: time.Now(),
+			Solvedat: time.Now().UTC(),
 		}
 		if err := d.db.AddSolveForTeamInEvent(c, addSolveParams); err != nil {
 			log.Error().Err(err).Msg("error adding forced solve")
