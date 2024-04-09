@@ -176,6 +176,8 @@ func (d *daemon) newEvent(c *gin.Context) {
 		}
 		req.ExerciseConfigs = exerConfs
 
+		req.VmName = d.conf.VmName
+
 		if err := d.agentPool.createNewEnvOnAvailableAgents(ctx, d.eventpool, req, resourceEstimates); err != nil {
 			if err == AllAgentsReturnedErr {
 				log.Error().Err(AllAgentsReturnedErr).Msg("error creating environments on all agents")

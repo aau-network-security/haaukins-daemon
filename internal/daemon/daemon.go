@@ -91,6 +91,10 @@ func NewConfigFromFile(path string) (*Config, error) {
 		c.StatePath = filepath.Join(pwd, "state")
 	}
 
+	if c.VmName == "" {
+		c.VmName = "kali-v1-0-3"
+	}
+
 	if c.AuditLog.FileName == "" {
 		c.AuditLog.FileName = "audit.log"
 	}
