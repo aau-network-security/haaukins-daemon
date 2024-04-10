@@ -371,17 +371,18 @@ func (d *daemon) labExpiryRoutine() {
 							wg.Add(1)
 							go func(team *Team, event *Event) {
 								defer wg.Done()
-
+								defer func() {
+									delete(event.Labs, team.Lab.LabInfo.Tag)
+									team.Lab = nil
+									saveState(d.eventpool, d.conf.StatePath)
+									sendCommandToTeam(team, updateTeam)
+								}()
 								log.Info().Str("Team", team.Username).Msg("[lab-expiry-routine] closing lab due to expiry")
 								if err := team.Lab.close(); err != nil {
 									log.Error().Err(err).Msg("[lab-expiry-routine] error closing lab in ")
 									return
 								}
 
-								delete(event.Labs, team.Lab.LabInfo.Tag)
-								team.Lab = nil
-								saveState(d.eventpool, d.conf.StatePath)
-								sendCommandToTeam(team, updateTeam)
 							}(team, event)
 						} else {
 							log.Warn().Msg("[lab-expiry-routine] lab had nil connection")
