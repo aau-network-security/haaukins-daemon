@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -26,6 +27,7 @@ func (d *daemon) adminOrgSubrouter(r *gin.RouterGroup) {
 
 type adminOrgRequest struct {
 	OrgName  string           `json:"orgName"`
+	LabQuota *int32           `json:"labQuota,omitempty"`
 	OrgOwner adminUserRequest `json:"orgOwner"`
 }
 
@@ -48,7 +50,6 @@ var orgCreationPolicies = [][]string{
 	{"role::npuser", "", "challengeProfiles::", "read"},
 }
 
-//
 // g2 policies
 var orgCreationGroupPolicies = [][]string{
 	{"events::", "objects::"},
@@ -78,8 +79,19 @@ func (d *daemon) newOrganization(c *gin.Context) {
 		return
 	}
 
+	// Validate username
+	if req.OrgName == "" || strings.Trim(req.OrgName, " ") == "" {
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "Invalid orgname"})
+		return
+	}
+
 	// Unpack the jwt claims passed in the gin context to a struct
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -113,7 +125,12 @@ func (d *daemon) newOrganization(c *gin.Context) {
 func (d *daemon) listOrganizations(c *gin.Context) {
 	ctx := context.Background()
 	// Unpack the jwt claims passed in the gin context to a struct
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -132,11 +149,27 @@ func (d *daemon) listOrganizations(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
 		}
-		orgs, err := d.db.GetOrganizations(ctx)
+		dbOrgs, err := d.db.GetOrganizations(ctx)
 		if err != nil {
 			log.Error().Err(err).Msg("Error listing organizations")
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: fmt.Sprintf("Error listing organizations: %v", err)})
 			return
+		}
+		orgs := []Organization{}
+		for _, dbOrg := range dbOrgs {
+			org := Organization{
+				ID:         dbOrg.ID,
+				Name:       dbOrg.Name,
+				OwnerUser:  dbOrg.OwnerUser,
+				OwnerEmail: dbOrg.OwnerEmail,
+			}
+			if !dbOrg.LabQuota.Valid {
+				org.LabQuota = nil
+			} else {
+				labQuota := dbOrg.LabQuota.Int32
+				org.LabQuota = &labQuota
+			}
+			orgs = append(orgs, org)
 		}
 		c.JSON(http.StatusOK, APIResponse{Status: "OK", Orgs: orgs})
 		return
@@ -155,7 +188,12 @@ func (d *daemon) updateOrganization(c *gin.Context) {
 	}
 
 	// Unpack the jwt claims passed in the gin context to a struct
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -196,7 +234,12 @@ func (d *daemon) deleteOrganization(c *gin.Context) {
 		return
 	}
 	// Unpack the jwt claims passed in the gin context to a struct
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -288,24 +331,18 @@ func (d *daemon) checkAndApplyUpdates(ctx context.Context, updatedOrg adminOrgRe
 		}
 		return errors.New("user you wish to bind to org, does not exist within organization")
 	}
-
-	// Get current and new info to compare
-	oldOrg, err := d.db.GetOrgByName(ctx, updatedOrg.OrgName)
-	if err != nil {
-		return err
-	}
 	newOwner, err := d.db.GetAdminUserByUsername(ctx, updatedOrg.OrgOwner.Username)
 	if err != nil {
 		return err
 	}
-
-	// Check if owner has been updated
-	if oldOrg.OwnerUser == newOwner.Username {
-		return errors.New("user is already the owner of the organization")
-	}
 	// Is the new owner even an administrator?
 	if newOwner.Role != "role::administrator" {
 		return errors.New("user is not an administrator and can therefore not become an organization owner")
+	}
+
+	labQuota := sql.NullInt32{Valid: false}
+	if updatedOrg.LabQuota != nil {
+		labQuota = sql.NullInt32{Valid: true, Int32: *updatedOrg.LabQuota}
 	}
 
 	//Update the organization if all checks has passed
@@ -313,6 +350,7 @@ func (d *daemon) checkAndApplyUpdates(ctx context.Context, updatedOrg adminOrgRe
 		Ownerusername: newOwner.Username,
 		Owneremail:    newOwner.Email,
 		Orgname:       updatedOrg.OrgName,
+		Labquota:      labQuota,
 	}
 	if err := d.db.UpdateOrganization(ctx, updateParams); err != nil {
 		return err
@@ -342,11 +380,18 @@ func (d *daemon) creatOrgWithAdmin(ctx context.Context, newOrg adminOrgRequest) 
 	if len(newOrg.OrgOwner.Password) < 8 {
 		return errors.New(passwordTooShortError)
 	}
+
+	labQuota := sql.NullInt32{Valid: false}
+	if newOrg.LabQuota != nil {
+		labQuota = sql.NullInt32{Valid: true, Int32: *newOrg.LabQuota}
+	}
+
 	// insert org and user into db
 	orgParams := db.AddOrganizationParams{
 		Org:           newOrg.OrgName,
 		Ownerusername: newOrg.OrgOwner.Username,
 		Owneremail:    newOrg.OrgOwner.Email,
+		Labquota:      labQuota,
 	}
 	if err := d.db.AddOrganization(ctx, orgParams); err != nil {
 		return err

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/aau-network-security/haaukins-daemon/internal/db"
@@ -71,7 +72,12 @@ func (d *daemon) newAgent(c *gin.Context) {
 		return
 	}
 
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -118,6 +124,7 @@ func (d *daemon) newAgent(c *gin.Context) {
 
 		streamCtx, cancel := context.WithCancel(context.Background())
 		agentForPool := &Agent{
+			M:            sync.RWMutex{},
 			Name:         req.Name,
 			Url:          req.Url,
 			Tls:          req.Tls,
@@ -166,7 +173,12 @@ func (d *daemon) newAgent(c *gin.Context) {
 func (d *daemon) getAgents(c *gin.Context) {
 	ctx := context.Background()
 
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+			log.Error().Err(err).Msg("error getting user from gin context")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+			return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -235,7 +247,12 @@ func (d *daemon) deleteAgent(c *gin.Context) {
 
 	agentName := c.Param("agent")
 
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+			log.Error().Err(err).Msg("error getting user from gin context")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+			return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -286,7 +303,12 @@ func (d *daemon) deleteAgent(c *gin.Context) {
 func (d *daemon) reconnectAgent(c *gin.Context) {
 	ctx := context.Background()
 
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -339,6 +361,7 @@ func (d *daemon) reconnectAgent(c *gin.Context) {
 
 		streamCtx, cancel := context.WithCancel(context.Background())
 		agentForPool := &Agent{
+			M:            sync.RWMutex{},
 			Name:         dbAgent.Name,
 			Url:          dbAgent.Url,
 			Tls:          dbAgent.Tls,
@@ -377,7 +400,12 @@ func (d *daemon) reconnectAgent(c *gin.Context) {
 }
 
 func (d *daemon) lockAgentState(c *gin.Context) {
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+			log.Error().Err(err).Msg("error getting user from gin context")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+			return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -409,7 +437,12 @@ func (d *daemon) lockAgentState(c *gin.Context) {
 }
 
 func (d *daemon) unlockAgentState(c *gin.Context) {
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+			log.Error().Err(err).Msg("error getting user from gin context")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+			return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -446,7 +479,6 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
-// TODO Find a better way to authenticate users than sending jwt as get query parameter
 func (d *daemon) agentWebsocket(c *gin.Context) {
 	agentName := c.Param("agent")
 

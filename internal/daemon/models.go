@@ -3,6 +3,7 @@ package daemon
 import (
 	"container/list"
 	"context"
+	"database/sql"
 	"sync"
 	"time"
 
@@ -14,12 +15,14 @@ import (
 )
 
 type AdminClaims struct {
-	Username     string `json:"username"`
-	Email        string `json:"email"`
-	Organization string `json:"organization"`
-	Role         string `json:"role"`
-	Jti          string `json:"jti"`
-	Exp          int64  `json:"exp"`
+	Username     string        `json:"username"`
+	Email        string        `json:"email"`
+	Sid          string        `json:"sid"`
+	Organization string        `json:"organization"`
+	Role         string        `json:"role"`
+	Jti          string        `json:"jti"`
+	Exp          int64         `json:"exp"`
+	LabQuota     sql.NullInt32 `json:"labQuota"`
 }
 
 type TeamClaims struct {
@@ -41,14 +44,30 @@ type APIResponse struct {
 	EventExercises *EventExercisesResponse                 `json:"eventExercises,omitempty"`
 	TeamLab        *LabResponse                            `json:"teamLab,omitempty"`
 	Categories     []*proto.GetCategoriesResponse_Category `json:"categories,omitempty"`
-	Orgs           []db.Organization                       `json:"orgs,omitempty"`
+	Orgs           []Organization                          `json:"orgs,omitempty"`
 	Agents         []AgentResponse                         `json:"agents,omitempty"`
-	Events         []db.Event                              `json:"events,omitempty"`
+	Events         []EventResponse                         `json:"events,omitempty"`
 	TeamInfo       *TeamResponse                           `json:"teaminfo,omitempty"`
 	EventInfo      *EventInfoResponse                      `json:"eventinfo,omitempty"`
 	LabHosts       []string                                `json:"labHosts,omitempty"`
 }
 
+type Organization struct {
+	ID         int32  `json:"Id"`
+	Name       string `json:"Name"`
+	OwnerUser  string `json:"OwnerUser"`
+	OwnerEmail string `json:"OwnerEmail"`
+	LabQuota   *int32 `json:"LabQuota"`
+}
+
+type AdminUserNoPw struct {
+	Username     string
+	FullName     string
+	Email        string
+	Role         string
+	Organization string
+	LabQuota     *int32
+}
 type EventPool struct {
 	M      sync.RWMutex      `json:"-"`
 	Events map[string]*Event `json:"events,omitempty"`
@@ -87,6 +106,7 @@ type EventConfig struct {
 	DynamicMax            int32     `json:"dynamicMax,omitempty"`
 	DynamicMin            int32     `json:"dynamicMin,omitempty"`
 	DynamicSolveThreshold int32     `json:"dynamicSolveThreshold,omitempty"`
+	ExerciseConfigs       []*aproto.ExerciseConfig
 }
 
 type Team struct {
@@ -104,6 +124,8 @@ type ExerciseProfile struct {
 	Name         string                        `json:"name"`
 	Secret       bool                          `json:"secret"`
 	Organization string                        `json:"organization"`
+	Public       bool                          `json:"public"`
+	Description  string                        `json:"description"`
 	Exercises    []db.GetExercisesInProfileRow `json:"exercises,omitempty"`
 }
 
@@ -122,6 +144,7 @@ type ResourceEstimates struct {
 }
 
 type Agent struct {
+	M            sync.RWMutex `json:"-"`
 	Name         string
 	Url          string
 	Tls          bool

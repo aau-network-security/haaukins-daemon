@@ -2,12 +2,8 @@ module github.com/aau-network-security/haaukins-daemon
 
 go 1.18
 
-replace github.com/aau-network-security/haaukins-agent => /home/mikkel/Desktop/haaukinsdev/haaukins-agent
-
-replace github.com/aau-network-security/haaukins-exercises => /home/mikkel/Desktop/haaukinsdev/haaukins-exercises
-
 require (
-	github.com/aau-network-security/haaukins-agent v0.0.1
+	github.com/aau-network-security/haaukins-agent v1.0.0
 	github.com/aau-network-security/haaukins-exercises v1.2.2
 	github.com/casbin/casbin/v2 v2.51.2
 	github.com/casbin/gorm-adapter/v3 v3.8.0
@@ -15,6 +11,8 @@ require (
 	github.com/gin-contrib/cors v1.4.0
 	github.com/gin-gonic/gin v1.8.1
 	github.com/go-redis/redis v6.15.9+incompatible
+	github.com/gogo/protobuf v1.3.2
+	github.com/golang/protobuf v1.5.2
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/websocket v1.5.0
 	github.com/lib/pq v1.10.6
@@ -44,7 +42,7 @@ require (
 	github.com/goccy/go-json v0.9.7 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.0.0-20170517235910-f1bb20e5a188 // indirect
-	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/golang/mock v1.6.0 // indirect
 	github.com/gorilla/css v1.0.0 // indirect
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
 	github.com/jackc/pgconn v1.12.1 // indirect
