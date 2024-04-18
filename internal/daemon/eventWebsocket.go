@@ -33,7 +33,7 @@ func (d *daemon) eventWebsocket(c *gin.Context) {
 		// read the on open message
 		req := WsAuthRequest{}
 		if err := ws.ReadJSON(&req); err != nil {
-			if !websocket.IsUnexpectedCloseError(err, 1006) {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseAbnormalClosure) {
 				log.Error().Err(err).Msg("error reading json from websocket connection")
 			}
 			return
