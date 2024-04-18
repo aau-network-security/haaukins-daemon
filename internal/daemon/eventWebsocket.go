@@ -36,7 +36,7 @@ func (d *daemon) eventWebsocket(c *gin.Context) {
 			if !websocket.IsUnexpectedCloseError(err, 1006) {
 				log.Error().Err(err).Msg("error reading json from websocket connection")
 			}
-			continue
+			return
 		}
 		// Validate the token
 		claims, err := d.jwtValidate(nil, req.Token)
@@ -63,14 +63,18 @@ func (d *daemon) eventWebsocket(c *gin.Context) {
 		}
 
 		wsId := uuid.New().String()
+		team.M.Lock()
 		if team.ActiveWebsocketConnections == nil {
 			team.ActiveWebsocketConnections = make(map[string]*websocket.Conn)
 		}
 		team.ActiveWebsocketConnections[wsId] = ws
+		team.M.Unlock()
 
 		defer func(ws *websocket.Conn, team *Team, wsId string) {
 			log.Debug().Msg("closing connection")
+			team.M.Lock()
 			delete(team.ActiveWebsocketConnections, wsId)
+			team.M.Unlock()
 			ws.Close()
 		}(ws, team, wsId)
 
