@@ -23,10 +23,11 @@ type adminUserRequest struct {
 	Role                string `json:"role,omitempty"`
 	Organization        string `json:"organization,omitempty"`
 	VerifyAdminPassword string `json:"verifyAdminPassword,omitempty"`
+	LabQuota            *int32 `json:"labQuota,omitempty"`
 }
 
 type AdminUserReponse struct {
-	User  interface{}       `json:"user,omitempty"`
+	User  AdminUserNoPw     `json:"user,omitempty"`
 	Perms map[string]string `json:"perms,omitempty"`
 }
 
@@ -99,9 +100,21 @@ func (d *daemon) adminLogin(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 		return
 	}
-
+	var labQuota *int32
+	if !userNoPw.LabQuota.Valid {
+		labQuota = nil
+	} else {
+		labQuota = &userNoPw.LabQuota.Int32
+	}
 	userToReturn := &AdminUserReponse{
-		User:  &userNoPw,
+		User: AdminUserNoPw{
+			Username:     userNoPw.Username,
+			FullName:     userNoPw.FullName,
+			Email:        userNoPw.Email,
+			Role:         userNoPw.Role,
+			Organization: userNoPw.Organization,
+			LabQuota:     labQuota,
+		},
 		Perms: perms,
 	}
 
@@ -120,7 +133,12 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 	}
 
 	// Unpack the jwt claims passed in the gin context to a struct
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -164,7 +182,7 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 			if req.Role == "superadmin" && org != "Admins" {
 				c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized... Superadmins can only be added to the Admins organization"})
 				return
-			
+
 			}
 		}
 		alreadyExists, err := d.createAdminUser(ctx, req, org)
@@ -187,10 +205,15 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 
 func (d *daemon) deleteAdminUser(c *gin.Context) {
 	ctx := context.Background()
-	
+
 	username := c.Param("username")
 	// Unpack the jwt claims passed in the gin context to a struct
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	log.Debug().Msgf("admin claims: %v", admin)
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
@@ -257,7 +280,12 @@ func (d *daemon) updateAdminUser(c *gin.Context) {
 		return
 	}
 	// Unpack the jwt claims passed in the gin context to a struct
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	log.Debug().Msgf("admin claims: %v", admin)
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
@@ -295,6 +323,12 @@ func (d *daemon) updateAdminUser(c *gin.Context) {
 		return
 	} else if admin.Username == currUser.Username { // if the user wants to update itself
 		// Update the current user
+		if admin.LabQuota.Valid {
+			labQuota := admin.LabQuota.Int32
+			req.LabQuota = &labQuota
+		} else {
+			req.LabQuota = nil
+		}
 		if err := d.updateAdminUserQuery(ctx, req, currUser, admin); err != nil {
 			log.Error().Err(err).Msg("Error updating user")
 			c.JSON(http.StatusBadRequest, APIResponse{Status: fmt.Sprintf("Could not update user: %s", err)})
@@ -313,7 +347,12 @@ func (d *daemon) getAdminUser(c *gin.Context) {
 	username := c.Param("username")
 
 	// Unpack the jwt claims passed in the gin context to a struct
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	log.Debug().Msgf("admin claims: %v", admin)
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
@@ -336,10 +375,24 @@ func (d *daemon) getAdminUser(c *gin.Context) {
 		return
 	}
 
+	var labQuota *int32
+	if !dbUser.LabQuota.Valid {
+		labQuota = nil
+	} else {
+		labQuota = &dbUser.LabQuota.Int32
+	}
 	userToReturn := &AdminUserReponse{
-		User:  &dbUser,
+		User: AdminUserNoPw{
+			Username:     dbUser.Username,
+			FullName:     dbUser.FullName,
+			Email:        dbUser.Email,
+			Role:         dbUser.Role,
+			Organization: dbUser.Organization,
+			LabQuota:     labQuota,
+		},
 		Perms: perms,
 	}
+
 	// Setting up casbin request
 	sub := admin.Username
 	dom := admin.Organization
@@ -365,7 +418,12 @@ func (d *daemon) getAdminUsers(c *gin.Context) {
 	ctx := context.Background()
 
 	// Unpack the jwt claims passed in the gin context to a struct
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	log.Debug().Msgf("admin claims: %v", admin)
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
@@ -401,8 +459,22 @@ func (d *daemon) getAdminUsers(c *gin.Context) {
 					c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 					return
 				}
+				var labQuota *int32
+				if !dbUser.LabQuota.Valid {
+					labQuota = nil
+				} else {
+					quota := dbUser.LabQuota.Int32
+					labQuota = &quota
+				}
 				userToReturn := AdminUserReponse{
-					User:  dbUser,
+					User: AdminUserNoPw{
+						Username:     dbUser.Username,
+						FullName:     dbUser.FullName,
+						Email:        dbUser.Email,
+						Role:         dbUser.Role,
+						Organization: dbUser.Organization,
+						LabQuota:     labQuota,
+					},
 					Perms: perms,
 				}
 				usersWithPerms = append(usersWithPerms, userToReturn)
@@ -424,8 +496,22 @@ func (d *daemon) getAdminUsers(c *gin.Context) {
 					c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 					return
 				}
+				var labQuota *int32
+				if !dbUser.LabQuota.Valid {
+					labQuota = nil
+				} else {
+					quota := dbUser.LabQuota.Int32
+					labQuota = &quota
+				}
 				userToReturn := AdminUserReponse{
-					User:  dbUser,
+					User: AdminUserNoPw{
+						Username:     dbUser.Username,
+						FullName:     dbUser.FullName,
+						Email:        dbUser.Email,
+						Role:         dbUser.Role,
+						Organization: dbUser.Organization,
+						LabQuota:     labQuota,
+					},
 					Perms: perms,
 				}
 				usersWithPerms = append(usersWithPerms, userToReturn)
@@ -445,6 +531,13 @@ func (d *daemon) createAdminUser(ctx context.Context, user adminUserRequest, org
 	if err != nil {
 		return false, err
 	}
+	labQuota := sql.NullInt32{Valid: false}
+	if user.LabQuota != nil {
+		labQuota = sql.NullInt32{Valid: true, Int32: *user.LabQuota}
+	}
+	if user.Role != "npuser" {
+		labQuota = sql.NullInt32{Valid: false}
+	}
 	// Passing request data to query param struct
 	newUser := db.CreateAdminUserParams{
 		Username:     user.Username,
@@ -453,6 +546,7 @@ func (d *daemon) createAdminUser(ctx context.Context, user adminUserRequest, org
 		Email:        user.Email,
 		Role:         fmt.Sprintf("role::%s", user.Role),
 		Organization: org,
+		LabQuota:     labQuota,
 	}
 	log.Debug().Msgf("New User:%v", newUser)
 	userExists, err := d.db.CheckIfUserExists(ctx, user.Username)
@@ -482,11 +576,11 @@ func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUser
 	if err != nil {
 		return err
 	}
-	
+
 	// When changing password we want to make sure that the user knows the current password
 	match := verifyPassword(adminInfo.Password, updatedUser.VerifyAdminPassword)
 	// Update password if changed
-	if !verifyPassword(currUser.Password, updatedUser.Password) && updatedUser.Password != "" && match{
+	if !verifyPassword(currUser.Password, updatedUser.Password) && updatedUser.Password != "" && match {
 		log.Debug().Msg("Updating password")
 		// Password should be longer than 8 characters
 		if len(updatedUser.Password) < 8 {
@@ -508,7 +602,7 @@ func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUser
 		}
 	} else if updatedUser.Password != "" && !match {
 		return errors.New("Wrong password")
-	} 
+	}
 
 	// Update email if changed
 	if updatedUser.Email != currUser.Email && updatedUser.Email != "" {
@@ -522,6 +616,18 @@ func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUser
 		if err := d.db.UpdateAdminEmail(ctx, newEmail); err != nil {
 			return fmt.Errorf("Error updating email: %s", err)
 		}
+	}
+
+	labQuota := sql.NullInt32{Valid: false}
+	if updatedUser.LabQuota != nil {
+		labQuota = sql.NullInt32{Valid: true, Int32: *updatedUser.LabQuota}
+	}
+	newLabQuota := db.UpdateAdminLabQuotaParams{
+		Labquota: labQuota,
+		Username: updatedUser.Username,
+	}
+	if err := d.db.UpdateAdminLabQuota(ctx, newLabQuota); err != nil {
+		return fmt.Errorf("Error updating labQuota: %s", err)
 	}
 
 	return nil

@@ -88,7 +88,12 @@ func (d *daemon) newEvent(c *gin.Context) {
 		return
 	}
 
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -99,7 +104,7 @@ func (d *daemon) newEvent(c *gin.Context) {
 	log.Debug().Msgf("new event request: %v", req)
 	var casbinRequests = [][]interface{}{
 		{admin.Username, admin.Organization, fmt.Sprintf("events::%s", admin.Organization), "write"},
-		{admin.Username, admin.Organization, fmt.Sprintf("secretchals::%s", admin.Organization), "write"},
+		{admin.Username, admin.Organization, fmt.Sprintf("secretchals::%s", admin.Organization), "read"},
 	}
 	if authorized, err := d.enforcer.BatchEnforce(casbinRequests); authorized[0] || err != nil {
 		if err != nil {
@@ -107,7 +112,6 @@ func (d *daemon) newEvent(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
 			return
 		}
-		// TODO Check user quota
 
 		uniqueExercisesList := removeDuplicates(req.ExerciseTags)
 
@@ -141,6 +145,12 @@ func (d *daemon) newEvent(c *gin.Context) {
 			return
 		}
 
+		if err := d.validateQuota(admin, req.MaxLabs); err != nil {
+			log.Error().Err(err).Msg("error validating quota")
+			c.JSON(http.StatusForbidden, APIResponse{Status: fmt.Sprintf("Quota error: %s", err.Error())})
+			return
+		}
+
 		var estimatedMemSpent uint64 // Current resources spent on running labs
 		for _, event := range d.eventpool.Events {
 			estimatedMemSpent += event.EstimatedMemoryUsage
@@ -165,6 +175,8 @@ func (d *daemon) newEvent(c *gin.Context) {
 			exerConfs = append(exerConfs, estruct)
 		}
 		req.ExerciseConfigs = exerConfs
+
+		req.VmName = d.conf.VmName
 
 		if err := d.agentPool.createNewEnvOnAvailableAgents(ctx, d.eventpool, req, resourceEstimates); err != nil {
 			if err == AllAgentsReturnedErr {
@@ -255,7 +267,12 @@ func (d *daemon) getEvents(c *gin.Context) {
 		}
 	}
 
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -394,7 +411,12 @@ func (d *daemon) deleteEvent(c *gin.Context) {
 	ctx := context.Background()
 
 	eventTag := c.Param("eventTag")
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -449,7 +471,12 @@ func (d *daemon) closeEvent(c *gin.Context) {
 	ctx := context.Background()
 
 	eventTag := c.Param("eventTag")
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -602,4 +629,15 @@ func calculateEstimatedEventMemUsage(exercises []*eproto.Exercise, teamSize, max
 	log.Debug().Uint64("estimatedMemUsage", estimatedMemUsage).Msg("estimated memory usage for event")
 
 	return estimatedMemUsage, estimatedMemUsagePerLab
+}
+
+// TODO write validateQuota function
+// TODO in relation to this, let users within organization see all events running under their own org
+func (d *daemon) validateQuota(admin AdminClaims, labsToAdd int32) error {
+	// Get labs running in organization
+
+	// Get organization fromdb
+
+	// Check if user or org quota is being breached
+	return nil
 }

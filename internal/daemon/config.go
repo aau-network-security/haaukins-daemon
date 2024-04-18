@@ -10,6 +10,7 @@ type Config struct {
 	Host               string        `yaml:"host"`                           // Host is is not really important at this time
 	Port               uint          `yaml:"port"`                           // Port to be listening on
 	ListeningIp        string        `yaml:"listening-ip,omitempty"`         // ex. "127.0.0.1", "0.0.0.0". Default is "0.0.0.0"
+	VmName             string        `yaml:"vm-name,omitempty"`              // Name of the VM
 	AuditLog           Logging       `yaml:"auditLog"`                       // Audit log, used for admin endpoints to log admin events. See Logging struct below
 	Database           db.DbConfig   `yaml:"db-config,omitempty"`            // Creds and host for the postgres database
 	ExerciseService    ServiceConfig `yaml:"exercise-service"`               // Creds and host information for the exercise service

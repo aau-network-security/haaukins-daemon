@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -15,15 +16,25 @@ import (
 	"github.com/yuin/goldmark/renderer/html"
 )
 
-func unpackAdminClaims(c *gin.Context) AdminClaims {
+func (d *daemon) getUserFromGinContext(c *gin.Context) (AdminClaims, error) {
+	sid, exists := c.Get("sid")
+	if !exists {
+		return AdminClaims{}, errors.New("sid does not exist in gin context")
+	}
+	adminClaims, err := d.db.GetAdminUserBySid(c, sid.(string))
+	if err != nil {
+		return AdminClaims{}, err
+	}
 	return AdminClaims{
-		Username:     string(c.MustGet("sub").(string)),
-		Email:        string(c.MustGet("email").(string)),
-		Organization: string(c.MustGet("organization").(string)),
-		Role:         string(c.MustGet("role").(string)),
+		Username:     adminClaims.Username,
+		Sid:          adminClaims.Sid.String(),
+		Email:        adminClaims.Email,
+		Organization: adminClaims.Organization,
+		Role:         adminClaims.Role,
 		Jti:          string(c.MustGet("jti").(string)),
 		Exp:          int64(c.MustGet("exp").(float64)),
-	}
+		LabQuota:     adminClaims.LabQuota,
+	}, nil
 }
 
 func unpackTeamClaims(c *gin.Context) TeamClaims {

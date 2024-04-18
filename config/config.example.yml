@@ -2,6 +2,7 @@ host: localhost
 port: 8080
 listening-ip: "127.0.0.1"
 state-path: /path/to/state/dir
+vm-version: kali-v*-*-*
 
 lab-expiry-duration: 1 # In minutes
 lab-expiry-extension: 1 # In minutes

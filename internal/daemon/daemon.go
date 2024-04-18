@@ -27,6 +27,7 @@ import (
 type daemon struct {
 	conf        *Config
 	db          *db.Queries
+	dbConn      *sql.DB
 	exClient    eproto.ExerciseStoreClient
 	agentPool   *AgentPool
 	auditLogger *zerolog.Logger
@@ -90,6 +91,10 @@ func NewConfigFromFile(path string) (*Config, error) {
 		c.StatePath = filepath.Join(pwd, "state")
 	}
 
+	if c.VmName == "" {
+		c.VmName = "kali-v1-0-3"
+	}
+
 	if c.AuditLog.FileName == "" {
 		c.AuditLog.FileName = "audit.log"
 	}
@@ -149,7 +154,7 @@ func New(conf *Config) (*daemon, error) {
 	}
 	// TODO rewrte init function if filtered adapter is used
 	//Setting up database connection
-	dbConn, gormDb, err := conf.Database.InitConn()
+	queries, gormDb, dbConn, err := conf.Database.InitConn()
 	if err != nil {
 		log.Fatal().Err(err).Msg("[Haaukins-daemon] Failed to connect to database")
 	}
@@ -178,7 +183,7 @@ func New(conf *Config) (*daemon, error) {
 
 	// Connecting to all haaukins agents
 	log.Info().Msg("Connecting to haaukins agents...")
-	agentsInDb, err := dbConn.GetAgents(ctx)
+	agentsInDb, err := queries.GetAgents(ctx)
 	if err != nil {
 		log.Fatal().Err(err).Msg("could not get haaukins agents from database")
 	}
@@ -299,7 +304,8 @@ func New(conf *Config) (*daemon, error) {
 
 	d := &daemon{
 		conf:        conf,
-		db:          dbConn,
+		db:          queries,
+		dbConn:      dbConn,
 		exClient:    exClient,
 		agentPool:   agentPool,
 		auditLogger: &auditLogger,
@@ -365,17 +371,18 @@ func (d *daemon) labExpiryRoutine() {
 							wg.Add(1)
 							go func(team *Team, event *Event) {
 								defer wg.Done()
-
+								defer func() {
+									delete(event.Labs, team.Lab.LabInfo.Tag)
+									team.Lab = nil
+									saveState(d.eventpool, d.conf.StatePath)
+									sendCommandToTeam(team, updateTeam)
+								}()
 								log.Info().Str("Team", team.Username).Msg("[lab-expiry-routine] closing lab due to expiry")
 								if err := team.Lab.close(); err != nil {
 									log.Error().Err(err).Msg("[lab-expiry-routine] error closing lab in ")
 									return
 								}
 
-								delete(event.Labs, team.Lab.LabInfo.Tag)
-								team.Lab = nil
-								saveState(d.eventpool, d.conf.StatePath)
-								sendCommandToTeam(team, updateTeam)
 							}(team, event)
 						} else {
 							log.Warn().Msg("[lab-expiry-routine] lab had nil connection")

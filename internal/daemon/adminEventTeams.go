@@ -60,7 +60,12 @@ func (d *daemon) getTeams(c *gin.Context) {
 
 	eventTag := c.Param("eventTag")
 
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -202,7 +207,12 @@ func (d *daemon) forceSolveExercise(c *gin.Context) {
 		return
 	}
 
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
@@ -279,7 +289,7 @@ func (d *daemon) forceSolveExercise(c *gin.Context) {
 			Tag:      req.ExerciseTag,
 			Eventid:  dbEvent.ID,
 			Teamid:   team.ID,
-			Solvedat: time.Now(),
+			Solvedat: time.Now().UTC(),
 		}
 		if err := d.db.AddSolveForTeamInEvent(c, addSolveParams); err != nil {
 			log.Error().Err(err).Msg("error adding forced solve")
@@ -295,7 +305,12 @@ func (d *daemon) forceSolveExercise(c *gin.Context) {
 func (d *daemon) resetTeamLab(c *gin.Context) {
 	teamName := c.Param("teamName")
 	eventTag := c.Param("eventTag")
-	admin := unpackAdminClaims(c)
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
 		Str("AdminUser", admin.Username).
