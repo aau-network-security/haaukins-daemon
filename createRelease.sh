@@ -46,7 +46,7 @@ cd release
 
 # Create the tarball
 echo "Creating the tarball"
-tar -czf haaukins-daemon-$1-linux-64bit.tar.gz haaukins-daemon-v1.0.0-linux-64bit database config nginx haaukins-daemon.service
+tar -czf haaukins-daemon-$1-linux-64bit.tar.gz haaukins-daemon-$1-linux-64bit database config nginx haaukins-daemon.service
 
 # remove everything exept the build binary and tarball
 rm -rf database config nginx haaukins-daemon.service
