@@ -89,12 +89,16 @@ func (d *daemon) eventWebsocket(c *gin.Context) {
 }
 
 func sendCommandToTeam(team *Team, command string) {
+	team.M.RLock()
+	defer team.M.RUnlock()
 	for _, ws := range team.ActiveWebsocketConnections {
 		ws.WriteMessage(websocket.TextMessage, []byte(command))
 	}
 }
 
 func broadCastCommandToEventTeams(event *Event, command string) {
+	event.M.RLock()
+	defer event.M.RUnlock()
 	for _, team := range event.Teams {
 		sendCommandToTeam(team, command)
 	}
