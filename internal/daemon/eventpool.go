@@ -50,7 +50,7 @@ func (ep *EventPool) GetEvent(eventTag string) (*Event, error) {
 	return event, nil
 }
 
-func (ep *EventPool) GetAllEvents() (map[string]*Event) {
+func (ep *EventPool) GetAllEvents() map[string]*Event {
 	ep.M.RLock()
 	defer ep.M.RUnlock()
 
@@ -63,11 +63,13 @@ func (ep *EventPool) GetAllAgentLabsForAgent(agentName string) []*AgentLab {
 
 	var labsForAgent []*AgentLab
 	for _, event := range ep.Events {
+		event.M.RLock()
 		for _, lab := range event.Labs {
 			if lab.ParentAgent.Name == agentName {
 				labsForAgent = append(labsForAgent, lab)
 			}
 		}
+		event.M.RUnlock()
 	}
 
 	return labsForAgent
@@ -108,10 +110,12 @@ func (event *Event) AddTeam(team *Team) {
 
 // Calculates the current amount of labs for an event then checks if it has passed or equal to the configured amount of maximum labs for event
 func (event *Event) IsMaxLabsReached() bool {
+	event.M.RLock()
+	defer event.M.RUnlock()
 	// First get amount of teams waiting for labs
 	currentNumberOfLabs := event.TeamsWaitingForBrowserLabs.Len() + event.TeamsWaitingForVpnLabs.Len()
 	for _, team := range event.Teams {
-		if team.Status == WaitingForLab || team.Status == InQueue{
+		if team.Status == WaitingForLab || team.Status == InQueue {
 			currentNumberOfLabs += 1
 		}
 	}
@@ -138,7 +142,7 @@ func (event *Event) IsMaxLabsReached() bool {
 This had the unfortunate effect of spending 1 core on the CPU per event created...
 Short minded fix is currently inserting a 1 milisecond delay...
 */
-func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string, labExpiry time.Duration ) {
+func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string, labExpiry time.Duration) {
 	browserQueueHandler := func() {
 		log.Debug().Msg("Waiting for teams to enter browser lab queue")
 		for {
@@ -251,4 +255,3 @@ func (team *Team) LockForFunc(function func()) {
 }
 
 // Lab
-
