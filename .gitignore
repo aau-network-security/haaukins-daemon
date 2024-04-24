@@ -13,3 +13,5 @@ state/state.json
 log.log
 tmp
 pid
+release
+.vscode

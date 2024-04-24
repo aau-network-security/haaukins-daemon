@@ -1,0 +1,4 @@
+POSTGRES_PASSWORD=postgresuser-password
+HAAUKINSDB_USER=haaukins
+HAAUKINSDB_PASSWORD=db-haaukins-password
+HAAUKINSDB_NAME=haaukins

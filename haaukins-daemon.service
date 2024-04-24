@@ -1,0 +1,21 @@
+[Unit]
+Description=Haaukins (daemon)
+ConditionPathExists=/path/to/haaukins/user/home/folder
+After=network.target
+
+[Service]
+Type=simple
+User=haaukins
+Group=haaukins
+LimitNOFILE=9223372036854775807
+
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=600
+
+WorkingDirectory=/path/to/haaukins-daemon/folder
+ExecStart=/path/to/haaukins-daemon/folder/haaukins-daemon
+
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=haaukins-daemon

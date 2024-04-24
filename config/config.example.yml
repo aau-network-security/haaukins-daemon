@@ -1,11 +1,11 @@
 host: localhost
 port: 8080
 listening-ip: "127.0.0.1"
-state-path: /path/to/state/dir
-vm-version: kali-v*-*-*
+state-path: /path/to/state/dir # leave blank to default to haaukins-daemon workdir
+vm-version: kali-v*-*-* # Leave blank to default to kali-v1-0-3
 
-lab-expiry-duration: 1 # In minutes
-lab-expiry-extension: 1 # In minutes
+lab-expiry-duration: 300 # In minutes
+lab-expiry-extension: 120 # In minutes
 eventRetention: 30 #Amount of days before stopped events are removed including teams related to that event
 
 auditLog: 
@@ -20,18 +20,19 @@ db-config:
   port: 5432
   db_name: haaukins
   username: haaukins
-  password: haaukins
+  password: db-haaukins-password #match the password in .env file inside database folder
   
 
 exercise-service:
   grpc: localhost
-  sign-key: dev-sign-key
-  auth-key: dev-auth-key
-  tls-enabled: false
+  sign-key: exdb-sign-key
+  auth-key: exdb-auth-key
+  tls-enabled: exdb-tls-enabled # true/false
   
 
-jwtSecret: test
+jwtSecret: jwt-secret
 
+# Only used for testing loading functionalities in frontend
 test-delay:
-  enabled: true/false
+  enabled: false # true/false
   delay-seconds: 10
