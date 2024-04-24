@@ -113,7 +113,9 @@ func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, a *Ag
 							LabInfo:              l,
 						}
 						event.UnassignedVpnLabs <- agentLab
+						event.M.Lock()
 						event.Labs[l.Tag] = agentLab
+						event.M.Unlock()
 						saveState(eventPool, statePath)
 						continue
 					}
@@ -128,7 +130,9 @@ func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, a *Ag
 						LabInfo:              l,
 					}
 					event.UnassignedBrowserLabs <- agentLab
+					event.M.Lock()
 					event.Labs[l.Tag] = agentLab
+					event.M.Unlock()
 					saveState(eventPool, statePath)
 					continue
 				}
@@ -658,7 +662,7 @@ func (d *daemon) agentSyncRoutine(ticker *time.Ticker) {
 							}
 						}(client)
 					}
-					
+
 				}
 			}
 		}
@@ -670,4 +674,69 @@ func (agent *Agent) GetName() string {
 	defer agent.M.RUnlock()
 
 	return agent.Name
+}
+
+func (d *daemon) agentReconnectionRoutine(ticker *time.Ticker) {
+	log.Info().Msg("[agent-reconnection-routine] starting routine")
+	for range ticker.C {
+		ctx := context.Background()
+		dbAgents, err := d.db.GetAgents(ctx)
+		if err != nil {
+			log.Error().Err(err).Msg("[agent-reconnection-routine] error getting agents from database")
+			continue
+		}
+
+		for _, dbAgent := range dbAgents {
+			if _, err := d.agentPool.getAgent(dbAgent.Name); err != nil {
+				log.Debug().Str("agent", dbAgent.Name).Msg("[agent-reconnection-routine] agent not found in agentpool, reconnecting...")
+				serviceConf := ServiceConfig{
+					Grpc:       dbAgent.Url,
+					AuthKey:    dbAgent.AuthKey,
+					SignKey:    dbAgent.SignKey,
+					TLSEnabled: dbAgent.Tls,
+				}
+				conn, memoryInstalled, err := NewAgentConnection(serviceConf)
+				if err != nil {
+					log.Error().Err(err).Msg("error reconnecting to agent")
+					continue
+				}
+
+				streamCtx, cancel := context.WithCancel(context.Background())
+				agentForPool := &Agent{
+					M:            sync.RWMutex{},
+					Name:         dbAgent.Name,
+					Url:          dbAgent.Url,
+					Tls:          dbAgent.Tls,
+					Conn:         conn,
+					Weight:       dbAgent.Weight,
+					RequestsLeft: dbAgent.Weight,
+					StateLock:    false,
+					Errors:       []error{},
+					Close:        cancel,
+					Resources: AgentResources{
+						MemoryInstalled: memoryInstalled,
+					},
+				}
+
+				if err := d.agentPool.connectToStreams(streamCtx, agentForPool, d.eventpool, d.conf.StatePath); err != nil {
+					log.Error().Err(err).Msg("error connecting to agent streams")
+					continue
+				}
+
+				d.agentPool.addAgent(agentForPool)
+				d.eventpool.M.RLock()
+				for _, event := range d.eventpool.Events {
+					event.M.Lock()
+					for _, lab := range event.Labs {
+
+						if lab.ParentAgent.Name == agentForPool.Name {
+							lab.Conn = conn
+						}
+					}
+					event.M.Unlock()
+				}
+				d.eventpool.M.RUnlock()
+			}
+		}
+	}
 }
