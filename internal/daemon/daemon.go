@@ -343,6 +343,9 @@ func (d *daemon) Run() error {
 	agentSyncRoutineTicker := time.NewTicker(30 * time.Second)
 	go d.agentSyncRoutine(agentSyncRoutineTicker)
 
+	agentReconnectionTicker := time.NewTicker(10 * time.Second)
+	go d.agentReconnectionRoutine(agentReconnectionTicker)
+
 	listeningAddress := fmt.Sprintf("%s:%d", d.conf.ListeningIp, d.conf.Port)
 	return r.Run(listeningAddress)
 }
@@ -363,7 +366,9 @@ func (d *daemon) labExpiryRoutine() {
 		for _, event := range d.eventpool.Events {
 			var wg sync.WaitGroup
 			anyLabsClosed := false
+			event.M.RLock()
 			for _, team := range event.Teams {
+				team.M.RLock()
 				if team.Lab != nil {
 					if time.Now().After(team.Lab.ExpiresAtTime) {
 						if team.Lab.Conn != nil {
@@ -372,8 +377,12 @@ func (d *daemon) labExpiryRoutine() {
 							go func(team *Team, event *Event) {
 								defer wg.Done()
 								defer func() {
+									event.M.Lock()
 									delete(event.Labs, team.Lab.LabInfo.Tag)
+									event.M.Unlock()
+									team.M.Lock()
 									team.Lab = nil
+									team.M.Unlock()
 									saveState(d.eventpool, d.conf.StatePath)
 									sendCommandToTeam(team, updateTeam)
 								}()
@@ -389,7 +398,9 @@ func (d *daemon) labExpiryRoutine() {
 						}
 					}
 				}
+				team.M.RUnlock()
 			}
+			event.M.RUnlock()
 			wg.Wait()
 			if anyLabsClosed {
 				broadCastCommandToEventTeams(event, updateEventInfo)

@@ -332,9 +332,11 @@ func (d *daemon) getEvents(c *gin.Context) {
 				if dbEvent.Status == 0 {
 					event, err := d.eventpool.GetEvent(dbEvent.Tag)
 					if err == nil {
+						event.M.RLock()
 						for _, lab := range event.Labs {
 							labs = append(labs, lab)
 						}
+						event.M.RUnlock()
 					}
 				}
 
@@ -384,9 +386,11 @@ func (d *daemon) getEvents(c *gin.Context) {
 			if dbEvent.Status == 0 {
 				event, err := d.eventpool.GetEvent(dbEvent.Tag)
 				if err == nil {
+					event.M.RLock()
 					for _, lab := range event.Labs {
 						labs = append(labs, lab)
 					}
+					event.M.RUnlock()
 				}
 			}
 

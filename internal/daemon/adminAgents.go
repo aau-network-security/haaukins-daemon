@@ -175,9 +175,9 @@ func (d *daemon) getAgents(c *gin.Context) {
 
 	admin, err := d.getUserFromGinContext(c)
 	if err != nil {
-			log.Error().Err(err).Msg("error getting user from gin context")
-			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
-			return
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
 	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
@@ -249,9 +249,9 @@ func (d *daemon) deleteAgent(c *gin.Context) {
 
 	admin, err := d.getUserFromGinContext(c)
 	if err != nil {
-			log.Error().Err(err).Msg("error getting user from gin context")
-			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
-			return
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
 	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
@@ -383,14 +383,18 @@ func (d *daemon) reconnectAgent(c *gin.Context) {
 		}
 
 		d.agentPool.addAgent(agentForPool)
-
+		d.eventpool.M.RLock()
 		for _, event := range d.eventpool.Events {
+			event.M.Lock()
 			for _, lab := range event.Labs {
+
 				if lab.ParentAgent.Name == agentForPool.Name {
 					lab.Conn = conn
 				}
 			}
+			event.M.Unlock()
 		}
+		d.eventpool.M.RUnlock()
 
 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 		return
@@ -402,9 +406,9 @@ func (d *daemon) reconnectAgent(c *gin.Context) {
 func (d *daemon) lockAgentState(c *gin.Context) {
 	admin, err := d.getUserFromGinContext(c)
 	if err != nil {
-			log.Error().Err(err).Msg("error getting user from gin context")
-			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
-			return
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
 	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
@@ -439,9 +443,9 @@ func (d *daemon) lockAgentState(c *gin.Context) {
 func (d *daemon) unlockAgentState(c *gin.Context) {
 	admin, err := d.getUserFromGinContext(c)
 	if err != nil {
-			log.Error().Err(err).Msg("error getting user from gin context")
-			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
-			return
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
 	}
 	d.auditLogger.Info().
 		Time("UTC", time.Now().UTC()).
