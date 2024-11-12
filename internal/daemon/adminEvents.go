@@ -113,6 +113,12 @@ func (d *daemon) newEvent(c *gin.Context) {
 			return
 		}
 
+		if req.Type == int32(TypeBeginner) {
+			log.Warn().Msg("admin user tried to create an event with beginner type")
+			c.JSON(http.StatusBadRequest, APIResponse{Status: "Beginner events are no longer supported"})
+			return
+		}
+
 		uniqueExercisesList := removeDuplicates(req.ExerciseTags)
 
 		exClientResp, err := d.exClient.GetExerciseByTags(ctx, &eproto.GetExerciseByTagsRequest{Tag: uniqueExercisesList})
