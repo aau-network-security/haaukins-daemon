@@ -145,6 +145,7 @@ Short minded fix is currently inserting a 1 milisecond delay...
 func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string, labExpiry time.Duration) {
 	browserQueueHandler := func() {
 		log.Debug().Msg("Waiting for teams to enter browser lab queue")
+	Outer:
 		for {
 			time.Sleep(1 * time.Millisecond)
 			e := event.TeamsWaitingForBrowserLabs.Front()
@@ -169,6 +170,32 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string, l
 				return
 			}
 
+			team.M.RLock()
+			TeamStatus := team.Status
+			team.M.RUnlock()
+			if TeamStatus != WaitingForLab {
+				for {
+					e := event.TeamsWaitingForBrowserLabs.Front()
+					// If no more teams are waiting for labs, close the lab, remove it from the event and continue
+					if e == nil {
+						log.Info().Msg("No more teams waiting for labs closing abunadant lab")
+						event.M.Lock()
+						delete(event.Labs, lab.LabInfo.Tag)
+						event.M.Unlock()
+						saveState(eventPool, statePath)
+						if err := lab.close(); err != nil {
+							log.Error().Err(err).Msg("error closing lab no longer needed")
+						}
+						continue Outer
+					}
+					log.Debug().Msg("New team pulled from browser queue")
+					event.TeamsWaitingForBrowserLabs.Remove(e)
+
+					team = e.Value.(*Team)
+					break
+				}
+			}
+
 			team.M.Lock()
 			lab.IsAssigned = true
 			lab.ExpiresAtTime = time.Now().Add(labExpiry * time.Minute)
@@ -184,6 +211,7 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string, l
 
 	vpnQueueHandler := func() {
 		log.Debug().Msg("Waiting for team to enter vpn lab queue")
+	Outer:
 		for {
 			time.Sleep(1 * time.Millisecond)
 			e := event.TeamsWaitingForVpnLabs.Front()
@@ -204,6 +232,32 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string, l
 			} else {
 				log.Debug().Msg("channel closed closing vpnQueueHandler")
 				return
+			}
+
+			team.M.RLock()
+			TeamStatus := team.Status
+			team.M.RUnlock()
+			if TeamStatus != WaitingForLab {
+				for {
+					e := event.TeamsWaitingForVpnLabs.Front()
+					// If no more teams are waiting for labs, close the lab, remove it from the event and continue
+					if e == nil {
+						log.Info().Msg("No more teams waiting for labs closing abunadant lab")
+						event.M.Lock()
+						delete(event.Labs, lab.LabInfo.Tag)
+						event.M.Unlock()
+						saveState(eventPool, statePath)
+						if err := lab.close(); err != nil {
+							log.Error().Err(err).Msg("error closing lab no longer needed")
+						}
+						continue Outer
+					}
+					log.Debug().Msg("New team pulled from browser queue")
+					event.TeamsWaitingForVpnLabs.Remove(e)
+
+					team = e.Value.(*Team)
+					break
+				}
 			}
 
 			team.M.Lock()

@@ -22,6 +22,11 @@ func (d *daemon) eventLabsSubrouter(r *gin.RouterGroup) {
 	labs.GET("/hosts", d.getHostsInLab)
 	labs.GET("/vpnconf/:id", d.getVpnConf)
 	labs.GET("/resetlab", d.resetLab)
+	labs.DELETE("/close", d.closeLab)
+
+	queue := labs.Group("/queue")
+	queue.Use(d.eventAuthMiddleware())
+	queue.DELETE("/cancel", d.cancelLabConfigurationRequest)
 }
 
 type LabRequest struct {
@@ -101,10 +106,12 @@ func (d *daemon) configureLab(c *gin.Context) {
 		return
 	}
 
-	if err := d.agentPool.createLabForEvent(ctx, req.IsVpn, event, d.eventpool); err != nil {
-		log.Error().Err(err).Msg("Error creating lab")
-		c.JSON(http.StatusInternalServerError, APIResponse{Status: "error when creating lab, please try again..."})
-		return
+	if (req.IsVpn && event.TeamsWaitingForVpnLabs.Len() == 0 && len(event.UnassignedVpnLabs) == 0) || (!req.IsVpn && event.TeamsWaitingForBrowserLabs.Len() == 0 && len(event.UnassignedBrowserLabs) == 0) {
+		if err := d.agentPool.createLabForEvent(ctx, req.IsVpn, event, d.eventpool); err != nil {
+			log.Error().Err(err).Msg("Error creating lab")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "error when creating lab, please try again..."})
+			return
+		}
 	}
 
 	//Add team to queue
@@ -158,6 +165,89 @@ func (d *daemon) getLabInfo(c *gin.Context) {
 	labResponse := assembleLabResponse(team.Lab)
 
 	c.JSON(http.StatusOK, APIResponse{Status: "OK", TeamLab: labResponse})
+}
+
+// Closes the lab for the requesting team
+func (d *daemon) closeLab(c *gin.Context) {
+	teamClaims := unpackTeamClaims(c)
+
+	event, err := d.eventpool.GetEvent(teamClaims.EventTag)
+	if err != nil {
+		log.Error().Err(err).Msg("could not find event in event pool")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "event for team is not currently running"})
+		return
+	}
+
+	team, err := event.GetTeam(teamClaims.Username)
+	if err != nil {
+		log.Error().Err(err).Msg("could not find team for event")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "could not find team for event"})
+		return
+	}
+
+	team.M.Lock()
+	defer team.M.Unlock()
+
+	if team.Lab == nil {
+		log.Debug().Str("team", team.Username).Msg("lab not found for team")
+		c.JSON(http.StatusNotFound, APIResponse{Status: "lab not found"})
+		return
+	}
+
+	defer saveState(d.eventpool, d.conf.StatePath)
+
+	event.M.Lock()
+	delete(event.Labs, team.Lab.LabInfo.Tag)
+	event.M.Unlock()
+	if team.Lab.Conn != nil {
+		if err := team.Lab.close(); err != nil {
+			log.Error().Err(err).Str("team", team.Username).Msg("Error closing lab for team")
+		}
+	}
+	team.Lab = nil
+	sendCommandToTeam(team, updateTeam)
+
+	c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+}
+
+func (d *daemon) cancelLabConfigurationRequest(c *gin.Context) {
+	teamClaims := unpackTeamClaims(c)
+
+	event, err := d.eventpool.GetEvent(teamClaims.EventTag)
+	if err != nil {
+		log.Error().Err(err).Msg("could not find event in event pool")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "event for team is not currently running"})
+		return
+	}
+
+	team, err := event.GetTeam(teamClaims.Username)
+	if err != nil {
+		log.Error().Err(err).Msg("could not find team for event")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "could not find team for event"})
+		return
+	}
+
+	team.M.Lock()
+	defer team.M.Unlock()
+
+	if team.Status == InQueue {
+		team.Status = Idle
+		if team.QueueElement != nil {
+			event.TeamsWaitingForBrowserLabs.Remove(team.QueueElement)
+		}
+		sendCommandToTeam(team, updateTeam)
+		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+		return
+	}
+
+	if team.Status == WaitingForLab {
+		team.Status = Idle
+		sendCommandToTeam(team, updateTeam)
+		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+		return
+	}
+
+	c.JSON(http.StatusBadRequest, APIResponse{Status: "team is not in queue"})
 }
 
 // Returns current hosts running in their lab
