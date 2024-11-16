@@ -106,12 +106,10 @@ func (d *daemon) configureLab(c *gin.Context) {
 		return
 	}
 
-	if (req.IsVpn && event.TeamsWaitingForVpnLabs.Len() == 0 && len(event.UnassignedVpnLabs) == 0) || (!req.IsVpn && event.TeamsWaitingForBrowserLabs.Len() == 0 && len(event.UnassignedBrowserLabs) == 0) {
-		if err := d.agentPool.createLabForEvent(ctx, req.IsVpn, event, d.eventpool); err != nil {
-			log.Error().Err(err).Msg("Error creating lab")
-			c.JSON(http.StatusInternalServerError, APIResponse{Status: "error when creating lab, please try again..."})
-			return
-		}
+	if err := d.agentPool.createLabForEvent(ctx, req.IsVpn, event, d.eventpool); err != nil {
+		log.Error().Err(err).Msg("Error creating lab")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "error when creating lab, please try again..."})
+		return
 	}
 
 	//Add team to queue
@@ -132,7 +130,7 @@ func (d *daemon) configureLab(c *gin.Context) {
 	if event.IsMaxLabsReached() {
 		broadCastCommandToEventTeams(event, updateEventInfo)
 	}
-	log.Info().Str("username", team.Username).Msg("putting team into queue for vpn lab")
+	log.Info().Str("username", team.Username).Msg("putting team into queue for browser lab")
 	queueElement := event.TeamsWaitingForBrowserLabs.PushBack(team)
 	team.QueueElement = queueElement
 	sendCommandToTeam(team, updateTeam)
@@ -234,14 +232,8 @@ func (d *daemon) cancelLabConfigurationRequest(c *gin.Context) {
 		team.Status = Idle
 		if team.QueueElement != nil {
 			event.TeamsWaitingForBrowserLabs.Remove(team.QueueElement)
+			event.TeamsWaitingForVpnLabs.Remove(team.QueueElement)
 		}
-		sendCommandToTeam(team, updateTeam)
-		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
-		return
-	}
-
-	if team.Status == WaitingForLab {
-		team.Status = Idle
 		sendCommandToTeam(team, updateTeam)
 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 		return
