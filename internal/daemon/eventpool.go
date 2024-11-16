@@ -157,6 +157,11 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string, l
 
 			e := event.TeamsWaitingForBrowserLabs.Front()
 			if e == nil {
+				if lab.Conn == nil {
+					event.UnassignedBrowserLabs <- lab
+					time.Sleep(1 * time.Millisecond)
+					continue
+				}
 				log.Info().Msg("No more teams waiting for labs closing abunadant lab")
 				event.M.Lock()
 				delete(event.Labs, lab.LabInfo.Tag)
@@ -198,6 +203,11 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string, l
 
 			e := event.TeamsWaitingForVpnLabs.Front()
 			if e == nil {
+				if lab.Conn == nil {
+					event.UnassignedVpnLabs <- lab
+					time.Sleep(1 * time.Millisecond)
+					continue
+				}
 				log.Info().Msg("No more teams waiting for labs closing abunadant lab")
 				event.M.Lock()
 				delete(event.Labs, lab.LabInfo.Tag)
