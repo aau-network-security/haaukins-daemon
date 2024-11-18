@@ -114,8 +114,10 @@ func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, a *Ag
 						}
 						event.UnassignedVpnLabs <- agentLab
 						event.M.Lock()
+						log.Debug().Str("eventTag", event.Config.Tag).Msg("Lock on event, agentpool.go: 116")
 						event.Labs[l.Tag] = agentLab
 						event.M.Unlock()
+						log.Debug().Str("eventTag", event.Config.Tag).Msg("Unlock on event, agentpool.go: 119")
 						saveState(eventPool, statePath)
 						continue
 					}
@@ -131,8 +133,10 @@ func (ap *AgentPool) connectToMonitoringStream(routineCtx context.Context, a *Ag
 					}
 					event.UnassignedBrowserLabs <- agentLab
 					event.M.Lock()
+					log.Debug().Str("eventTag", event.Config.Tag).Msg("Lock on event, agentpool.go: 135")
 					event.Labs[l.Tag] = agentLab
 					event.M.Unlock()
+					log.Debug().Str("eventTag", event.Config.Tag).Msg("Unlock on event, agentpool.go: 138")
 					saveState(eventPool, statePath)
 					continue
 				}
@@ -728,8 +732,10 @@ func (d *daemon) agentReconnectionRoutine(ticker *time.Ticker) {
 
 				d.agentPool.addAgent(agentForPool)
 				d.eventpool.M.RLock()
+				log.Debug().Msg("Read Lock on eventpool, agentpool.go: 734")
 				for _, event := range d.eventpool.Events {
 					event.M.Lock()
+					log.Debug().Str("eventTag", event.Config.Tag).Msg("Lock on event, agentpool.go: 737")
 					for _, lab := range event.Labs {
 
 						if lab.ParentAgent.Name == agentForPool.Name {
@@ -737,8 +743,10 @@ func (d *daemon) agentReconnectionRoutine(ticker *time.Ticker) {
 						}
 					}
 					event.M.Unlock()
+					log.Debug().Str("eventTag", event.Config.Tag).Msg("Unlock on event, agentpool.go: 745")
 				}
 				d.eventpool.M.RUnlock()
+				log.Debug().Msg("Read Unlock on eventpool, agentpool.go: 748")
 			}
 		}
 	}

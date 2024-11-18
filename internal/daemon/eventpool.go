@@ -164,8 +164,10 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string, l
 				}
 				log.Info().Msg("No more teams waiting for labs closing abunadant lab")
 				event.M.Lock()
+				log.Debug().Str("eventTag", event.Config.Tag).Msg("Lock on event, eventpool.go: 166")
 				delete(event.Labs, lab.LabInfo.Tag)
 				event.M.Unlock()
+				log.Debug().Str("eventTag", event.Config.Tag).Msg("Unlock on event, eventpool.go: 169")
 				saveState(eventPool, statePath)
 				if err := lab.close(); err != nil {
 					log.Error().Err(err).Msg("error closing lab no longer needed")
@@ -178,11 +180,13 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string, l
 			team := e.Value.(*Team)
 
 			team.M.Lock()
+			log.Debug().Str("team", team.Username).Msg("Lock on team, eventpool.go: 182")
 			lab.IsAssigned = true
 			lab.ExpiresAtTime = time.Now().Add(labExpiry * time.Minute)
 			team.Lab = lab
 			team.Status = Idle
 			team.M.Unlock()
+			log.Debug().Str("team", team.Username).Msg("Unlock on team, eventpool.go: 188")
 
 			sendCommandToTeam(team, updateTeam)
 			saveState(eventPool, statePath)
@@ -210,8 +214,10 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string, l
 				}
 				log.Info().Msg("No more teams waiting for labs closing abunadant lab")
 				event.M.Lock()
+				log.Debug().Str("eventTag", event.Config.Tag).Msg("Lock on event, eventpool.go: 216")
 				delete(event.Labs, lab.LabInfo.Tag)
 				event.M.Unlock()
+				log.Debug().Str("eventTag", event.Config.Tag).Msg("Unlock on event, eventpool.go: 219")
 				saveState(eventPool, statePath)
 				if err := lab.close(); err != nil {
 					log.Error().Err(err).Msg("error closing lab no longer needed")
@@ -225,11 +231,13 @@ func (event *Event) startQueueHandlers(eventPool *EventPool, statePath string, l
 			team := e.Value.(*Team)
 
 			team.M.Lock()
+			log.Debug().Str("team", team.Username).Msg("Lock on team, eventpool.go: 233")
 			lab.IsAssigned = true
 			lab.ExpiresAtTime = time.Now().Add(labExpiry * time.Minute)
 			team.Lab = lab
 			team.Status = Idle
 			team.M.Unlock()
+			log.Debug().Str("team", team.Username).Msg("Unlock on team, eventpool.go: 239")
 
 			sendCommandToTeam(team, updateTeam)
 			saveState(eventPool, statePath)

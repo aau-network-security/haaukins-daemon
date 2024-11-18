@@ -363,10 +363,12 @@ func (d *daemon) startExerciseInLab(c *gin.Context) {
 		return
 	}
 	team.M.Lock()
+	log.Debug().Str("team", team.Username).Msg("Lock on team, eventExercises.go: 365")
 	team.Status = RunningExerciseCommand
 	defer func(team *Team) {
 		team.Status = Idle
 		team.M.Unlock()
+		log.Debug().Str("team", team.Username).Msg("Unlock on team, eventExercises.go: 370")
 		sendCommandToTeam(team, updateTeam)
 	}(team)
 	sendCommandToTeam(team, updateTeam)
@@ -503,10 +505,12 @@ func (d *daemon) stopExercise(c *gin.Context) {
 		return
 	}
 	team.M.Lock()
+	log.Debug().Str("team", team.Username).Msg("Lock on team, eventExercises.go: 507")
 	team.Status = RunningExerciseCommand
 	defer func(team *Team) {
 		team.Status = Idle
 		team.M.Unlock()
+		log.Debug().Str("team", team.Username).Msg("Unlock on team, eventExercises.go: 512")
 		sendCommandToTeam(team, updateTeam)
 	}(team)
 	sendCommandToTeam(team, updateTeam)
@@ -561,10 +565,12 @@ func (d *daemon) resetExercise(c *gin.Context) {
 		return
 	}
 	team.M.Lock()
+	log.Debug().Str("team", team.Username).Msg("Lock on team, eventExercises.go: 567")
 	team.Status = RunningExerciseCommand
 	defer func(team *Team) {
 		team.Status = Idle
 		team.M.Unlock()
+		log.Debug().Str("team", team.Username).Msg("Unlock on team, eventExercises.go: 572")
 		sendCommandToTeam(team, updateTeam)
 	}(team)
 	sendCommandToTeam(team, updateTeam)

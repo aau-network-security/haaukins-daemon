@@ -363,12 +363,15 @@ func (d *daemon) labExpiryRoutine() {
 	for {
 		time.Sleep(1 * time.Second)
 		d.eventpool.M.RLock()
+		log.Debug().Msg("Read Lock on eventpool, daemon.go: 365")
 		for _, event := range d.eventpool.Events {
 			var wg sync.WaitGroup
 			anyLabsClosed := false
 			event.M.RLock()
+			log.Debug().Str("eventTag", event.Config.Tag).Msg("Read Lock on event, daemon.go: 370")
 			for _, team := range event.Teams {
 				team.M.RLock()
+				log.Debug().Str("team", team.Username).Msg("Read Lock on team, daemon.go: 373")
 				if team.Lab != nil {
 					if time.Now().After(team.Lab.ExpiresAtTime) {
 						if team.Lab.Conn != nil {
@@ -378,11 +381,15 @@ func (d *daemon) labExpiryRoutine() {
 								defer wg.Done()
 								defer func() {
 									event.M.Lock()
+									log.Debug().Str("eventTag", event.Config.Tag).Msg("Lock on event, daemon.go: 383")
 									delete(event.Labs, team.Lab.LabInfo.Tag)
 									event.M.Unlock()
+									log.Debug().Str("eventTag", event.Config.Tag).Msg("Unlock on event, daemon.go: 386")
 									team.M.Lock()
+									log.Debug().Str("team", team.Username).Msg("Lock on team, daemon.go: 388")
 									team.Lab = nil
 									team.M.Unlock()
+									log.Debug().Str("team", team.Username).Msg("Unlock on team, daemon.go: 391")
 									saveState(d.eventpool, d.conf.StatePath)
 									sendCommandToTeam(team, updateTeam)
 								}()
@@ -399,14 +406,17 @@ func (d *daemon) labExpiryRoutine() {
 					}
 				}
 				team.M.RUnlock()
+				log.Debug().Str("team", team.Username).Msg("Read unlock on team, daemon.go: 408")
 			}
 			event.M.RUnlock()
+			log.Debug().Str("eventTag", event.Config.Tag).Msg("Read unlock on event, daemon.go: 411")
 			wg.Wait()
 			if anyLabsClosed {
 				broadCastCommandToEventTeams(event, updateEventInfo)
 			}
 		}
 		d.eventpool.M.RUnlock()
+		log.Debug().Msg("Read unlock on eventpool, daemon.go: 418")
 	}
 }
 

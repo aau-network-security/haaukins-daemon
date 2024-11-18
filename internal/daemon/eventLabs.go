@@ -184,7 +184,11 @@ func (d *daemon) closeLab(c *gin.Context) {
 	}
 
 	team.M.Lock()
-	defer team.M.Unlock()
+	log.Debug().Str("team", team.Username).Msg("Lock on team, eventLabs.go: 186")
+	defer func(team *Team) {
+		team.M.Unlock()
+		log.Debug().Str("team", team.Username).Msg("Unlock on team, eventLabs.go: 189")
+	}(team)
 
 	if team.Lab == nil {
 		log.Debug().Str("team", team.Username).Msg("lab not found for team")
@@ -195,8 +199,10 @@ func (d *daemon) closeLab(c *gin.Context) {
 	defer saveState(d.eventpool, d.conf.StatePath)
 
 	event.M.Lock()
+	log.Debug().Str("eventTag", event.Config.Tag).Msg("Lock on event, eventLabs.go: 201")
 	delete(event.Labs, team.Lab.LabInfo.Tag)
 	event.M.Unlock()
+	log.Debug().Str("eventTag", event.Config.Tag).Msg("Unlock on event, eventLabs.go: 204")
 	if team.Lab.Conn != nil {
 		if err := team.Lab.close(); err != nil {
 			log.Error().Err(err).Str("team", team.Username).Msg("Error closing lab for team")
@@ -226,7 +232,11 @@ func (d *daemon) cancelLabConfigurationRequest(c *gin.Context) {
 	}
 
 	team.M.Lock()
-	defer team.M.Unlock()
+	log.Debug().Str("team", team.Username).Msg("Lock on team, eventLabs.go: 234")
+	defer func(team *Team) {
+		team.M.Unlock()
+		log.Debug().Str("team", team.Username).Msg("Unlock on team, eventLabs.go: 237")
+	}(team)
 
 	if team.Status == InQueue {
 		team.Status = Idle
@@ -393,10 +403,12 @@ func (d *daemon) resetVm(c *gin.Context) {
 	}
 
 	team.M.Lock()
+	log.Debug().Str("team", team.Username).Msg("Lock on team, eventLabs.go: 405")
 	team.Status = RunningVmCommand
 	defer func(team *Team) {
 		team.Status = Idle
 		team.M.Unlock()
+		log.Debug().Str("team", team.Username).Msg("Unlock on team, eventLabs.go: 410")
 		sendCommandToTeam(team, updateTeam)
 	}(team)
 	sendCommandToTeam(team, updateTeam)
