@@ -183,11 +183,15 @@ func (d *daemon) closeLab(c *gin.Context) {
 		return
 	}
 
+	event.M.Lock()
+	log.Debug().Str("eventTag", event.Config.Tag).Msg("Lock on event, eventLabs.go: 186")
 	team.M.Lock()
-	log.Debug().Str("team", team.Username).Msg("Lock on team, eventLabs.go: 186")
+	log.Debug().Str("team", team.Username).Msg("Lock on team, eventLabs.go: 188")
 	defer func(team *Team) {
 		team.M.Unlock()
-		log.Debug().Str("team", team.Username).Msg("Unlock on team, eventLabs.go: 189")
+		log.Debug().Str("team", team.Username).Msg("Unlock on team, eventLabs.go: 191")
+		event.M.Unlock()
+		log.Debug().Str("eventTag", event.Config.Tag).Msg("Unlock on event, eventLabs.go: 193")
 	}(team)
 
 	if team.Lab == nil {
@@ -198,11 +202,8 @@ func (d *daemon) closeLab(c *gin.Context) {
 
 	defer saveState(d.eventpool, d.conf.StatePath)
 
-	event.M.Lock()
-	log.Debug().Str("eventTag", event.Config.Tag).Msg("Lock on event, eventLabs.go: 201")
 	delete(event.Labs, team.Lab.LabInfo.Tag)
-	event.M.Unlock()
-	log.Debug().Str("eventTag", event.Config.Tag).Msg("Unlock on event, eventLabs.go: 204")
+
 	if team.Lab.Conn != nil {
 		go func(team *Team) {
 			if err := team.Lab.close(); err != nil {
@@ -405,12 +406,12 @@ func (d *daemon) resetVm(c *gin.Context) {
 	}
 
 	team.M.Lock()
-	log.Debug().Str("team", team.Username).Msg("Lock on team, eventLabs.go: 405")
+	log.Debug().Str("team", team.Username).Msg("Lock on team, eventLabs.go: 408")
 	team.Status = RunningVmCommand
 	defer func(team *Team) {
 		team.Status = Idle
 		team.M.Unlock()
-		log.Debug().Str("team", team.Username).Msg("Unlock on team, eventLabs.go: 410")
+		log.Debug().Str("team", team.Username).Msg("Unlock on team, eventLabs.go: 413")
 		sendCommandToTeam(team, updateTeam)
 	}(team)
 	sendCommandToTeam(team, updateTeam)
