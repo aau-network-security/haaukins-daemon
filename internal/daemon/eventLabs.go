@@ -183,36 +183,34 @@ func (d *daemon) closeLab(c *gin.Context) {
 		return
 	}
 
-	event.M.Lock()
-	log.Debug().Str("eventTag", event.Config.Tag).Msg("Lock on event, eventLabs.go: 186")
-	team.M.Lock()
-	log.Debug().Str("team", team.Username).Msg("Lock on team, eventLabs.go: 188")
-	defer func(team *Team) {
-		team.M.Unlock()
-		log.Debug().Str("team", team.Username).Msg("Unlock on team, eventLabs.go: 191")
-		event.M.Unlock()
-		log.Debug().Str("eventTag", event.Config.Tag).Msg("Unlock on event, eventLabs.go: 193")
-	}(team)
-
-	if team.Lab == nil {
+	teamLab := team.GetLab()
+	if teamLab == nil {
 		log.Debug().Str("team", team.Username).Msg("lab not found for team")
 		c.JSON(http.StatusNotFound, APIResponse{Status: "lab not found"})
 		return
 	}
 
-	defer saveState(d.eventpool, d.conf.StatePath)
-
-	delete(event.Labs, team.Lab.LabInfo.Tag)
-
 	if team.Lab.Conn != nil {
-		go func(team *Team) {
+		go func(team *Team, event *Event) {
+			defer func() {
+				event.M.Lock()
+				log.Debug().Str("eventTag", event.Config.Tag).Msg("Lock on event, eventLabs.go: 195")
+				delete(event.Labs, team.Lab.LabInfo.Tag)
+				event.M.Unlock()
+				log.Debug().Str("eclearventTag", event.Config.Tag).Msg("Unlock on event, eventLabs.go: 198")
+				team.M.Lock()
+				log.Debug().Str("team", team.Username).Msg("Lock on team, eventLabs.go: 200")
+				team.Lab = nil
+				team.M.Unlock()
+				log.Debug().Str("team", team.Username).Msg("Unlock on team, eventLabs.go: 203")
+				saveState(d.eventpool, d.conf.StatePath)
+				sendCommandToTeam(team, updateTeam)
+			}()
 			if err := team.Lab.close(); err != nil {
 				log.Error().Err(err).Str("team", team.Username).Msg("Error closing lab for team")
 			}
-		}(team)
+		}(team, event)
 	}
-	team.Lab = nil
-	sendCommandToTeam(team, updateTeam)
 
 	c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 }
