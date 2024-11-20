@@ -204,9 +204,11 @@ func (d *daemon) closeLab(c *gin.Context) {
 	event.M.Unlock()
 	log.Debug().Str("eventTag", event.Config.Tag).Msg("Unlock on event, eventLabs.go: 204")
 	if team.Lab.Conn != nil {
-		if err := team.Lab.close(); err != nil {
-			log.Error().Err(err).Str("team", team.Username).Msg("Error closing lab for team")
-		}
+		go func(team *Team) {
+			if err := team.Lab.close(); err != nil {
+				log.Error().Err(err).Str("team", team.Username).Msg("Error closing lab for team")
+			}
+		}(team)
 	}
 	team.Lab = nil
 	sendCommandToTeam(team, updateTeam)
