@@ -183,27 +183,30 @@ func (d *daemon) closeLab(c *gin.Context) {
 		return
 	}
 
-	team.M.Lock()
-	defer team.M.Unlock()
-
-	if team.Lab == nil {
+	teamLab := team.GetLab()
+	if teamLab == nil {
 		log.Debug().Str("team", team.Username).Msg("lab not found for team")
 		c.JSON(http.StatusNotFound, APIResponse{Status: "lab not found"})
 		return
 	}
 
-	defer saveState(d.eventpool, d.conf.StatePath)
-
-	event.M.Lock()
-	delete(event.Labs, team.Lab.LabInfo.Tag)
-	event.M.Unlock()
 	if team.Lab.Conn != nil {
-		if err := team.Lab.close(); err != nil {
-			log.Error().Err(err).Str("team", team.Username).Msg("Error closing lab for team")
-		}
+		go func(team *Team, event *Event) {
+			defer func() {
+				event.M.Lock()
+				delete(event.Labs, team.Lab.LabInfo.Tag)
+				event.M.Unlock()
+				team.M.Lock()
+				team.Lab = nil
+				team.M.Unlock()
+				saveState(d.eventpool, d.conf.StatePath)
+				sendCommandToTeam(team, updateTeam)
+			}()
+			if err := team.Lab.close(); err != nil {
+				log.Error().Err(err).Str("team", team.Username).Msg("Error closing lab for team")
+			}
+		}(team, event)
 	}
-	team.Lab = nil
-	sendCommandToTeam(team, updateTeam)
 
 	c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 }
@@ -226,7 +229,9 @@ func (d *daemon) cancelLabConfigurationRequest(c *gin.Context) {
 	}
 
 	team.M.Lock()
-	defer team.M.Unlock()
+	defer func(team *Team) {
+		team.M.Unlock()
+	}(team)
 
 	if team.Status == InQueue {
 		team.Status = Idle
