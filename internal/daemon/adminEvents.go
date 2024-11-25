@@ -339,12 +339,10 @@ func (d *daemon) getEvents(c *gin.Context) {
 					event, err := d.eventpool.GetEvent(dbEvent.Tag)
 					if err == nil {
 						event.M.RLock()
-						log.Debug().Str("eventTag", event.Config.Tag).Msg("Read lock on event, adminEvents.go: 341")
 						for _, lab := range event.Labs {
 							labs = append(labs, lab)
 						}
 						event.M.RUnlock()
-						log.Debug().Str("eventTag", event.Config.Tag).Msg("Read unlock on event, adminEvents.go: 346")
 					}
 				}
 
@@ -395,12 +393,10 @@ func (d *daemon) getEvents(c *gin.Context) {
 				event, err := d.eventpool.GetEvent(dbEvent.Tag)
 				if err == nil {
 					event.M.RLock()
-					log.Debug().Str("eventTag", event.Config.Tag).Msg("Read lock on event, adminEvents.go: 397")
 					for _, lab := range event.Labs {
 						labs = append(labs, lab)
 					}
 					event.M.RUnlock()
-					log.Debug().Str("eventTag", event.Config.Tag).Msg("Read unlock on event, adminEvents.go: 402")
 				}
 			}
 

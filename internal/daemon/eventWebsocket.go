@@ -64,21 +64,17 @@ func (d *daemon) eventWebsocket(c *gin.Context) {
 
 		wsId := uuid.New().String()
 		team.M.Lock()
-		log.Debug().Str("team", team.Username).Msg("Lock on team, eventWebsocket.go: 66")
 		if team.ActiveWebsocketConnections == nil {
 			team.ActiveWebsocketConnections = make(map[string]*websocket.Conn)
 		}
 		team.ActiveWebsocketConnections[wsId] = ws
 		team.M.Unlock()
-		log.Debug().Str("team", team.Username).Msg("Unlock on team, eventWebsocket.go: 72")
 
 		defer func(ws *websocket.Conn, team *Team, wsId string) {
 			log.Debug().Msg("closing connection")
 			team.M.Lock()
-			log.Debug().Str("team", team.Username).Msg("Lock on team, eventWebsocket.go: 77")
 			delete(team.ActiveWebsocketConnections, wsId)
 			team.M.Unlock()
-			log.Debug().Str("team", team.Username).Msg("Unlock on team, eventWebsocket.go: 81")
 			ws.Close()
 		}(ws, team, wsId)
 

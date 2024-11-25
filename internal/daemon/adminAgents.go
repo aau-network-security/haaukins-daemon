@@ -384,10 +384,8 @@ func (d *daemon) reconnectAgent(c *gin.Context) {
 
 		d.agentPool.addAgent(agentForPool)
 		d.eventpool.M.RLock()
-		log.Debug().Msg("Read lock on eventpool, adminAgents.go: 386")
 		for _, event := range d.eventpool.Events {
 			event.M.Lock()
-			log.Debug().Str("eventTag", event.Config.Tag).Msg("Lock on event, adminAgents.go: 389")
 			for _, lab := range event.Labs {
 
 				if lab.ParentAgent.Name == agentForPool.Name {
@@ -395,10 +393,8 @@ func (d *daemon) reconnectAgent(c *gin.Context) {
 				}
 			}
 			event.M.Unlock()
-			log.Debug().Str("eventTag", event.Config.Tag).Msg("Unlock on event, adminAgents.go: 397")
 		}
 		d.eventpool.M.RUnlock()
-		log.Debug().Msg("Read unlock on eventpool, adminAgents.go: 400")
 
 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 		return
