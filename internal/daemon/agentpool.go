@@ -591,11 +591,15 @@ func (agentLab *AgentLab) updateLabInfo() {
 }
 
 func (agentLab *AgentLab) close() error {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if agentLab.Conn == nil {
+		return errors.New("connection in agentLab is nil")
+	}
 	agentClient := aproto.NewAgentClient(agentLab.Conn)
 	_, err := agentClient.CloseLab(ctx, &aproto.CloseLabRequest{LabTag: agentLab.LabInfo.Tag})
 	if err != nil {
-		log.Error().Err(err).Msg("error updating lab info")
+		log.Error().Err(err).Msg("error closing lab")
 		return err
 	}
 	return nil

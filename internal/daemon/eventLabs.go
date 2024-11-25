@@ -106,12 +106,10 @@ func (d *daemon) configureLab(c *gin.Context) {
 		return
 	}
 
-	if (req.IsVpn && event.TeamsWaitingForVpnLabs.Len() == 0 && len(event.UnassignedVpnLabs) == 0) || (!req.IsVpn && event.TeamsWaitingForBrowserLabs.Len() == 0 && len(event.UnassignedBrowserLabs) == 0) {
-		if err := d.agentPool.createLabForEvent(ctx, req.IsVpn, event, d.eventpool); err != nil {
-			log.Error().Err(err).Msg("Error creating lab")
-			c.JSON(http.StatusInternalServerError, APIResponse{Status: "error when creating lab, please try again..."})
-			return
-		}
+	if err := d.agentPool.createLabForEvent(ctx, req.IsVpn, event, d.eventpool); err != nil {
+		log.Error().Err(err).Msg("Error creating lab")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "error when creating lab, please try again..."})
+		return
 	}
 
 	//Add team to queue
@@ -132,7 +130,7 @@ func (d *daemon) configureLab(c *gin.Context) {
 	if event.IsMaxLabsReached() {
 		broadCastCommandToEventTeams(event, updateEventInfo)
 	}
-	log.Info().Str("username", team.Username).Msg("putting team into queue for vpn lab")
+	log.Info().Str("username", team.Username).Msg("putting team into queue for browser lab")
 	queueElement := event.TeamsWaitingForBrowserLabs.PushBack(team)
 	team.QueueElement = queueElement
 	sendCommandToTeam(team, updateTeam)
@@ -185,27 +183,30 @@ func (d *daemon) closeLab(c *gin.Context) {
 		return
 	}
 
-	team.M.Lock()
-	defer team.M.Unlock()
-
-	if team.Lab == nil {
+	teamLab := team.GetLab()
+	if teamLab == nil {
 		log.Debug().Str("team", team.Username).Msg("lab not found for team")
 		c.JSON(http.StatusNotFound, APIResponse{Status: "lab not found"})
 		return
 	}
 
-	defer saveState(d.eventpool, d.conf.StatePath)
-
-	event.M.Lock()
-	delete(event.Labs, team.Lab.LabInfo.Tag)
-	event.M.Unlock()
 	if team.Lab.Conn != nil {
-		if err := team.Lab.close(); err != nil {
-			log.Error().Err(err).Str("team", team.Username).Msg("Error closing lab for team")
-		}
+		go func(team *Team, event *Event) {
+			defer func() {
+				event.M.Lock()
+				delete(event.Labs, team.Lab.LabInfo.Tag)
+				event.M.Unlock()
+				team.M.Lock()
+				team.Lab = nil
+				team.M.Unlock()
+				saveState(d.eventpool, d.conf.StatePath)
+				sendCommandToTeam(team, updateTeam)
+			}()
+			if err := team.Lab.close(); err != nil {
+				log.Error().Err(err).Str("team", team.Username).Msg("Error closing lab for team")
+			}
+		}(team, event)
 	}
-	team.Lab = nil
-	sendCommandToTeam(team, updateTeam)
 
 	c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 }
@@ -228,20 +229,16 @@ func (d *daemon) cancelLabConfigurationRequest(c *gin.Context) {
 	}
 
 	team.M.Lock()
-	defer team.M.Unlock()
+	defer func(team *Team) {
+		team.M.Unlock()
+	}(team)
 
 	if team.Status == InQueue {
 		team.Status = Idle
 		if team.QueueElement != nil {
 			event.TeamsWaitingForBrowserLabs.Remove(team.QueueElement)
+			event.TeamsWaitingForVpnLabs.Remove(team.QueueElement)
 		}
-		sendCommandToTeam(team, updateTeam)
-		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
-		return
-	}
-
-	if team.Status == WaitingForLab {
-		team.Status = Idle
 		sendCommandToTeam(team, updateTeam)
 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 		return

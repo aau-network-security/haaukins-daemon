@@ -362,8 +362,8 @@ func (d *daemon) labExpiryRoutine() {
 	log.Info().Msg("[lab-expiry-routine] starting routine")
 	for {
 		time.Sleep(1 * time.Second)
-		d.eventpool.M.RLock()
-		for _, event := range d.eventpool.Events {
+		events := d.eventpool.GetAllEvents()
+		for _, event := range events {
 			var wg sync.WaitGroup
 			anyLabsClosed := false
 			event.M.RLock()
@@ -406,7 +406,6 @@ func (d *daemon) labExpiryRoutine() {
 				broadCastCommandToEventTeams(event, updateEventInfo)
 			}
 		}
-		d.eventpool.M.RUnlock()
 	}
 }
 
