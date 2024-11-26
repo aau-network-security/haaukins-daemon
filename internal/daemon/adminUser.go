@@ -307,6 +307,7 @@ func (d *daemon) updateAdminUser(c *gin.Context) {
 		{admin.Username, admin.Organization, currUser.Role, "write"},
 	}
 
+	isUserSelf := admin.Username == currUser.Username
 	if authorized, err := d.enforcer.BatchEnforce(requests); (authorized[0] && authorized[1]) || err != nil {
 		if err != nil {
 			log.Error().Err(err).Msgf("Encountered an error while authorizing user update")
@@ -314,14 +315,14 @@ func (d *daemon) updateAdminUser(c *gin.Context) {
 			return
 		}
 
-		if err := d.updateAdminUserQuery(ctx, req, currUser, admin, false); err != nil {
+		if err := d.updateAdminUserQuery(ctx, req, currUser, admin, isUserSelf); err != nil {
 			log.Error().Err(err).Msg("Error updating user")
 			c.JSON(http.StatusBadRequest, APIResponse{Status: fmt.Sprintf("Could not update user: %s", err)})
 			return
 		}
 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 		return
-	} else if admin.Username == currUser.Username { // if the user wants to update itself
+	} else if isUserSelf { // if the user wants to update itself
 		// Update the current user
 		if admin.LabQuota.Valid {
 			labQuota := admin.LabQuota.Int32
@@ -329,7 +330,7 @@ func (d *daemon) updateAdminUser(c *gin.Context) {
 		} else {
 			req.LabQuota = nil
 		}
-		if err := d.updateAdminUserQuery(ctx, req, currUser, admin, true); err != nil {
+		if err := d.updateAdminUserQuery(ctx, req, currUser, admin, isUserSelf); err != nil {
 			log.Error().Err(err).Msg("Error updating user")
 			c.JSON(http.StatusBadRequest, APIResponse{Status: fmt.Sprintf("Could not update user: %s", err)})
 			return
