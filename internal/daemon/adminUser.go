@@ -314,7 +314,7 @@ func (d *daemon) updateAdminUser(c *gin.Context) {
 			return
 		}
 
-		if err := d.updateAdminUserQuery(ctx, req, currUser, admin); err != nil {
+		if err := d.updateAdminUserQuery(ctx, req, currUser, admin, false); err != nil {
 			log.Error().Err(err).Msg("Error updating user")
 			c.JSON(http.StatusBadRequest, APIResponse{Status: fmt.Sprintf("Could not update user: %s", err)})
 			return
@@ -329,7 +329,7 @@ func (d *daemon) updateAdminUser(c *gin.Context) {
 		} else {
 			req.LabQuota = nil
 		}
-		if err := d.updateAdminUserQuery(ctx, req, currUser, admin); err != nil {
+		if err := d.updateAdminUserQuery(ctx, req, currUser, admin, true); err != nil {
 			log.Error().Err(err).Msg("Error updating user")
 			c.JSON(http.StatusBadRequest, APIResponse{Status: fmt.Sprintf("Could not update user: %s", err)})
 			return
@@ -436,6 +436,7 @@ func (d *daemon) getAdminUsers(c *gin.Context) {
 		{admin.Username, admin.Organization, "users::Admins", "read"},
 		{admin.Username, admin.Organization, fmt.Sprintf("users::%s", admin.Organization), "read"},
 	}
+	log.Debug().Msgf("Requests: %v", requests)
 	// Trying to authorize user
 	if authorized, err := d.enforcer.BatchEnforce(requests); authorized[0] || authorized[1] || err != nil {
 		if err != nil {
@@ -570,7 +571,7 @@ func (d *daemon) createAdminUser(ctx context.Context, user adminUserRequest, org
 }
 
 // updateAdminUser holds the logic for updating the pasword or email for a user, and is called from the updateAdminUser handler
-func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUserRequest, currUser db.AdminUser, admin AdminClaims) error {
+func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUserRequest, currUser db.AdminUser, admin AdminClaims, isUpdatedUserSelf bool) error {
 	// Get admininfo for password verification to prevent unauthorized updates of users
 	adminInfo, err := d.db.GetAdminUserByUsername(ctx, admin.Username)
 	if err != nil {
@@ -580,7 +581,7 @@ func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUser
 	// When changing password we want to make sure that the user knows the current password
 	match := verifyPassword(adminInfo.Password, updatedUser.VerifyAdminPassword)
 	// Update password if changed
-	if !verifyPassword(currUser.Password, updatedUser.Password) && updatedUser.Password != "" && match {
+	if !verifyPassword(currUser.Password, updatedUser.Password) && updatedUser.Password != "" && (match || !isUpdatedUserSelf) {
 		log.Debug().Msg("Updating password")
 		// Password should be longer than 8 characters
 		if len(updatedUser.Password) < 8 {
