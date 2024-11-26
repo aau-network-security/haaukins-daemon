@@ -43,6 +43,7 @@ func (d *daemon) adminUserSubrouter(r *gin.RouterGroup) {
 	user.GET("", d.getAdminUsers)
 	user.PUT("", d.updateAdminUser)
 	user.DELETE("/:username", d.deleteAdminUser)
+	// TODO add reset password endpoint which sends an email with a random password to the requested user.
 
 }
 
@@ -166,6 +167,7 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 			return
 		}
 		// Password should be more than 8 characters
+		// TODO add case for if password length is 0, then send email with random password
 		if len(req.Password) < 8 {
 			c.JSON(http.StatusBadRequest, APIResponse{Status: passwordTooShortError})
 			return
