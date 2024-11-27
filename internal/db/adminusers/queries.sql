@@ -33,3 +33,6 @@ SELECT EXISTS( SELECT 1 FROM admin_users WHERE lower(username) = lower(@username
 
 -- name: UpdateAdminUserRoleByUsername :exec
 UPDATE admin_users SET role = @role WHERE lower(username) = lower(@username);
+
+-- name: UpdateAdminUserOrganizationByUsername :exec
+UPDATE admin_users SET organization = @organization WHERE lower(username) = lower(@username);

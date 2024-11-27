@@ -1538,6 +1538,20 @@ func (q *Queries) UpdateAdminPassword(ctx context.Context, arg UpdateAdminPasswo
 	return err
 }
 
+const updateAdminUserOrganizationByUsername = `-- name: UpdateAdminUserOrganizationByUsername :exec
+UPDATE admin_users SET organization = $1 WHERE lower(username) = lower($2)
+`
+
+type UpdateAdminUserOrganizationByUsernameParams struct {
+	Organization string
+	Username     string
+}
+
+func (q *Queries) UpdateAdminUserOrganizationByUsername(ctx context.Context, arg UpdateAdminUserOrganizationByUsernameParams) error {
+	_, err := q.db.ExecContext(ctx, updateAdminUserOrganizationByUsername, arg.Organization, arg.Username)
+	return err
+}
+
 const updateAdminUserRoleByUsername = `-- name: UpdateAdminUserRoleByUsername :exec
 UPDATE admin_users SET role = $1 WHERE lower(username) = lower($2)
 `

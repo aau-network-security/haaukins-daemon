@@ -565,7 +565,7 @@ func (d *daemon) updateRole(c *gin.Context) {
 	userToUpdate, err := d.db.GetAdminUserByUsername(c, usernameToUpdate)
 	if err != nil {
 		log.Error().Err(err).Msg("Error getting user")
-		c.JSON(http.StatusBadRequest, APIResponse{Status: "Could not find user to update"})
+		c.JSON(http.StatusNotFound, APIResponse{Status: "Could not find user to update"})
 		return
 	}
 
@@ -612,7 +612,103 @@ func (d *daemon) updateRole(c *gin.Context) {
 }
 
 func (d *daemon) updateUserOrganization(c *gin.Context) {
+	type orgUpdate struct {
+		NewOrganization string `json:"newOrganization" binding:"required"`
+	}
+	var req orgUpdate
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Error().Err(err).Msg("Error parsing request data: ")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "Error"})
+		return
+	}
 
+	usernameToUpdate := c.Param("username")
+
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
+	d.auditLogger.Info().
+		Time("UTC", time.Now().UTC()).
+		Str("AdminUser", admin.Username).
+		Str("AdminEmail", admin.Email).
+		Str("UserToChange", usernameToUpdate).
+		Str("NewOrganization", req.NewOrganization).
+		Msg("AdminUser is trying to change organization of a user")
+
+	if strings.EqualFold(admin.Username, usernameToUpdate) {
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "Cannot change own role"})
+		return
+	}
+
+	userToUpdate, err := d.db.GetAdminUserByUsername(c, usernameToUpdate)
+	if err != nil {
+		log.Error().Err(err).Msg("Error getting user")
+		c.JSON(http.StatusNotFound, APIResponse{Status: "Could not find user to update"})
+		return
+	}
+
+	if strings.EqualFold(userToUpdate.Organization, req.NewOrganization) {
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "User already in that organization"})
+		return
+	}
+
+	newOrganization, err := d.db.GetOrgByName(c, req.NewOrganization)
+	if err != nil {
+		log.Error().Err(err).Msg("Error getting organization")
+		c.JSON(http.StatusNotFound, APIResponse{Status: "Could not find organization"})
+		return
+	}
+
+	oldOrganization, err := d.db.GetOrgByName(c, userToUpdate.Organization)
+	if err != nil {
+		log.Error().Err(err).Msg("Error getting organization")
+		c.JSON(http.StatusNotFound, APIResponse{Status: "Could not find organization"})
+		return
+	}
+
+	if strings.EqualFold(userToUpdate.Username, oldOrganization.OwnerUser) {
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "Cannot change organization of a current organization owner"})
+		return
+	}
+
+	sub := admin.Username
+	dom := admin.Organization
+	obj := "organizations"
+	act := "write"
+	if authorized, err := d.enforcer.Enforce(sub, dom, obj, act); authorized || err != nil {
+		if err != nil {
+			log.Error().Err(err).Msgf("Encountered an error while authorizing organization update")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+
+		_, err := d.enforcer.AddRoleForUser(userToUpdate.Username, userToUpdate.Role, newOrganization.Name)
+		if err != nil {
+			log.Error().Err(err).Msg("Error adding role")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+
+		_, err = d.enforcer.DeleteRoleForUser(userToUpdate.Username, userToUpdate.Role, userToUpdate.Organization)
+		if err != nil {
+			log.Error().Err(err).Msg("Error deleting role")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+
+		if err := d.db.UpdateAdminUserOrganizationByUsername(c, db.UpdateAdminUserOrganizationByUsernameParams{Organization: newOrganization.Name, Username: userToUpdate.Username}); err != nil {
+			log.Error().Err(err).Msg("Error updating organization")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+
+		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+		return
+	}
+	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 }
 
 // createAdminUser creates a new admin user and is called in the newAdminUser handler
