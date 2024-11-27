@@ -30,3 +30,6 @@ SELECT EXISTS( SELECT 1 FROM admin_users WHERE lower(username) = lower(@username
 
 -- name: CheckIfUserExistsInOrg :one
 SELECT EXISTS( SELECT 1 FROM admin_users WHERE lower(username) = lower(@username) AND lower(organization) = lower(@organization));
+
+-- name: UpdateAdminUserRoleByUsername :exec
+UPDATE admin_users SET role = @role WHERE lower(username) = lower(@username);
