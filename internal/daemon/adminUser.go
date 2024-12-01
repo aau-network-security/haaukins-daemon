@@ -580,6 +580,12 @@ func (d *daemon) updateRole(c *gin.Context) {
 			return
 		}
 
+		if req.NewRole == "superadmin" && userToUpdate.Organization != "Admins" {
+			c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized... Superadmins can only be added to the Admins organization"})
+			return
+
+		}
+
 		changeApplied, err := d.enforcer.AddRoleForUser(userToUpdate.Username, fmt.Sprintf("role::%s", req.NewRole), userToUpdate.Organization)
 		if err != nil {
 			log.Error().Err(err).Msg("Error adding role")
