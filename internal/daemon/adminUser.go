@@ -656,6 +656,11 @@ func (d *daemon) updateUserOrganization(c *gin.Context) {
 		return
 	}
 
+	if userToUpdate.Role == "superadmin" {
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "Cannot change organization of a superadmin"})
+		return
+	}
+
 	if strings.EqualFold(userToUpdate.Organization, req.NewOrganization) {
 		c.JSON(http.StatusBadRequest, APIResponse{Status: "User already in that organization"})
 		return
