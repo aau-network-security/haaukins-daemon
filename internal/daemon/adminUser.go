@@ -43,6 +43,9 @@ func (d *daemon) adminUserSubrouter(r *gin.RouterGroup) {
 	user.GET("", d.getAdminUsers)
 	user.PUT("", d.updateAdminUser)
 	user.DELETE("/:username", d.deleteAdminUser)
+	user.PATCH("/:username/role", d.updateRole)
+	user.PATCH("/:username/organization", d.updateUserOrganization)
+	// TODO add reset password endpoint which sends an email with a random password to the requested user.
 
 }
 
@@ -166,6 +169,7 @@ func (d *daemon) newAdminUser(c *gin.Context) {
 			return
 		}
 		// Password should be more than 8 characters
+		// TODO add case for if password length is 0, then send email with random password
 		if len(req.Password) < 8 {
 			c.JSON(http.StatusBadRequest, APIResponse{Status: passwordTooShortError})
 			return
@@ -307,6 +311,7 @@ func (d *daemon) updateAdminUser(c *gin.Context) {
 		{admin.Username, admin.Organization, currUser.Role, "write"},
 	}
 
+	isUserSelf := admin.Username == currUser.Username
 	if authorized, err := d.enforcer.BatchEnforce(requests); (authorized[0] && authorized[1]) || err != nil {
 		if err != nil {
 			log.Error().Err(err).Msgf("Encountered an error while authorizing user update")
@@ -314,14 +319,14 @@ func (d *daemon) updateAdminUser(c *gin.Context) {
 			return
 		}
 
-		if err := d.updateAdminUserQuery(ctx, req, currUser, admin); err != nil {
+		if err := d.updateAdminUserQuery(ctx, req, currUser, admin, isUserSelf); err != nil {
 			log.Error().Err(err).Msg("Error updating user")
 			c.JSON(http.StatusBadRequest, APIResponse{Status: fmt.Sprintf("Could not update user: %s", err)})
 			return
 		}
 		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
 		return
-	} else if admin.Username == currUser.Username { // if the user wants to update itself
+	} else if isUserSelf { // if the user wants to update itself
 		// Update the current user
 		if admin.LabQuota.Valid {
 			labQuota := admin.LabQuota.Int32
@@ -329,7 +334,7 @@ func (d *daemon) updateAdminUser(c *gin.Context) {
 		} else {
 			req.LabQuota = nil
 		}
-		if err := d.updateAdminUserQuery(ctx, req, currUser, admin); err != nil {
+		if err := d.updateAdminUserQuery(ctx, req, currUser, admin, isUserSelf); err != nil {
 			log.Error().Err(err).Msg("Error updating user")
 			c.JSON(http.StatusBadRequest, APIResponse{Status: fmt.Sprintf("Could not update user: %s", err)})
 			return
@@ -436,6 +441,7 @@ func (d *daemon) getAdminUsers(c *gin.Context) {
 		{admin.Username, admin.Organization, "users::Admins", "read"},
 		{admin.Username, admin.Organization, fmt.Sprintf("users::%s", admin.Organization), "read"},
 	}
+	log.Debug().Msgf("Requests: %v", requests)
 	// Trying to authorize user
 	if authorized, err := d.enforcer.BatchEnforce(requests); authorized[0] || authorized[1] || err != nil {
 		if err != nil {
@@ -524,6 +530,198 @@ func (d *daemon) getAdminUsers(c *gin.Context) {
 	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
 }
 
+func (d *daemon) updateRole(c *gin.Context) {
+	type roleUpdate struct {
+		NewRole string `json:"newRole" binding:"required"`
+	}
+	var req roleUpdate
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Error().Err(err).Msg("Error parsing request data: ")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "Error"})
+		return
+	}
+
+	usernameToUpdate := c.Param("username")
+
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
+	d.auditLogger.Info().
+		Time("UTC", time.Now().UTC()).
+		Str("AdminUser", admin.Username).
+		Str("AdminEmail", admin.Email).
+		Str("UserToChange", usernameToUpdate).
+		Str("NewRole", req.NewRole).
+		Msg("AdminUser is trying to change role of a user")
+
+	if strings.EqualFold(admin.Username, usernameToUpdate) {
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "Cannot change own role"})
+		return
+	}
+
+	userToUpdate, err := d.db.GetAdminUserByUsername(c, usernameToUpdate)
+	if err != nil {
+		log.Error().Err(err).Msg("Error getting user")
+		c.JSON(http.StatusNotFound, APIResponse{Status: "Could not find user to update"})
+		return
+	}
+
+	var requests = [][]interface{}{
+		{admin.Username, admin.Organization, fmt.Sprintf("users::%s", userToUpdate.Organization), "write"},
+		{admin.Username, admin.Organization, fmt.Sprintf("role::%s", req.NewRole), "write"},
+	}
+	if authorized, err := d.enforcer.BatchEnforce(requests); (authorized[0] && authorized[1]) || err != nil {
+		if err != nil {
+			log.Error().Err(err).Msgf("Encountered an error while authorizing role update")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+
+		if req.NewRole == "superadmin" && userToUpdate.Organization != "Admins" {
+			c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized... Superadmins can only be added to the Admins organization"})
+			return
+
+		}
+
+		changeApplied, err := d.enforcer.AddRoleForUser(userToUpdate.Username, fmt.Sprintf("role::%s", req.NewRole), userToUpdate.Organization)
+		if err != nil {
+			log.Error().Err(err).Msg("Error adding role")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+		log.Debug().Msgf("Change applied: %v", changeApplied)
+
+		if !changeApplied {
+			c.JSON(http.StatusBadRequest, APIResponse{Status: "Role already assigned"})
+			return
+		}
+
+		_, err = d.enforcer.DeleteRoleForUser(userToUpdate.Username, userToUpdate.Role, userToUpdate.Organization)
+		if err != nil {
+			log.Error().Err(err).Msg("Error deleting role")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+
+		if err := d.db.UpdateAdminUserRoleByUsername(c, db.UpdateAdminUserRoleByUsernameParams{Role: fmt.Sprintf("role::%s", req.NewRole), Username: usernameToUpdate}); err != nil {
+			log.Error().Err(err).Msg("Error updating role")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+		return
+	}
+	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
+}
+
+func (d *daemon) updateUserOrganization(c *gin.Context) {
+	type orgUpdate struct {
+		NewOrganization string `json:"newOrganization" binding:"required"`
+	}
+	var req orgUpdate
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Error().Err(err).Msg("Error parsing request data: ")
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "Error"})
+		return
+	}
+
+	usernameToUpdate := c.Param("username")
+
+	admin, err := d.getUserFromGinContext(c)
+	if err != nil {
+		log.Error().Err(err).Msg("error getting user from gin context")
+		c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal Server Error"})
+		return
+	}
+	d.auditLogger.Info().
+		Time("UTC", time.Now().UTC()).
+		Str("AdminUser", admin.Username).
+		Str("AdminEmail", admin.Email).
+		Str("UserToChange", usernameToUpdate).
+		Str("NewOrganization", req.NewOrganization).
+		Msg("AdminUser is trying to change organization of a user")
+
+	if strings.EqualFold(admin.Username, usernameToUpdate) {
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "Cannot change own role"})
+		return
+	}
+
+	userToUpdate, err := d.db.GetAdminUserByUsername(c, usernameToUpdate)
+	if err != nil {
+		log.Error().Err(err).Msg("Error getting user")
+		c.JSON(http.StatusNotFound, APIResponse{Status: "Could not find user to update"})
+		return
+	}
+
+	if userToUpdate.Role == "role::superadmin" {
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "Cannot change organization of a superadmin"})
+		return
+	}
+
+	if strings.EqualFold(userToUpdate.Organization, req.NewOrganization) {
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "User already in that organization"})
+		return
+	}
+
+	newOrganization, err := d.db.GetOrgByName(c, req.NewOrganization)
+	if err != nil {
+		log.Error().Err(err).Msg("Error getting organization")
+		c.JSON(http.StatusNotFound, APIResponse{Status: "Could not find organization"})
+		return
+	}
+
+	oldOrganization, err := d.db.GetOrgByName(c, userToUpdate.Organization)
+	if err != nil {
+		log.Error().Err(err).Msg("Error getting organization")
+		c.JSON(http.StatusNotFound, APIResponse{Status: "Could not find organization"})
+		return
+	}
+
+	if strings.EqualFold(userToUpdate.Username, oldOrganization.OwnerUser) {
+		c.JSON(http.StatusBadRequest, APIResponse{Status: "Cannot change organization of a current organization owner"})
+		return
+	}
+
+	sub := admin.Username
+	dom := admin.Organization
+	obj := "organizations"
+	act := "write"
+	if authorized, err := d.enforcer.Enforce(sub, dom, obj, act); authorized || err != nil {
+		if err != nil {
+			log.Error().Err(err).Msgf("Encountered an error while authorizing organization update")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+
+		_, err := d.enforcer.AddRoleForUser(userToUpdate.Username, userToUpdate.Role, newOrganization.Name)
+		if err != nil {
+			log.Error().Err(err).Msg("Error adding role")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+
+		_, err = d.enforcer.DeleteRoleForUser(userToUpdate.Username, userToUpdate.Role, userToUpdate.Organization)
+		if err != nil {
+			log.Error().Err(err).Msg("Error deleting role")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+
+		if err := d.db.UpdateAdminUserOrganizationByUsername(c, db.UpdateAdminUserOrganizationByUsernameParams{Organization: newOrganization.Name, Username: userToUpdate.Username}); err != nil {
+			log.Error().Err(err).Msg("Error updating organization")
+			c.JSON(http.StatusInternalServerError, APIResponse{Status: "Internal server error"})
+			return
+		}
+
+		c.JSON(http.StatusOK, APIResponse{Status: "OK"})
+		return
+	}
+	c.JSON(http.StatusUnauthorized, APIResponse{Status: "Unauthorized"})
+}
+
 // createAdminUser creates a new admin user and is called in the newAdminUser handler
 func (d *daemon) createAdminUser(ctx context.Context, user adminUserRequest, org string) (bool, error) {
 	// Create password hash from password
@@ -570,7 +768,7 @@ func (d *daemon) createAdminUser(ctx context.Context, user adminUserRequest, org
 }
 
 // updateAdminUser holds the logic for updating the pasword or email for a user, and is called from the updateAdminUser handler
-func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUserRequest, currUser db.AdminUser, admin AdminClaims) error {
+func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUserRequest, currUser db.AdminUser, admin AdminClaims, isUpdatedUserSelf bool) error {
 	// Get admininfo for password verification to prevent unauthorized updates of users
 	adminInfo, err := d.db.GetAdminUserByUsername(ctx, admin.Username)
 	if err != nil {
@@ -580,7 +778,7 @@ func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUser
 	// When changing password we want to make sure that the user knows the current password
 	match := verifyPassword(adminInfo.Password, updatedUser.VerifyAdminPassword)
 	// Update password if changed
-	if !verifyPassword(currUser.Password, updatedUser.Password) && updatedUser.Password != "" && match {
+	if !verifyPassword(currUser.Password, updatedUser.Password) && updatedUser.Password != "" && (match || !isUpdatedUserSelf) {
 		log.Debug().Msg("Updating password")
 		// Password should be longer than 8 characters
 		if len(updatedUser.Password) < 8 {
@@ -600,7 +798,7 @@ func (d *daemon) updateAdminUserQuery(ctx context.Context, updatedUser adminUser
 		if err := d.db.UpdateAdminPassword(ctx, newPw); err != nil {
 			return fmt.Errorf("Error updating password: %s", err)
 		}
-	} else if updatedUser.Password != "" && !match {
+	} else if updatedUser.Password != "" && !match && !verifyPassword(currUser.Password, updatedUser.Password) {
 		return errors.New("Wrong password")
 	}
 
